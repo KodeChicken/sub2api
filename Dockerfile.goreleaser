@@ -12,6 +12,8 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 
 FROM ${ALPINE_IMAGE}
 
+ARG TARGETPLATFORM
+
 LABEL maintainer="KodeChicken <github.com/KodeChicken>"
 LABEL description="Sub2API - AI API Gateway Platform"
 LABEL org.opencontainers.image.source="https://github.com/KodeChicken/sub2api"
