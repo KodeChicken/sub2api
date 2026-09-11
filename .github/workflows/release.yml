@@ -94,6 +94,11 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.inputs.tag || github.ref }}
 
+      - name: Point updater to this repository
+        run: |
+          sed -i 's#githubRepo     = "Wei-Shaw/sub2api"#githubRepo     = "${{ github.repository }}"#' backend/internal/service/update_service.go
+          grep -F 'githubRepo     = "${{ github.repository }}"' backend/internal/service/update_service.go
+
       - name: Download VERSION artifact
         uses: actions/download-artifact@v8
         with:
