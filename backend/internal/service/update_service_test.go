@@ -69,6 +69,24 @@ func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoUpdateAvailable)
 }
 
+func TestCompareVersionsForkRevisions(t *testing.T) {
+	tests := []struct {
+		current string
+		latest  string
+		want    int
+	}{
+		{current: "0.2.4", latest: "0.2.4-kc.1", want: -1},
+		{current: "0.2.4-kc.1", latest: "0.2.4-kc.2", want: -1},
+		{current: "0.2.4-kc.2", latest: "0.2.4-kc.1", want: 1},
+		{current: "0.2.4-kc.99", latest: "0.2.5", want: -1},
+		{current: "v0.2.5-kc.1", latest: "0.2.5-kc.1", want: 0},
+	}
+
+	for _, tt := range tests {
+		require.Equal(t, tt.want, compareVersions(tt.current, tt.latest), "%s vs %s", tt.current, tt.latest)
+	}
+}
+
 func newRollbackTestService(current string, releases []*GitHubRelease) *UpdateService {
 	return NewUpdateService(
 		&updateServiceCacheStub{},
