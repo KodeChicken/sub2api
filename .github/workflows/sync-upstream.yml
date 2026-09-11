@@ -53,22 +53,32 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Publish latest upstream release
+      - name: Publish upstream releases
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SYNC_CHANGED: ${{ steps.sync.outputs.changed }}
         shell: bash
         run: |
-          tag=$(gh api repos/Wei-Shaw/sub2api/releases/latest --jq .tag_name)
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $tag already exists"
-            exit 0
-          fi
+          mapfile -t tags < <(gh api 'repos/Wei-Shaw/sub2api/releases?per_page=2' --jq '.[].tag_name')
+          for index in "${!tags[@]}"; do
+            tag=${tags[$index]}
+            source_ref=$tag
+            [[ $index == 0 ]] && source_ref=main
 
-          gh workflow run release.yml \
-            --repo "$GITHUB_REPOSITORY" \
-            --ref main \
-            -f tag="$tag" \
-            -f simple_release=false
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              if [[ $index != 0 || ("$GITHUB_EVENT_NAME" != push && "$SYNC_CHANGED" != true) ]]; then
+                echo "Release $tag already exists"
+                continue
+              fi
+            fi
+
+            gh workflow run release.yml \
+              --repo "$GITHUB_REPOSITORY" \
+              --ref main \
+              -f tag="$tag" \
+              -f source_ref="$source_ref" \
+              -f simple_release=false
+          done
 
       - name: Prepare image tags
         id: image
