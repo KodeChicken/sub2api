@@ -176,6 +176,20 @@ func (_c *GroupCreate) SetNillableIsExclusive(v *bool) *GroupCreate {
 	return _c
 }
 
+// SetIsCarpool sets the "is_carpool" field.
+func (_c *GroupCreate) SetIsCarpool(v bool) *GroupCreate {
+	_c.mutation.SetIsCarpool(v)
+	return _c
+}
+
+// SetNillableIsCarpool sets the "is_carpool" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableIsCarpool(v *bool) *GroupCreate {
+	if v != nil {
+		_c.SetIsCarpool(*v)
+	}
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *GroupCreate) SetStatus(v string) *GroupCreate {
 	_c.mutation.SetStatus(v)
@@ -1071,6 +1085,10 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultIsExclusive
 		_c.mutation.SetIsExclusive(v)
 	}
+	if _, ok := _c.mutation.IsCarpool(); !ok {
+		v := group.DefaultIsCarpool
+		_c.mutation.SetIsCarpool(v)
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		v := group.DefaultStatus
 		_c.mutation.SetStatus(v)
@@ -1257,6 +1275,9 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.IsExclusive(); !ok {
 		return &ValidationError{Name: "is_exclusive", err: errors.New(`ent: missing required field "Group.is_exclusive"`)}
+	}
+	if _, ok := _c.mutation.IsCarpool(); !ok {
+		return &ValidationError{Name: "is_carpool", err: errors.New(`ent: missing required field "Group.is_carpool"`)}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Group.status"`)}
@@ -1488,6 +1509,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.IsExclusive(); ok {
 		_spec.SetField(group.FieldIsExclusive, field.TypeBool, value)
 		_node.IsExclusive = value
+	}
+	if value, ok := _c.mutation.IsCarpool(); ok {
+		_spec.SetField(group.FieldIsCarpool, field.TypeBool, value)
+		_node.IsCarpool = value
 	}
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(group.FieldStatus, field.TypeString, value)
@@ -2006,6 +2031,18 @@ func (u *GroupUpsert) SetIsExclusive(v bool) *GroupUpsert {
 // UpdateIsExclusive sets the "is_exclusive" field to the value that was provided on create.
 func (u *GroupUpsert) UpdateIsExclusive() *GroupUpsert {
 	u.SetExcluded(group.FieldIsExclusive)
+	return u
+}
+
+// SetIsCarpool sets the "is_carpool" field.
+func (u *GroupUpsert) SetIsCarpool(v bool) *GroupUpsert {
+	u.Set(group.FieldIsCarpool, v)
+	return u
+}
+
+// UpdateIsCarpool sets the "is_carpool" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateIsCarpool() *GroupUpsert {
+	u.SetExcluded(group.FieldIsCarpool)
 	return u
 }
 
@@ -3134,6 +3171,20 @@ func (u *GroupUpsertOne) SetIsExclusive(v bool) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateIsExclusive() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateIsExclusive()
+	})
+}
+
+// SetIsCarpool sets the "is_carpool" field.
+func (u *GroupUpsertOne) SetIsCarpool(v bool) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetIsCarpool(v)
+	})
+}
+
+// UpdateIsCarpool sets the "is_carpool" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateIsCarpool() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateIsCarpool()
 	})
 }
 
@@ -4580,6 +4631,20 @@ func (u *GroupUpsertBulk) SetIsExclusive(v bool) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateIsExclusive() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateIsExclusive()
+	})
+}
+
+// SetIsCarpool sets the "is_carpool" field.
+func (u *GroupUpsertBulk) SetIsCarpool(v bool) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetIsCarpool(v)
+	})
+}
+
+// UpdateIsCarpool sets the "is_carpool" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateIsCarpool() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateIsCarpool()
 	})
 }
 

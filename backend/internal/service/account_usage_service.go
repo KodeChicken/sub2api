@@ -290,19 +290,26 @@ type ClaudeUsageFetcher interface {
 
 // AccountUsageService 账号使用量查询服务
 type AccountUsageService struct {
-	accountRepo             AccountRepository
-	usageLogRepo            UsageLogRepository
-	usageFetcher            ClaudeUsageFetcher
-	geminiQuotaService      *GeminiQuotaService
-	antigravityQuotaFetcher *AntigravityQuotaFetcher
-	grokQuotaFetcher        *GrokQuotaFetcher
-	grokQuotaService        *GrokQuotaService
-	openAIQuotaService      *OpenAIQuotaService
-	cache                   *UsageCache
-	identityCache           IdentityCache
-	tlsFPProfileService     *TLSFingerprintProfileService
-	agentIdentityTaskMu     sync.Mutex
-	agentIdentityWS         agentIdentityWSConnectionInvalidator
+	accountRepo                AccountRepository
+	usageLogRepo               UsageLogRepository
+	usageFetcher               ClaudeUsageFetcher
+	geminiQuotaService         *GeminiQuotaService
+	antigravityQuotaFetcher    *AntigravityQuotaFetcher
+	grokQuotaFetcher           *GrokQuotaFetcher
+	grokQuotaService           *GrokQuotaService
+	openAIQuotaService         *OpenAIQuotaService
+	carpoolSubscriptionService *SubscriptionService
+	cache                      *UsageCache
+	identityCache              IdentityCache
+	tlsFPProfileService        *TLSFingerprintProfileService
+	agentIdentityTaskMu        sync.Mutex
+	agentIdentityWS            agentIdentityWSConnectionInvalidator
+}
+
+func (s *AccountUsageService) SetCarpoolSubscriptionService(subscriptionService *SubscriptionService) {
+	if s != nil {
+		s.carpoolSubscriptionService = subscriptionService
+	}
 }
 
 // NewAccountUsageService 创建AccountUsageService实例
@@ -727,8 +734,9 @@ func (s *AccountUsageService) getOpenAIUsage(ctx context.Context, account *Accou
 			if s.openAIQuotaService != nil {
 				if quotaUsage, err := s.openAIQuotaService.QueryUsage(ctx, account.ID); err == nil {
 					if updates := buildCodexSparkWindowExtraUpdates(quotaUsage, now); len(updates) > 0 {
+						persistUpdates := s.applyCarpoolResetForSnapshot(ctx, account, updates, now)
 						mergeAccountExtra(account, updates)
-						s.persistOpenAICodexProbeSnapshot(account.ID, updates)
+						s.persistOpenAICodexProbeSnapshot(account.ID, persistUpdates)
 						if account.ParentAccountID != nil {
 							notifyOpenAIAutoReset(*account.ParentAccountID)
 						}
@@ -907,10 +915,55 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 		return nil, err
 	}
 	if len(updates) > 0 {
-		s.persistOpenAICodexProbeSnapshot(account.ID, updates)
+		persistUpdates := s.applyCarpoolResetForSnapshot(ctx, account, updates, time.Now())
+		s.persistOpenAICodexProbeSnapshot(account.ID, persistUpdates)
 		return updates, nil
 	}
 	return nil, nil
+}
+
+func (s *AccountUsageService) applyCarpoolResetForSnapshot(ctx context.Context, account *Account, updates map[string]any, now time.Time) map[string]any {
+	if s == nil || s.carpoolSubscriptionService == nil || account == nil || account.IsShadow() {
+		return updates
+	}
+	cardReset, resetErr := s.carpoolSubscriptionService.CarpoolCardResetSinceSnapshot(ctx, account.ID, account.Extra, now)
+	if resetErr != nil {
+		slog.Warn("carpool_reset_card_event_check_failed", "account_id", account.ID, "error", resetErr)
+		return retainCarpool7DBaseline(updates)
+	}
+	if cardReset {
+		return updates
+	}
+	eventKey, detected := DetectCarpool7DWindowResetFromUpdates(account.Extra, updates, now)
+	if !detected {
+		return updates
+	}
+	count, err := s.carpoolSubscriptionService.PreviewCarpoolSubscriptionQuotaReset(ctx, account.ID)
+	if err == nil && count == 0 {
+		return updates
+	}
+	if err == nil {
+		_, err = s.carpoolSubscriptionService.ResetCarpoolSubscriptionQuotas(ctx, account.ID, CarpoolResetSourceOfficial7D, eventKey)
+	}
+	if err == nil {
+		return updates
+	}
+	slog.Warn("carpool_subscription_quota_reset_failed", "account_id", account.ID, "source", CarpoolResetSourceOfficial7D, "error", err)
+	// Keep the prior 7d baseline durable so the periodic scanner can retry. The
+	// fresh probe still drives the current response/UI; only the stored baseline
+	// remains old until the reset event commits.
+	return retainCarpool7DBaseline(updates)
+}
+
+func retainCarpool7DBaseline(updates map[string]any) map[string]any {
+	persistUpdates := make(map[string]any, len(updates))
+	for key, value := range updates {
+		if strings.HasPrefix(key, "codex_7d_") || key == "codex_usage_updated_at" {
+			continue
+		}
+		persistUpdates[key] = value
+	}
+	return persistUpdates
 }
 
 func (s *AccountUsageService) persistOpenAICodexProbeSnapshot(accountID int64, updates map[string]any) {

@@ -125,6 +125,11 @@ func MonthlyUsageUsd(v float64) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldEQ(FieldMonthlyUsageUsd, v))
 }
 
+// QuotaResetRevision applies equality check predicate on the "quota_reset_revision" field. It's identical to QuotaResetRevisionEQ.
+func QuotaResetRevision(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldQuotaResetRevision, v))
+}
+
 // AssignedBy applies equality check predicate on the "assigned_by" field. It's identical to AssignedByEQ.
 func AssignedBy(v int64) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldEQ(FieldAssignedBy, v))
@@ -723,6 +728,46 @@ func MonthlyUsageUsdLT(v float64) predicate.UserSubscription {
 // MonthlyUsageUsdLTE applies the LTE predicate on the "monthly_usage_usd" field.
 func MonthlyUsageUsdLTE(v float64) predicate.UserSubscription {
 	return predicate.UserSubscription(sql.FieldLTE(FieldMonthlyUsageUsd, v))
+}
+
+// QuotaResetRevisionEQ applies the EQ predicate on the "quota_reset_revision" field.
+func QuotaResetRevisionEQ(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldEQ(FieldQuotaResetRevision, v))
+}
+
+// QuotaResetRevisionNEQ applies the NEQ predicate on the "quota_reset_revision" field.
+func QuotaResetRevisionNEQ(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNEQ(FieldQuotaResetRevision, v))
+}
+
+// QuotaResetRevisionIn applies the In predicate on the "quota_reset_revision" field.
+func QuotaResetRevisionIn(vs ...int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldIn(FieldQuotaResetRevision, vs...))
+}
+
+// QuotaResetRevisionNotIn applies the NotIn predicate on the "quota_reset_revision" field.
+func QuotaResetRevisionNotIn(vs ...int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldNotIn(FieldQuotaResetRevision, vs...))
+}
+
+// QuotaResetRevisionGT applies the GT predicate on the "quota_reset_revision" field.
+func QuotaResetRevisionGT(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGT(FieldQuotaResetRevision, v))
+}
+
+// QuotaResetRevisionGTE applies the GTE predicate on the "quota_reset_revision" field.
+func QuotaResetRevisionGTE(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldGTE(FieldQuotaResetRevision, v))
+}
+
+// QuotaResetRevisionLT applies the LT predicate on the "quota_reset_revision" field.
+func QuotaResetRevisionLT(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLT(FieldQuotaResetRevision, v))
+}
+
+// QuotaResetRevisionLTE applies the LTE predicate on the "quota_reset_revision" field.
+func QuotaResetRevisionLTE(v int64) predicate.UserSubscription {
+	return predicate.UserSubscription(sql.FieldLTE(FieldQuotaResetRevision, v))
 }
 
 // AssignedByEQ applies the EQ predicate on the "assigned_by" field.

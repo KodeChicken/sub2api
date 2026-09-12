@@ -224,6 +224,13 @@ type ResetSubscriptionQuotaRequest struct {
 	Monthly bool `json:"monthly"`
 }
 
+type BulkResetSubscriptionQuotaRequest struct {
+	SubscriptionIDs []int64 `json:"subscription_ids" binding:"required,min=1,max=500,dive,gt=0"`
+	Daily           bool    `json:"daily"`
+	Weekly          bool    `json:"weekly"`
+	Monthly         bool    `json:"monthly"`
+}
+
 // ResetQuota resets daily, weekly, and/or monthly usage for a subscription.
 // POST /api/v1/admin/subscriptions/:id/reset-quota
 func (h *SubscriptionHandler) ResetQuota(c *gin.Context) {
@@ -247,6 +254,30 @@ func (h *SubscriptionHandler) ResetQuota(c *gin.Context) {
 		return
 	}
 	response.Success(c, dto.UserSubscriptionFromServiceAdmin(sub))
+}
+
+// BulkResetQuota resets the selected subscriptions atomically.
+// POST /api/v1/admin/subscriptions/bulk-reset-quota
+func (h *SubscriptionHandler) BulkResetQuota(c *gin.Context) {
+	var req BulkResetSubscriptionQuotaRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if !req.Daily && !req.Weekly && !req.Monthly {
+		response.BadRequest(c, "At least one of 'daily', 'weekly', or 'monthly' must be true")
+		return
+	}
+	subscriptions, err := h.subscriptionService.AdminResetQuotaBatch(c.Request.Context(), req.SubscriptionIDs, req.Daily, req.Weekly, req.Monthly)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	out := make([]dto.AdminUserSubscription, 0, len(subscriptions))
+	for i := range subscriptions {
+		out = append(out, *dto.UserSubscriptionFromServiceAdmin(&subscriptions[i]))
+	}
+	response.Success(c, gin.H{"updated_count": len(out), "subscriptions": out})
 }
 
 // Revoke handles revoking a subscription.

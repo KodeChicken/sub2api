@@ -938,6 +938,37 @@ export interface OpenAIQuotaResetResult {
     | 'reset_credit_cache_refresh_failed'
     | 'account_state_recovery_failed'
     | 'account_state_refresh_failed'
+  carpool_subscription_reset?: CarpoolSubscriptionQuotaResetResult | null
+  carpool_subscription_reset_warning?: string
+}
+
+export interface CarpoolSubscriptionQuotaResetResult {
+  event_id?: number
+  account_id: number
+  source?: string
+  affected_count: number
+  already_applied?: boolean
+}
+
+export async function previewCarpoolSubscriptionQuotaReset(id: number): Promise<{ account_id: number; affected_count: number }> {
+  const { data } = await apiClient.get<{ account_id: number; affected_count: number }>(
+    `/admin/openai/accounts/${id}/carpool-subscriptions/preview`
+  )
+  return data
+}
+
+export async function resetCarpoolSubscriptionQuotas(id: number): Promise<CarpoolSubscriptionQuotaResetResult> {
+  const { data } = await apiClient.post<CarpoolSubscriptionQuotaResetResult>(
+    `/admin/openai/accounts/${id}/carpool-subscriptions/reset`
+  )
+  return data
+}
+
+export async function undoCarpoolSubscriptionQuotaReset(id: number): Promise<CarpoolSubscriptionQuotaResetResult> {
+  const { data } = await apiClient.post<CarpoolSubscriptionQuotaResetResult>(
+    `/admin/openai/accounts/${id}/carpool-subscriptions/undo`
+  )
+  return data
 }
 
 /** Usage payload plus whether the reset-credit snapshot was persisted. */
@@ -1117,6 +1148,9 @@ export const accountsAPI = {
   revertProxyFallback,
   refreshOpenAIQuota,
   resetOpenAIQuota,
+  previewCarpoolSubscriptionQuotaReset,
+  resetCarpoolSubscriptionQuotas,
+  undoCarpoolSubscriptionQuotaReset,
   createSparkShadow,
   getUpstreamBillingProbeSettings,
   updateUpstreamBillingProbeSettings,

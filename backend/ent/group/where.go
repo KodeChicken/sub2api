@@ -110,6 +110,11 @@ func IsExclusive(v bool) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldIsExclusive, v))
 }
 
+// IsCarpool applies equality check predicate on the "is_carpool" field. It's identical to IsCarpoolEQ.
+func IsCarpool(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldIsCarpool, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldStatus, v))
@@ -843,6 +848,16 @@ func IsExclusiveEQ(v bool) predicate.Group {
 // IsExclusiveNEQ applies the NEQ predicate on the "is_exclusive" field.
 func IsExclusiveNEQ(v bool) predicate.Group {
 	return predicate.Group(sql.FieldNEQ(FieldIsExclusive, v))
+}
+
+// IsCarpoolEQ applies the EQ predicate on the "is_carpool" field.
+func IsCarpoolEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldIsCarpool, v))
+}
+
+// IsCarpoolNEQ applies the NEQ predicate on the "is_carpool" field.
+func IsCarpoolNEQ(v bool) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldIsCarpool, v))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.

@@ -1000,6 +1000,8 @@ export default {
         monthlyLimit: '每月限额（USD）',
         defaultValidityDays: '默认有效期（天）',
         validityHint: '分配给用户时订阅的有效天数',
+        carpoolReset: '拼车账号额度重置时同步重置订阅配额',
+        carpoolResetHint: '该分组绑定的账号额度重置后，同步重置此分组内所有有效订阅已配置的日/周/月配额。',
         noLimit: '无限制'
       },
       imagePricing: {

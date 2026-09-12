@@ -94,6 +94,16 @@
           <!-- Right: Actions -->
           <div class="ml-auto flex flex-wrap items-center justify-end gap-3">
             <button
+              v-if="selectedSubscriptionIds.length > 0"
+              type="button"
+              class="btn btn-secondary"
+              :disabled="resettingBulkQuota"
+              @click="showBulkResetQuotaConfirm = true"
+            >
+              <Icon name="refresh" size="md" class="mr-2" />
+              {{ t('admin.subscriptions.bulkResetQuota', { count: selectedSubscriptionIds.length }) }}
+            </button>
+            <button
               @click="loadSubscriptions"
               :disabled="loading"
               class="btn btn-secondary"
@@ -173,10 +183,13 @@
           :columns="columns"
           :data="subscriptions"
           :loading="loading"
+          selectable
+          :selected-keys="selectedSubscriptionKeys"
           :server-side-sort="true"
           default-sort-key="created_at"
           default-sort-order="desc"
           @sort="handleSort"
+          @update:selected-keys="handleSelectedSubscriptionKeysUpdate"
         >
           <template #cell-user="{ row }">
             <div class="flex items-center gap-2">
@@ -682,6 +695,16 @@
       @confirm="confirmResetQuota"
       @cancel="showResetQuotaConfirm = false"
     />
+    <ConfirmDialog
+      :show="showBulkResetQuotaConfirm"
+      :title="t('admin.subscriptions.bulkResetQuotaTitle')"
+      :message="t('admin.subscriptions.bulkResetQuotaConfirm', { count: selectedSubscriptionIds.length })"
+      :confirm-text="t('admin.subscriptions.bulkResetQuotaAction')"
+      :cancel-text="t('common.cancel')"
+      :danger="true"
+      @confirm="confirmBulkResetQuota"
+      @cancel="showBulkResetQuotaConfirm = false"
+    />
     <!-- Subscription Guide Modal -->
     <teleport to="body">
       <transition name="modal">
@@ -930,6 +953,8 @@ const statusOptions = computed(() => [
 ])
 
 const subscriptions = ref<UserSubscription[]>([])
+const selectedSubscriptionKeys = ref<Array<string | number>>([])
+const selectedSubscriptionIds = computed(() => selectedSubscriptionKeys.value.map(Number).filter((id) => Number.isSafeInteger(id) && id > 0))
 const groups = ref<Group[]>([])
 const loading = ref(false)
 let abortController: AbortController | null = null
@@ -975,9 +1000,11 @@ const showExtendModal = ref(false)
 const showRevokeDialog = ref(false)
 const showRestoreDialog = ref(false)
 const showResetQuotaConfirm = ref(false)
+const showBulkResetQuotaConfirm = ref(false)
 const submitting = ref(false)
 const resettingSubscription = ref<UserSubscription | null>(null)
 const resettingQuota = ref(false)
+const resettingBulkQuota = ref(false)
 const extendingSubscription = ref<UserSubscription | null>(null)
 const revokingSubscription = ref<UserSubscription | null>(null)
 const restoringSubscription = ref<UserSubscription | null>(null)
@@ -1336,6 +1363,33 @@ const confirmResetQuota = async () => {
     console.error('Error resetting quota:', error)
   } finally {
     resettingQuota.value = false
+  }
+}
+
+const handleSelectedSubscriptionKeysUpdate = (keys: Array<string | number>) => {
+  selectedSubscriptionKeys.value = keys
+}
+
+const confirmBulkResetQuota = async () => {
+  const subscriptionIds = selectedSubscriptionIds.value
+  if (subscriptionIds.length === 0 || resettingBulkQuota.value) return
+  resettingBulkQuota.value = true
+  try {
+    const result = await adminAPI.subscriptions.bulkResetQuota({
+      subscription_ids: subscriptionIds,
+      daily: true,
+      weekly: true,
+      monthly: true
+    })
+    appStore.showSuccess(t('admin.subscriptions.bulkQuotaResetSuccess', { count: result.updated_count }))
+    showBulkResetQuotaConfirm.value = false
+    selectedSubscriptionKeys.value = []
+    await loadSubscriptions()
+  } catch (error: any) {
+    appStore.showError(error.response?.data?.detail || t('admin.subscriptions.failedToResetQuota'))
+    console.error('Error bulk resetting quota:', error)
+  } finally {
+    resettingBulkQuota.value = false
   }
 }
 

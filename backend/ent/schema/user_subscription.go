@@ -68,6 +68,9 @@ func (UserSubscription) Fields() []ent.Field {
 		field.Float("monthly_usage_usd").
 			SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}).
 			Default(0),
+		field.Int64("quota_reset_revision").
+			Default(0).
+			Comment("配额窗口重置版本，用于安全撤回重置"),
 
 		field.Int64("assigned_by").
 			Optional().

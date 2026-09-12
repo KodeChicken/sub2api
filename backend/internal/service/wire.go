@@ -198,6 +198,7 @@ func ProvideOpenAIQuotaAutoResetService(
 	audit *AuditLogService,
 	settingService *SettingService,
 	leaderLock LeaderLockCache,
+	subscriptionService *SubscriptionService,
 ) *OpenAIQuotaAutoResetService {
 	service := NewOpenAIQuotaAutoResetService(
 		accountRepo,
@@ -208,6 +209,7 @@ func ProvideOpenAIQuotaAutoResetService(
 		settingService,
 		leaderLock,
 	)
+	service.SetCarpoolSubscriptionService(subscriptionService)
 	service.Start()
 	return service
 }
@@ -225,6 +227,7 @@ func ProvideAccountUsageService(
 	identityCache IdentityCache,
 	tlsFPProfileService *TLSFingerprintProfileService,
 	openAIGatewayService *OpenAIGatewayService,
+	subscriptionService *SubscriptionService,
 ) *AccountUsageService {
 	service := NewAccountUsageService(
 		accountRepo,
@@ -240,6 +243,7 @@ func ProvideAccountUsageService(
 		tlsFPProfileService,
 	)
 	service.agentIdentityWS = openAIGatewayService
+	service.SetCarpoolSubscriptionService(subscriptionService)
 	return service
 }
 

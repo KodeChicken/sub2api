@@ -250,6 +250,27 @@ func (_u *UserSubscriptionUpdate) AddMonthlyUsageUsd(v float64) *UserSubscriptio
 	return _u
 }
 
+// SetQuotaResetRevision sets the "quota_reset_revision" field.
+func (_u *UserSubscriptionUpdate) SetQuotaResetRevision(v int64) *UserSubscriptionUpdate {
+	_u.mutation.ResetQuotaResetRevision()
+	_u.mutation.SetQuotaResetRevision(v)
+	return _u
+}
+
+// SetNillableQuotaResetRevision sets the "quota_reset_revision" field if the given value is not nil.
+func (_u *UserSubscriptionUpdate) SetNillableQuotaResetRevision(v *int64) *UserSubscriptionUpdate {
+	if v != nil {
+		_u.SetQuotaResetRevision(*v)
+	}
+	return _u
+}
+
+// AddQuotaResetRevision adds value to the "quota_reset_revision" field.
+func (_u *UserSubscriptionUpdate) AddQuotaResetRevision(v int64) *UserSubscriptionUpdate {
+	_u.mutation.AddQuotaResetRevision(v)
+	return _u
+}
+
 // SetAssignedBy sets the "assigned_by" field.
 func (_u *UserSubscriptionUpdate) SetAssignedBy(v int64) *UserSubscriptionUpdate {
 	_u.mutation.SetAssignedBy(v)
@@ -515,6 +536,12 @@ func (_u *UserSubscriptionUpdate) sqlSave(ctx context.Context) (_node int, err e
 	}
 	if value, ok := _u.mutation.AddedMonthlyUsageUsd(); ok {
 		_spec.AddField(usersubscription.FieldMonthlyUsageUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.QuotaResetRevision(); ok {
+		_spec.SetField(usersubscription.FieldQuotaResetRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedQuotaResetRevision(); ok {
+		_spec.AddField(usersubscription.FieldQuotaResetRevision, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AssignedAt(); ok {
 		_spec.SetField(usersubscription.FieldAssignedAt, field.TypeTime, value)
@@ -896,6 +923,27 @@ func (_u *UserSubscriptionUpdateOne) AddMonthlyUsageUsd(v float64) *UserSubscrip
 	return _u
 }
 
+// SetQuotaResetRevision sets the "quota_reset_revision" field.
+func (_u *UserSubscriptionUpdateOne) SetQuotaResetRevision(v int64) *UserSubscriptionUpdateOne {
+	_u.mutation.ResetQuotaResetRevision()
+	_u.mutation.SetQuotaResetRevision(v)
+	return _u
+}
+
+// SetNillableQuotaResetRevision sets the "quota_reset_revision" field if the given value is not nil.
+func (_u *UserSubscriptionUpdateOne) SetNillableQuotaResetRevision(v *int64) *UserSubscriptionUpdateOne {
+	if v != nil {
+		_u.SetQuotaResetRevision(*v)
+	}
+	return _u
+}
+
+// AddQuotaResetRevision adds value to the "quota_reset_revision" field.
+func (_u *UserSubscriptionUpdateOne) AddQuotaResetRevision(v int64) *UserSubscriptionUpdateOne {
+	_u.mutation.AddQuotaResetRevision(v)
+	return _u
+}
+
 // SetAssignedBy sets the "assigned_by" field.
 func (_u *UserSubscriptionUpdateOne) SetAssignedBy(v int64) *UserSubscriptionUpdateOne {
 	_u.mutation.SetAssignedBy(v)
@@ -1191,6 +1239,12 @@ func (_u *UserSubscriptionUpdateOne) sqlSave(ctx context.Context) (_node *UserSu
 	}
 	if value, ok := _u.mutation.AddedMonthlyUsageUsd(); ok {
 		_spec.AddField(usersubscription.FieldMonthlyUsageUsd, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.QuotaResetRevision(); ok {
+		_spec.SetField(usersubscription.FieldQuotaResetRevision, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedQuotaResetRevision(); ok {
+		_spec.AddField(usersubscription.FieldQuotaResetRevision, field.TypeInt64, value)
 	}
 	if value, ok := _u.mutation.AssignedAt(); ok {
 		_spec.SetField(usersubscription.FieldAssignedAt, field.TypeTime, value)

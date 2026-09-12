@@ -454,6 +454,9 @@ func registerOpenAIOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		openai.GET("/accounts/:id/quota", h.Admin.OpenAIOAuth.QueryQuota)
 		openai.POST("/accounts/:id/quota/refresh", h.Admin.OpenAIOAuth.RefreshQuota)
 		openai.POST("/accounts/:id/reset-quota", h.Admin.OpenAIOAuth.ResetQuota)
+		openai.GET("/accounts/:id/carpool-subscriptions/preview", h.Admin.OpenAIOAuth.PreviewCarpoolSubscriptionQuotaReset)
+		openai.POST("/accounts/:id/carpool-subscriptions/reset", h.Admin.OpenAIOAuth.ResetCarpoolSubscriptionQuota)
+		openai.POST("/accounts/:id/carpool-subscriptions/undo", h.Admin.OpenAIOAuth.UndoCarpoolSubscriptionQuotaReset)
 	}
 }
 
@@ -675,6 +678,7 @@ func registerSubscriptionRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		subscriptions.GET("/:id/progress", h.Admin.Subscription.GetProgress)
 		subscriptions.POST("/assign", h.Admin.Subscription.Assign)
 		subscriptions.POST("/bulk-assign", h.Admin.Subscription.BulkAssign)
+		subscriptions.POST("/bulk-reset-quota", h.Admin.Subscription.BulkResetQuota)
 		subscriptions.POST("/:id/extend", h.Admin.Subscription.Extend)
 		subscriptions.POST("/:id/reset-quota", h.Admin.Subscription.ResetQuota)
 		subscriptions.POST("/:id/revoke", h.Admin.Subscription.Revoke)

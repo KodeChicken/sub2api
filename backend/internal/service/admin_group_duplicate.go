@@ -107,6 +107,7 @@ func cloneGroupForDuplicate(source *Group, operationID string) *Group {
 		ProfitMinMargin:                 source.ProfitMinMargin,
 		ProfitSafetyBuffer:              source.ProfitSafetyBuffer,
 		IsExclusive:                     source.IsExclusive,
+		IsCarpool:                       source.IsCarpool,
 		Status:                          duplicateGroupInactiveStatus,
 		DuplicateOperationID:            operationID,
 		SubscriptionType:                source.SubscriptionType,

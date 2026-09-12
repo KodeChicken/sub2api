@@ -38,6 +38,7 @@ func (r *userSubscriptionRepository) Create(ctx context.Context, sub *service.Us
 		SetDailyUsageUsd(sub.DailyUsageUSD).
 		SetWeeklyUsageUsd(sub.WeeklyUsageUSD).
 		SetMonthlyUsageUsd(sub.MonthlyUsageUSD).
+		SetQuotaResetRevision(sub.QuotaResetRevision).
 		SetNillableAssignedBy(sub.AssignedBy)
 
 	if sub.StartsAt.IsZero() {
@@ -149,6 +150,7 @@ func (r *userSubscriptionRepository) Update(ctx context.Context, sub *service.Us
 		SetDailyUsageUsd(sub.DailyUsageUSD).
 		SetWeeklyUsageUsd(sub.WeeklyUsageUSD).
 		SetMonthlyUsageUsd(sub.MonthlyUsageUSD).
+		SetQuotaResetRevision(sub.QuotaResetRevision).
 		SetNillableAssignedBy(sub.AssignedBy).
 		SetAssignedAt(sub.AssignedAt).
 		SetNotes(sub.Notes)
@@ -380,6 +382,7 @@ func (r *userSubscriptionRepository) ActivateWindows(ctx context.Context, id int
 		SetDailyWindowStart(dailyStart).
 		SetWeeklyWindowStart(periodicStart).
 		SetMonthlyWindowStart(periodicStart).
+		AddQuotaResetRevision(1).
 		Save(ctx)
 	return r.translateConditionalWindowReset(ctx, client, id, n, err)
 }
@@ -396,6 +399,7 @@ func (r *userSubscriptionRepository) ResetUsageWindows(ctx context.Context, id i
 	if resetMonthly {
 		update.SetMonthlyUsageUsd(0).SetMonthlyWindowStart(periodicStart)
 	}
+	update.AddQuotaResetRevision(1)
 	_, err := update.Save(ctx)
 	return translatePersistenceError(err, service.ErrSubscriptionNotFound, nil)
 }
@@ -411,6 +415,7 @@ func (r *userSubscriptionRepository) ResetDailyUsage(ctx context.Context, id int
 	n, err := query.
 		SetDailyUsageUsd(0).
 		SetDailyWindowStart(newWindowStart).
+		AddQuotaResetRevision(1).
 		Save(ctx)
 	return r.translateConditionalWindowReset(ctx, client, id, n, err)
 }
@@ -426,6 +431,7 @@ func (r *userSubscriptionRepository) ResetWeeklyUsage(ctx context.Context, id in
 	n, err := query.
 		SetWeeklyUsageUsd(0).
 		SetWeeklyWindowStart(newWindowStart).
+		AddQuotaResetRevision(1).
 		Save(ctx)
 	return r.translateConditionalWindowReset(ctx, client, id, n, err)
 }
@@ -441,6 +447,7 @@ func (r *userSubscriptionRepository) ResetMonthlyUsage(ctx context.Context, id i
 	n, err := query.
 		SetMonthlyUsageUsd(0).
 		SetMonthlyWindowStart(newWindowStart).
+		AddQuotaResetRevision(1).
 		Save(ctx)
 	return r.translateConditionalWindowReset(ctx, client, id, n, err)
 }
@@ -653,6 +660,7 @@ func userSubscriptionEntityToServiceWithStatusMapping(m *dbent.UserSubscription,
 		DailyUsageUSD:      m.DailyUsageUsd,
 		WeeklyUsageUSD:     m.WeeklyUsageUsd,
 		MonthlyUsageUSD:    m.MonthlyUsageUsd,
+		QuotaResetRevision: m.QuotaResetRevision,
 		AssignedBy:         m.AssignedBy,
 		AssignedAt:         m.AssignedAt,
 		Notes:              derefString(m.Notes),
@@ -689,4 +697,5 @@ func applyUserSubscriptionEntityToService(dst *service.UserSubscription, src *db
 	dst.ID = src.ID
 	dst.CreatedAt = src.CreatedAt
 	dst.UpdatedAt = src.UpdatedAt
+	dst.QuotaResetRevision = src.QuotaResetRevision
 }

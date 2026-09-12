@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -18,10 +19,11 @@ import (
 
 // OpenAIOAuthHandler handles OpenAI OAuth-related operations
 type OpenAIOAuthHandler struct {
-	openaiOAuthService *service.OpenAIOAuthService
-	adminService       service.AdminService
-	quotaService       openAIQuotaService
-	rateLimitService   openAIAccountStateRecoverer
+	openaiOAuthService         *service.OpenAIOAuthService
+	adminService               service.AdminService
+	quotaService               openAIQuotaService
+	rateLimitService           openAIAccountStateRecoverer
+	carpoolSubscriptionService *service.SubscriptionService
 }
 
 type openAIQuotaService interface {
@@ -44,11 +46,13 @@ const openAIQuotaResetPostProcessTimeout = 8 * time.Second
 
 type openAIQuotaResetResponse struct {
 	service.OpenAIQuotaResetResult
-	Quota                 *service.OpenAIQuotaUsage `json:"quota,omitempty"`
-	Account               *dto.Account              `json:"account,omitempty"`
-	CacheRefreshed        bool                      `json:"cache_refreshed"`
-	AccountStateRecovered bool                      `json:"account_state_recovered"`
-	WarningCode           string                    `json:"warning_code,omitempty"`
+	Quota                 *service.OpenAIQuotaUsage        `json:"quota,omitempty"`
+	Account               *dto.Account                     `json:"account,omitempty"`
+	CacheRefreshed        bool                             `json:"cache_refreshed"`
+	AccountStateRecovered bool                             `json:"account_state_recovered"`
+	WarningCode           string                           `json:"warning_code,omitempty"`
+	CarpoolReset          *service.CarpoolQuotaResetResult `json:"carpool_subscription_reset,omitempty"`
+	CarpoolResetWarning   string                           `json:"carpool_subscription_reset_warning,omitempty"`
 }
 
 // openAIQuotaRefreshResponse is the reset-credit-persisting variant of the quota
@@ -57,7 +61,9 @@ type openAIQuotaResetResponse struct {
 // failed display-cache write must never discard a successful upstream read.
 type openAIQuotaRefreshResponse struct {
 	service.OpenAIQuotaUsage
-	CachePersisted bool `json:"cache_persisted"`
+	CachePersisted      bool                             `json:"cache_persisted"`
+	CarpoolReset        *service.CarpoolQuotaResetResult `json:"carpool_subscription_reset,omitempty"`
+	CarpoolResetWarning string                           `json:"carpool_subscription_reset_warning,omitempty"`
 }
 
 // openAIQuotaResetPostProcessContext detaches the post-reset bookkeeping from the
@@ -97,6 +103,12 @@ func NewOpenAIOAuthHandler(
 		h.rateLimitService = rateLimitService
 	}
 	return h
+}
+
+func (h *OpenAIOAuthHandler) SetCarpoolSubscriptionService(subscriptionService *service.SubscriptionService) {
+	if h != nil {
+		h.carpoolSubscriptionService = subscriptionService
+	}
 }
 
 // OpenAIGenerateAuthURLRequest represents the request for generating OpenAI auth URL
@@ -522,6 +534,14 @@ func (h *OpenAIOAuthHandler) RefreshQuota(c *gin.Context) {
 	service.NotifyOpenAIAutoResetCredit(accountID)
 
 	refreshResponse := openAIQuotaRefreshResponse{OpenAIQuotaUsage: *usage}
+	carpoolReset, resetErr := h.resetCarpoolForUsage(c.Request.Context(), accountID, usage, service.CarpoolResetSourceOfficial7D, "")
+	if resetErr != nil {
+		slog.Warn("carpool_subscription_quota_reset_failed", "account_id", accountID, "source", service.CarpoolResetSourceOfficial7D, "error", resetErr)
+		refreshResponse.CarpoolResetWarning = resetErr.Error()
+		response.Success(c, refreshResponse)
+		return
+	}
+	refreshResponse.CarpoolReset = carpoolReset
 	// A failed snapshot write leaves the previous cache intact — report it as a
 	// partial success instead of discarding the usage payload we just fetched,
 	// which would leave the card without a credit count at all.
@@ -596,7 +616,14 @@ func (h *OpenAIOAuthHandler) ResetQuota(c *gin.Context) {
 	resetResponse := openAIQuotaResetResponse{OpenAIQuotaResetResult: *result}
 	postCtx, cancelPost := openAIQuotaResetPostProcessContext(c.Request.Context())
 	defer cancelPost()
-
+	if !strings.EqualFold(strings.TrimSpace(result.Code), "no_credit") {
+		carpoolResult, carpoolErr := h.resetCarpoolSubscriptions(postCtx, accountID, service.CarpoolResetSourceManualCard, carpoolEventKey(c, "manual-card"))
+		resetResponse.CarpoolReset = carpoolResult
+		if carpoolErr != nil {
+			slog.Error("carpool_subscription_quota_reset_after_card_failed", "account_id", accountID, "error", carpoolErr)
+			resetResponse.CarpoolResetWarning = carpoolErr.Error()
+		}
+	}
 	postResult := service.RunOpenAIQuotaResetPostProcess(
 		postCtx,
 		accountID,
@@ -612,4 +639,127 @@ func (h *OpenAIOAuthHandler) ResetQuota(c *gin.Context) {
 		resetResponse.Account = dto.AccountFromService(postResult.Account)
 	}
 	response.Success(c, resetResponse)
+}
+
+func (h *OpenAIOAuthHandler) resetCarpoolForUsage(ctx context.Context, accountID int64, usage *service.OpenAIQuotaUsage, source, forcedKey string) (*service.CarpoolQuotaResetResult, error) {
+	if h.carpoolSubscriptionService == nil || usage == nil {
+		return nil, nil
+	}
+	account, err := h.adminService.GetAccount(ctx, accountID)
+	if err != nil {
+		return nil, err
+	}
+	cardReset, err := h.carpoolSubscriptionService.CarpoolCardResetSinceSnapshot(ctx, accountID, account.Extra, time.Now())
+	if err != nil || cardReset {
+		return nil, err
+	}
+	eventKey, detected := service.DetectCarpool7DWindowReset(account.Extra, usage, time.Now())
+	if !detected {
+		return nil, nil
+	}
+	if forcedKey != "" {
+		eventKey = forcedKey
+	}
+	count, err := h.carpoolSubscriptionService.PreviewCarpoolSubscriptionQuotaReset(ctx, accountID)
+	if err != nil || count == 0 {
+		return nil, err
+	}
+	return h.carpoolSubscriptionService.ResetCarpoolSubscriptionQuotas(ctx, accountID, source, eventKey)
+}
+
+func (h *OpenAIOAuthHandler) resetCarpoolSubscriptions(ctx context.Context, accountID int64, source, eventKey string) (*service.CarpoolQuotaResetResult, error) {
+	if h.carpoolSubscriptionService == nil {
+		return nil, nil
+	}
+	return h.carpoolSubscriptionService.ResetCarpoolSubscriptionQuotas(ctx, accountID, source, eventKey)
+}
+
+func (h *OpenAIOAuthHandler) validateCarpoolAccount(ctx context.Context, accountID int64) error {
+	account, err := h.adminService.GetAccount(ctx, accountID)
+	if err != nil {
+		return err
+	}
+	if account == nil || account.Platform != service.PlatformOpenAI || account.Type != service.AccountTypeOAuth {
+		return fmt.Errorf("carpool subscription quota operations are only available for OpenAI OAuth accounts")
+	}
+	return nil
+}
+
+func carpoolEventKey(c *gin.Context, prefix string) string {
+	key := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+	if key == "" || len(key) > 120 {
+		key = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	return prefix + ":" + key
+}
+
+// PreviewCarpoolSubscriptionQuotaReset reports the explicit impact of the
+// account-management fallback action.
+func (h *OpenAIOAuthHandler) PreviewCarpoolSubscriptionQuotaReset(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	if h.carpoolSubscriptionService == nil {
+		response.BadRequest(c, "carpool subscription quota reset is unavailable")
+		return
+	}
+	if err := h.validateCarpoolAccount(c.Request.Context(), accountID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	count, err := h.carpoolSubscriptionService.PreviewCarpoolSubscriptionQuotaReset(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"account_id": accountID, "affected_count": count})
+}
+
+// ResetCarpoolSubscriptionQuota is the manual account-management fallback.
+func (h *OpenAIOAuthHandler) ResetCarpoolSubscriptionQuota(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	if h.carpoolSubscriptionService == nil {
+		response.BadRequest(c, "carpool subscription quota reset is unavailable")
+		return
+	}
+	if err := h.validateCarpoolAccount(c.Request.Context(), accountID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result, err := h.resetCarpoolSubscriptions(c.Request.Context(), accountID, service.CarpoolResetSourceFallback, carpoolEventKey(c, "fallback"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+// UndoCarpoolSubscriptionQuotaReset restores the latest reset snapshot and
+// preserves usage accrued after that reset.
+func (h *OpenAIOAuthHandler) UndoCarpoolSubscriptionQuotaReset(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	if h.carpoolSubscriptionService == nil {
+		response.BadRequest(c, "carpool subscription quota reset is unavailable")
+		return
+	}
+	if err := h.validateCarpoolAccount(c.Request.Context(), accountID); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	result, err := h.carpoolSubscriptionService.UndoLatestCarpoolSubscriptionQuotaReset(c.Request.Context(), accountID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }

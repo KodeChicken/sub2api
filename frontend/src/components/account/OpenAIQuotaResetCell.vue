@@ -61,6 +61,24 @@
         </svg>
         {{ t('admin.accounts.openaiQuotaReset.reset') }}
       </button>
+      <button
+        type="button"
+        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-indigo-600 transition-colors hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-indigo-400 dark:hover:bg-indigo-900/30"
+        :disabled="loading || resetting || carpoolResetting || carpoolUndoing"
+        :title="t('admin.accounts.openaiQuotaReset.carpoolResetTitle')"
+        @click="openCarpoolResetConfirm"
+      >
+        {{ t('admin.accounts.openaiQuotaReset.carpoolReset') }}
+      </button>
+      <button
+        type="button"
+        class="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-900/30"
+        :disabled="loading || resetting || carpoolResetting || carpoolUndoing"
+        :title="t('admin.accounts.openaiQuotaReset.carpoolUndoTitle')"
+        @click="showCarpoolUndoConfirm = true"
+      >
+        {{ t('admin.accounts.openaiQuotaReset.carpoolUndo') }}
+      </button>
     </div>
 
     <div
@@ -160,6 +178,25 @@
       @confirm="confirmReset"
       @cancel="showResetConfirm = false"
     />
+    <ConfirmDialog
+      :show="showCarpoolResetConfirm"
+      :title="t('admin.accounts.openaiQuotaReset.carpoolResetTitle')"
+      :message="t('admin.accounts.openaiQuotaReset.carpoolResetConfirm', { count: carpoolAffectedCount })"
+      :confirm-text="t('admin.accounts.openaiQuotaReset.carpoolReset')"
+      :cancel-text="t('common.cancel')"
+      danger
+      @confirm="confirmCarpoolReset"
+      @cancel="showCarpoolResetConfirm = false"
+    />
+    <ConfirmDialog
+      :show="showCarpoolUndoConfirm"
+      :title="t('admin.accounts.openaiQuotaReset.carpoolUndoTitle')"
+      :message="t('admin.accounts.openaiQuotaReset.carpoolUndoConfirm')"
+      :confirm-text="t('admin.accounts.openaiQuotaReset.carpoolUndo')"
+      :cancel-text="t('common.cancel')"
+      @confirm="confirmCarpoolUndo"
+      @cancel="showCarpoolUndoConfirm = false"
+    />
   </div>
 </template>
 
@@ -170,6 +207,9 @@ import type { Account } from '@/types'
 import {
   refreshOpenAIQuota,
   resetOpenAIQuota,
+  previewCarpoolSubscriptionQuotaReset,
+  resetCarpoolSubscriptionQuotas,
+  undoCarpoolSubscriptionQuotaReset,
   type OpenAIQuotaUsage,
   type OpenAIQuotaResetResult
 } from '@/api/admin/accounts'
@@ -197,6 +237,11 @@ const resetMessage = ref<string | null>(null)
 const resetWarning = ref<string | null>(null)
 const showResetConfirm = ref(false)
 const showResetCreditDetails = ref(false)
+const showCarpoolResetConfirm = ref(false)
+const showCarpoolUndoConfirm = ref(false)
+const carpoolAffectedCount = ref(0)
+const carpoolResetting = ref(false)
+const carpoolUndoing = ref(false)
 
 type AutoResetCreditState = NonNullable<NonNullable<Account['extra']>['codex_auto_reset_credit_state']>
 const validAutoResetStatuses = new Set(['checking', 'available', 'resetting', 'success', 'no_credit', 'failed'])
@@ -452,10 +497,72 @@ const confirmReset = async () => {
         windows: result.windows_reset
       })
     }
+    if (result.carpool_subscription_reset_warning) {
+      resetWarning.value = t('admin.accounts.openaiQuotaReset.carpoolResetFailed')
+    } else if (result.carpool_subscription_reset?.affected_count) {
+      resetMessage.value = t('admin.accounts.openaiQuotaReset.carpoolResetSuccess', {
+        count: result.carpool_subscription_reset.affected_count
+      })
+    }
   } catch (e) {
     error.value = extractErrorMessage(e)
   } finally {
     resetting.value = false
+  }
+}
+
+const openCarpoolResetConfirm = async () => {
+  if (loading.value || resetting.value || carpoolResetting.value) return
+  loading.value = true
+  error.value = null
+  try {
+    const preview = await previewCarpoolSubscriptionQuotaReset(props.account.id)
+    carpoolAffectedCount.value = preview.affected_count
+    if (preview.affected_count === 0) {
+      resetMessage.value = t('admin.accounts.openaiQuotaReset.carpoolNoSubscriptions')
+      return
+    }
+    showCarpoolResetConfirm.value = true
+  } catch (e) {
+    error.value = extractErrorMessage(e)
+  } finally {
+    loading.value = false
+  }
+}
+
+const confirmCarpoolReset = async () => {
+  showCarpoolResetConfirm.value = false
+  if (carpoolResetting.value) return
+  carpoolResetting.value = true
+  error.value = null
+  resetMessage.value = null
+  try {
+    const result = await resetCarpoolSubscriptionQuotas(props.account.id)
+    resetMessage.value = t('admin.accounts.openaiQuotaReset.carpoolResetSuccess', {
+      count: result.affected_count
+    })
+  } catch (e) {
+    error.value = extractErrorMessage(e)
+  } finally {
+    carpoolResetting.value = false
+  }
+}
+
+const confirmCarpoolUndo = async () => {
+  showCarpoolUndoConfirm.value = false
+  if (carpoolUndoing.value) return
+  carpoolUndoing.value = true
+  error.value = null
+  resetMessage.value = null
+  try {
+    const result = await undoCarpoolSubscriptionQuotaReset(props.account.id)
+    resetMessage.value = t('admin.accounts.openaiQuotaReset.carpoolUndoSuccess', {
+      count: result.affected_count
+    })
+  } catch (e) {
+    error.value = extractErrorMessage(e)
+  } finally {
+    carpoolUndoing.value = false
   }
 }
 

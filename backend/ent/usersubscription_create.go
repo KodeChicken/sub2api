@@ -189,6 +189,20 @@ func (_c *UserSubscriptionCreate) SetNillableMonthlyUsageUsd(v *float64) *UserSu
 	return _c
 }
 
+// SetQuotaResetRevision sets the "quota_reset_revision" field.
+func (_c *UserSubscriptionCreate) SetQuotaResetRevision(v int64) *UserSubscriptionCreate {
+	_c.mutation.SetQuotaResetRevision(v)
+	return _c
+}
+
+// SetNillableQuotaResetRevision sets the "quota_reset_revision" field if the given value is not nil.
+func (_c *UserSubscriptionCreate) SetNillableQuotaResetRevision(v *int64) *UserSubscriptionCreate {
+	if v != nil {
+		_c.SetQuotaResetRevision(*v)
+	}
+	return _c
+}
+
 // SetAssignedBy sets the "assigned_by" field.
 func (_c *UserSubscriptionCreate) SetAssignedBy(v int64) *UserSubscriptionCreate {
 	_c.mutation.SetAssignedBy(v)
@@ -342,6 +356,10 @@ func (_c *UserSubscriptionCreate) defaults() error {
 		v := usersubscription.DefaultMonthlyUsageUsd
 		_c.mutation.SetMonthlyUsageUsd(v)
 	}
+	if _, ok := _c.mutation.QuotaResetRevision(); !ok {
+		v := usersubscription.DefaultQuotaResetRevision
+		_c.mutation.SetQuotaResetRevision(v)
+	}
 	if _, ok := _c.mutation.AssignedAt(); !ok {
 		if usersubscription.DefaultAssignedAt == nil {
 			return fmt.Errorf("ent: uninitialized usersubscription.DefaultAssignedAt (forgotten import ent/runtime?)")
@@ -388,6 +406,9 @@ func (_c *UserSubscriptionCreate) check() error {
 	}
 	if _, ok := _c.mutation.MonthlyUsageUsd(); !ok {
 		return &ValidationError{Name: "monthly_usage_usd", err: errors.New(`ent: missing required field "UserSubscription.monthly_usage_usd"`)}
+	}
+	if _, ok := _c.mutation.QuotaResetRevision(); !ok {
+		return &ValidationError{Name: "quota_reset_revision", err: errors.New(`ent: missing required field "UserSubscription.quota_reset_revision"`)}
 	}
 	if _, ok := _c.mutation.AssignedAt(); !ok {
 		return &ValidationError{Name: "assigned_at", err: errors.New(`ent: missing required field "UserSubscription.assigned_at"`)}
@@ -472,6 +493,10 @@ func (_c *UserSubscriptionCreate) createSpec() (*UserSubscription, *sqlgraph.Cre
 	if value, ok := _c.mutation.MonthlyUsageUsd(); ok {
 		_spec.SetField(usersubscription.FieldMonthlyUsageUsd, field.TypeFloat64, value)
 		_node.MonthlyUsageUsd = value
+	}
+	if value, ok := _c.mutation.QuotaResetRevision(); ok {
+		_spec.SetField(usersubscription.FieldQuotaResetRevision, field.TypeInt64, value)
+		_node.QuotaResetRevision = value
 	}
 	if value, ok := _c.mutation.AssignedAt(); ok {
 		_spec.SetField(usersubscription.FieldAssignedAt, field.TypeTime, value)
@@ -798,6 +823,24 @@ func (u *UserSubscriptionUpsert) AddMonthlyUsageUsd(v float64) *UserSubscription
 	return u
 }
 
+// SetQuotaResetRevision sets the "quota_reset_revision" field.
+func (u *UserSubscriptionUpsert) SetQuotaResetRevision(v int64) *UserSubscriptionUpsert {
+	u.Set(usersubscription.FieldQuotaResetRevision, v)
+	return u
+}
+
+// UpdateQuotaResetRevision sets the "quota_reset_revision" field to the value that was provided on create.
+func (u *UserSubscriptionUpsert) UpdateQuotaResetRevision() *UserSubscriptionUpsert {
+	u.SetExcluded(usersubscription.FieldQuotaResetRevision)
+	return u
+}
+
+// AddQuotaResetRevision adds v to the "quota_reset_revision" field.
+func (u *UserSubscriptionUpsert) AddQuotaResetRevision(v int64) *UserSubscriptionUpsert {
+	u.Add(usersubscription.FieldQuotaResetRevision, v)
+	return u
+}
+
 // SetAssignedBy sets the "assigned_by" field.
 func (u *UserSubscriptionUpsert) SetAssignedBy(v int64) *UserSubscriptionUpsert {
 	u.Set(usersubscription.FieldAssignedBy, v)
@@ -1119,6 +1162,27 @@ func (u *UserSubscriptionUpsertOne) AddMonthlyUsageUsd(v float64) *UserSubscript
 func (u *UserSubscriptionUpsertOne) UpdateMonthlyUsageUsd() *UserSubscriptionUpsertOne {
 	return u.Update(func(s *UserSubscriptionUpsert) {
 		s.UpdateMonthlyUsageUsd()
+	})
+}
+
+// SetQuotaResetRevision sets the "quota_reset_revision" field.
+func (u *UserSubscriptionUpsertOne) SetQuotaResetRevision(v int64) *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.SetQuotaResetRevision(v)
+	})
+}
+
+// AddQuotaResetRevision adds v to the "quota_reset_revision" field.
+func (u *UserSubscriptionUpsertOne) AddQuotaResetRevision(v int64) *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.AddQuotaResetRevision(v)
+	})
+}
+
+// UpdateQuotaResetRevision sets the "quota_reset_revision" field to the value that was provided on create.
+func (u *UserSubscriptionUpsertOne) UpdateQuotaResetRevision() *UserSubscriptionUpsertOne {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.UpdateQuotaResetRevision()
 	})
 }
 
@@ -1617,6 +1681,27 @@ func (u *UserSubscriptionUpsertBulk) AddMonthlyUsageUsd(v float64) *UserSubscrip
 func (u *UserSubscriptionUpsertBulk) UpdateMonthlyUsageUsd() *UserSubscriptionUpsertBulk {
 	return u.Update(func(s *UserSubscriptionUpsert) {
 		s.UpdateMonthlyUsageUsd()
+	})
+}
+
+// SetQuotaResetRevision sets the "quota_reset_revision" field.
+func (u *UserSubscriptionUpsertBulk) SetQuotaResetRevision(v int64) *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.SetQuotaResetRevision(v)
+	})
+}
+
+// AddQuotaResetRevision adds v to the "quota_reset_revision" field.
+func (u *UserSubscriptionUpsertBulk) AddQuotaResetRevision(v int64) *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.AddQuotaResetRevision(v)
+	})
+}
+
+// UpdateQuotaResetRevision sets the "quota_reset_revision" field to the value that was provided on create.
+func (u *UserSubscriptionUpsertBulk) UpdateQuotaResetRevision() *UserSubscriptionUpsertBulk {
+	return u.Update(func(s *UserSubscriptionUpsert) {
+		s.UpdateQuotaResetRevision()
 	})
 }
 

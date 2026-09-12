@@ -1003,6 +1003,8 @@ export default {
         monthlyLimit: 'Monthly Limit (USD)',
         defaultValidityDays: 'Default Validity (Days)',
         validityHint: 'Number of days the subscription is valid when assigned to a user',
+        carpoolReset: 'Sync subscription quota resets for carpool accounts',
+        carpoolResetHint: 'When a bound account quota is reset, also reset configured quotas for every active subscription in this group.',
         noLimit: 'No limit'
       },
       imagePricing: {

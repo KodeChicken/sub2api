@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand/v2"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -393,6 +394,7 @@ func renewedSubscriptionTerm(existingSub *UserSubscription, notes string, starts
 	renewed.DailyUsageUSD = 0
 	renewed.WeeklyUsageUSD = 0
 	renewed.MonthlyUsageUSD = 0
+	renewed.QuotaResetRevision++
 	renewed.Notes = appendSubscriptionNotes(existingSub.Notes, notes)
 	return &renewed
 }
@@ -890,6 +892,60 @@ func (s *SubscriptionService) AdminResetQuota(ctx context.Context, subscriptionI
 	}
 	// Return the refreshed subscription from DB
 	return s.userSubRepo.GetByID(ctx, subscriptionID)
+}
+
+// AdminResetQuotaBatch resets selected subscriptions in one transaction. The
+// caller supplies explicit IDs; this method never expands a filter to all rows.
+func (s *SubscriptionService) AdminResetQuotaBatch(ctx context.Context, subscriptionIDs []int64, resetDaily, resetWeekly, resetMonthly bool) ([]UserSubscription, error) {
+	if !resetDaily && !resetWeekly && !resetMonthly {
+		return nil, ErrInvalidInput
+	}
+	ids := make([]int64, 0, len(subscriptionIDs))
+	seen := make(map[int64]struct{}, len(subscriptionIDs))
+	for _, id := range subscriptionIDs {
+		if id <= 0 {
+			return nil, ErrInvalidInput
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 || len(ids) > 500 {
+		return nil, ErrInvalidInput
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+
+	now := s.now()
+	dailyStart := timezone.StartOfDay(now)
+	updated := make([]UserSubscription, 0, len(ids))
+	err := s.withSubscriptionUpdateTx(ctx, func(txCtx context.Context) error {
+		for _, id := range ids {
+			if _, err := s.userSubRepo.GetByIDForUpdate(txCtx, id); err != nil {
+				return err
+			}
+			if err := s.userSubRepo.ResetUsageWindows(txCtx, id, resetDaily, resetWeekly, resetMonthly, dailyStart, now); err != nil {
+				return err
+			}
+			refreshed, err := s.userSubRepo.GetByID(txCtx, id)
+			if err != nil {
+				return err
+			}
+			updated = append(updated, *refreshed)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for i := range updated {
+		s.InvalidateSubCacheSync(updated[i].UserID, updated[i].GroupID)
+		if s.billingCacheService != nil {
+			_ = s.billingCacheService.InvalidateSubscription(ctx, updated[i].UserID, updated[i].GroupID)
+		}
+	}
+	return updated, nil
 }
 
 // CheckAndResetWindows 检查并重置过期的窗口

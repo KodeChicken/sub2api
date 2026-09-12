@@ -82,13 +82,14 @@ type openAIAutoResetRecovery interface {
 // OpenAIQuotaAutoResetService 通过小型去重队列承接实时信号，并用分钟扫描补偿
 // 重启、漏事件和多实例读取；真正消费仍由 PostgreSQL 幂等记录串行化。
 type OpenAIQuotaAutoResetService struct {
-	accountRepo AccountRepository
-	quota       openAIAutoResetQuota
-	recoverer   openAIAutoResetRecovery
-	idempotency *IdempotencyCoordinator
-	audit       *AuditLogService
-	settings    *SettingService
-	leaderLock  LeaderLockCache
+	accountRepo          AccountRepository
+	carpoolSubscriptions *SubscriptionService
+	quota                openAIAutoResetQuota
+	recoverer            openAIAutoResetRecovery
+	idempotency          *IdempotencyCoordinator
+	audit                *AuditLogService
+	settings             *SettingService
+	leaderLock           LeaderLockCache
 
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -98,6 +99,14 @@ type OpenAIQuotaAutoResetService struct {
 	start   sync.Once
 	stop    sync.Once
 	wg      sync.WaitGroup
+}
+
+const carpoolQuotaSnapshotInterval = 10 * time.Minute
+
+func (s *OpenAIQuotaAutoResetService) SetCarpoolSubscriptionService(subscriptionService *SubscriptionService) {
+	if s != nil {
+		s.carpoolSubscriptions = subscriptionService
+	}
 }
 
 func NewOpenAIQuotaAutoResetService(
@@ -217,6 +226,14 @@ func (s *OpenAIQuotaAutoResetService) scanEnabledAccounts(ctx context.Context) {
 	if release != nil {
 		defer release()
 	}
+	carpoolAccountIDs := map[int64]struct{}{}
+	if s.carpoolSubscriptions != nil {
+		var err error
+		carpoolAccountIDs, err = s.carpoolSubscriptions.CarpoolAccountIDs(ctx)
+		if err != nil {
+			slog.Warn("carpool_subscription_account_scan_failed", "error", err)
+		}
+	}
 	for page := 1; ; page++ {
 		accounts, pageInfo, err := s.accountRepo.ListWithFilters(ctx, pagination.PaginationParams{
 			Page: page, PageSize: openAIAutoResetBatchSize,
@@ -227,7 +244,8 @@ func (s *OpenAIQuotaAutoResetService) scanEnabledAccounts(ctx context.Context) {
 		}
 		for i := range accounts {
 			account := &accounts[i]
-			if account.Schedulable && ResolveOpenAIAutoResetCreditConfig(account).Enabled {
+			_, hasCarpoolSubscriptions := carpoolAccountIDs[account.ID]
+			if account.Schedulable && (ResolveOpenAIAutoResetCreditConfig(account).Enabled || hasCarpoolSubscriptions) {
 				s.Notify(account.ID)
 			}
 		}
@@ -279,6 +297,11 @@ func (s *OpenAIQuotaAutoResetService) evaluateAccount(ctx context.Context, accou
 			s.Notify(*account.ParentAccountID)
 		}
 		return nil
+	}
+	if account.IsActive() && account.Schedulable && s.carpoolSubscriptions != nil {
+		if err := s.checkCarpoolQuotaSnapshot(ctx, account); err != nil {
+			slog.Warn("carpool_subscription_snapshot_check_failed", "account_id", accountID, "error", err)
+		}
 	}
 	config := ResolveOpenAIAutoResetCreditConfig(account)
 	if !config.Enabled || !account.IsActive() || !account.Schedulable {
@@ -443,6 +466,16 @@ func (s *OpenAIQuotaAutoResetService) evaluateAccount(ctx context.Context, accou
 		s.recordAudit(accountID, assessment, available, "no_credit", 0, noCredit.ErrorCode)
 		return s.persistState(ctx, accountID, noCredit)
 	}
+	if s.carpoolSubscriptions != nil {
+		carpoolCtx, cancelCarpool := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Second)
+		carpoolResult, resetErr := s.carpoolSubscriptions.ResetCarpoolSubscriptionQuotas(carpoolCtx, accountID, CarpoolResetSourceAutoCard, stableKey)
+		cancelCarpool()
+		if resetErr != nil {
+			slog.Error("carpool_subscription_quota_reset_after_auto_card_failed", "account_id", accountID, "error", resetErr)
+		} else if carpoolResult != nil && carpoolResult.AffectedCount > 0 {
+			slog.Info("carpool_subscription_quota_reset_after_auto_card", "account_id", accountID, "affected_count", carpoolResult.AffectedCount)
+		}
+	}
 	postCtx, cancelPost := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Second)
 	post := RunOpenAIQuotaResetPostProcess(postCtx, accountID, s.quota, s.recoverer, s.accountRepo.GetByID)
 	cancelPost()
@@ -482,6 +515,53 @@ func (s *OpenAIQuotaAutoResetService) evaluateAccount(ctx context.Context, accou
 		"windows_reset", consumeResult.WindowsReset,
 	)
 	return nil
+}
+
+func (s *OpenAIQuotaAutoResetService) checkCarpoolQuotaSnapshot(ctx context.Context, account *Account) error {
+	if s == nil || account == nil || s.carpoolSubscriptions == nil {
+		return nil
+	}
+	count, err := s.carpoolSubscriptions.PreviewCarpoolSubscriptionQuotaReset(ctx, account.ID)
+	if err != nil || count == 0 {
+		return err
+	}
+	if !carpoolQuotaSnapshotStale(account.Extra, time.Now()) {
+		return nil
+	}
+	usage, err := s.quota.QueryUsage(ctx, account.ID)
+	if err != nil {
+		return err
+	}
+	if usage == nil {
+		return errors.New("openai quota query returned an empty result")
+	}
+	now := time.Now()
+	updates := buildOpenAIAutoResetUsageUpdates(usage, now)
+	cardReset, err := s.carpoolSubscriptions.CarpoolCardResetSinceSnapshot(ctx, account.ID, account.Extra, now)
+	if err != nil {
+		return err
+	}
+	if eventKey, detected := DetectCarpool7DWindowReset(account.Extra, usage, now); detected && !cardReset {
+		if _, err := s.carpoolSubscriptions.ResetCarpoolSubscriptionQuotas(ctx, account.ID, CarpoolResetSourceOfficial7D, eventKey); err != nil {
+			return err
+		}
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+	return s.accountRepo.UpdateExtra(ctx, account.ID, updates)
+}
+
+func carpoolQuotaSnapshotStale(extra map[string]any, now time.Time) bool {
+	raw, ok := extra["codex_usage_updated_at"]
+	if !ok {
+		return true
+	}
+	ts, err := time.Parse(time.RFC3339, fmt.Sprint(raw))
+	if err != nil {
+		return true
+	}
+	return now.Sub(ts) >= carpoolQuotaSnapshotInterval
 }
 
 type openAIAutoResetConsumeResult struct {

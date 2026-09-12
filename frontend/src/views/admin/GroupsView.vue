@@ -726,6 +726,19 @@
             v-if="createForm.subscription_type === 'subscription'"
             class="space-y-4 border-l-2 border-primary-200 pl-4 dark:border-primary-800"
           >
+            <div class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+              <div class="flex items-center gap-3">
+                <Toggle v-model="createForm.is_carpool" />
+                <div>
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-100">
+                    {{ t('admin.groups.subscription.carpoolReset') }}
+                  </div>
+                  <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                    {{ t('admin.groups.subscription.carpoolResetHint') }}
+                  </p>
+                </div>
+              </div>
+            </div>
             <div>
               <label class="input-label">{{
                 t("admin.groups.subscription.dailyLimit")
@@ -2366,6 +2379,19 @@
             v-if="editForm.subscription_type === 'subscription'"
             class="space-y-4 border-l-2 border-primary-200 pl-4 dark:border-primary-800"
           >
+            <div class="rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20">
+              <div class="flex items-center gap-3">
+                <Toggle v-model="editForm.is_carpool" />
+                <div>
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-100">
+                    {{ t('admin.groups.subscription.carpoolReset') }}
+                  </div>
+                  <p class="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                    {{ t('admin.groups.subscription.carpoolResetHint') }}
+                  </p>
+                </div>
+              </div>
+            </div>
             <div>
               <label class="input-label">{{
                 t("admin.groups.subscription.dailyLimit")
@@ -4934,6 +4960,7 @@ const createForm = reactive({
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
   is_exclusive: false,
+  is_carpool: false,
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
   weekly_limit_usd: null as number | null,
@@ -5298,6 +5325,7 @@ const editForm = reactive({
   platform: "anthropic" as GroupPlatform,
   rate_multiplier: 1.0,
   is_exclusive: false,
+  is_carpool: false,
   status: "active" as "active" | "inactive",
   subscription_type: "standard" as SubscriptionType,
   daily_limit_usd: null as number | null,
@@ -5761,6 +5789,7 @@ const closeCreateModal = () => {
   createForm.platform = "anthropic";
   createForm.rate_multiplier = 1.0;
   createForm.is_exclusive = false;
+  createForm.is_carpool = false;
   createForm.subscription_type = "standard";
   createForm.daily_limit_usd = null;
   createForm.weekly_limit_usd = null;
@@ -6030,6 +6059,7 @@ const handleEdit = async (group: AdminGroup) => {
   editForm.platform = group.platform;
   editForm.rate_multiplier = group.rate_multiplier;
   editForm.is_exclusive = group.is_exclusive;
+  editForm.is_carpool = group.is_carpool ?? false;
   editForm.status = group.status;
   editForm.subscription_type = group.subscription_type || "standard";
   editForm.daily_limit_usd = group.daily_limit_usd;
@@ -6636,6 +6666,7 @@ watch(
       createForm.peak_start = "";
       createForm.peak_end = "";
       createForm.peak_rate_multiplier = 1.0;
+      createForm.is_carpool = false;
     }
   },
 );
@@ -6645,6 +6676,7 @@ watch(
   () => editForm.subscription_type,
   (newVal) => {
     if (newVal !== "subscription") {
+      editForm.is_carpool = false;
       editForm.peak_rate_enabled = false;
       editForm.peak_start = "";
       editForm.peak_end = "";
