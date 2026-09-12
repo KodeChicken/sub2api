@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v0.0.*"
   schedule:
     - cron: "17,47 * * * *"
 
@@ -21,11 +23,12 @@ jobs:
     outputs:
       publish: ${{ steps.prepare.outputs.publish }}
       tag: ${{ steps.prepare.outputs.tag }}
+      require_version_match: ${{ steps.prepare.outputs.require_version_match }}
     steps:
-      - name: Checkout main
+      - name: Checkout release source
         uses: actions/checkout@v6
         with:
-          ref: main
+          ref: ${{ github.ref_type == 'tag' && github.ref_name || 'main' }}
           fetch-depth: 0
 
       - name: Prepare release
@@ -37,6 +40,28 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # A manually pushed project tag is already the immutable release
+          # source. Publish it directly instead of running the upstream-sync
+          # path, which owns creation of automatic v0.0.x tags.
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            release_tag="${GITHUB_REF#refs/tags/}"
+            if [[ ! "$release_tag" =~ ^v0\.0\.[1-9][0-9]*$ ]]; then
+              echo "Invalid manual release tag: $release_tag" >&2
+              exit 1
+            fi
+            if gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              echo "Release $release_tag already exists"
+              echo "publish=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Publishing manually pushed tag $release_tag"
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+            echo "require_version_match=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           git remote add upstream https://github.com/Wei-Shaw/sub2api.git
           git pull --ff-only origin main
 
@@ -62,6 +87,12 @@ jobs:
             echo "Retrying missing release for $latest_tag"
             echo "publish=true" >> "$GITHUB_OUTPUT"
             echo "tag=$latest_tag" >> "$GITHUB_OUTPUT"
+            version_at_tag=$(git show "$latest_tag:backend/cmd/server/VERSION" 2>/dev/null | tr -d '\r\n' || true)
+            if [[ "$version_at_tag" == "${latest_tag#v}" ]]; then
+              echo "require_version_match=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "require_version_match=false" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
 
@@ -97,6 +128,7 @@ jobs:
 
           echo "publish=true" >> "$GITHUB_OUTPUT"
           echo "tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "require_version_match=true" >> "$GITHUB_OUTPUT"
 
   build-frontend:
     needs: prepare
@@ -149,9 +181,12 @@ jobs:
       - name: Verify release source
         env:
           TAG_NAME: ${{ needs.prepare.outputs.tag }}
+          REQUIRE_VERSION_MATCH: ${{ needs.prepare.outputs.require_version_match }}
         run: |
           [[ "$TAG_NAME" =~ ^v0\.0\.[1-9][0-9]*$ ]]
-          test "$(tr -d '\r\n' < backend/cmd/server/VERSION)" = "${TAG_NAME#v}"
+          if [[ "$REQUIRE_VERSION_MATCH" == "true" ]]; then
+            test "$(tr -d '\r\n' < backend/cmd/server/VERSION)" = "${TAG_NAME#v}"
+          fi
           grep -F 'githubRepo     = "${{ github.repository }}"' backend/internal/service/update_service.go
 
       - name: Download frontend artifact
