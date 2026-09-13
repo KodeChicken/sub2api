@@ -34,6 +34,7 @@ func (s *GatewayService) SelectAccountForModel(ctx context.Context, groupID *int
 func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}) (*Account, error) {
 	// 优先检查 context 中的强制平台（/antigravity 路由）
 	var platform string
+	var resolvedGroup *Group
 	forcePlatform, hasForcePlatform := ctx.Value(ctxkey.ForcePlatform).(string)
 	if hasForcePlatform && forcePlatform != "" {
 		platform = forcePlatform
@@ -47,6 +48,7 @@ func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context
 		}
 		groupID = resolvedGroupID
 		ctx = s.withGroupContext(ctx, group)
+		resolvedGroup = group
 		platform = group.Platform
 		if group.Platform == PlatformComposite {
 			decision, ok, err := s.resolveCompositeRouteDecision(ctx, group, requestedModel, CompositeRouteEndpointAny)
@@ -65,6 +67,9 @@ func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context
 		platform = PlatformAnthropic
 	}
 	ctx = s.withGatewayProfitControlGate(ctx, groupID)
+	if account, handled, err := s.selectTemporaryDispatchAccount(ctx, groupID, resolvedGroup, platform, requestedModel, excludedIDs); handled {
+		return account, err
+	}
 
 	// Claude Code 限制可能已将 groupID 解析为 fallback group，
 	// 渠道限制预检查必须使用解析后的分组。
@@ -214,6 +219,29 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 	platform, hasForcePlatform, err := s.resolvePlatform(ctx, groupID, group, requestedModel)
 	if err != nil {
 		return nil, err
+	}
+	if account, handled, dispatchErr := s.selectTemporaryDispatchAccount(ctx, groupID, group, platform, requestedModel, excludedIDs); handled {
+		if dispatchErr != nil {
+			return nil, dispatchErr
+		}
+		result, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
+		if acquireErr == nil && result.Acquired {
+			if !s.checkAndRegisterSession(ctx, account, sessionHash) {
+				result.ReleaseFunc()
+				return nil, temporaryDispatchSelectionError(requestedModel, "target account session limit reached")
+			}
+			return s.newSelectionResult(ctx, account, true, result.ReleaseFunc, nil)
+		}
+		if !s.checkAndRegisterSession(ctx, account, sessionHash) {
+			return nil, temporaryDispatchSelectionError(requestedModel, "target account session limit reached")
+		}
+		cfg := s.schedulingConfig()
+		return s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
+			AccountID:      account.ID,
+			MaxConcurrency: account.Concurrency,
+			Timeout:        cfg.FallbackWaitTimeout,
+			MaxWaiting:     cfg.FallbackMaxWaiting,
+		})
 	}
 	preferOAuth := platform == PlatformGemini
 	if s.debugModelRoutingEnabled() && requestedModel != "" && modelRoutingAppliesToTargetPlatform(platform) {

@@ -13,6 +13,7 @@ import type {
   CompositeRouteDecision,
   CreateGroupRequest,
   UpdateGroupRequest,
+  TemporaryDispatchResult,
   PaginatedResponse
 } from '@/types'
 
@@ -470,6 +471,26 @@ export async function getCapacitySummary(): Promise<
   return data
 }
 
+export async function startTemporaryDispatch(
+  groupIds: number[],
+  accountId: number,
+  durationMinutes: number
+): Promise<TemporaryDispatchResult> {
+  const { data } = await apiClient.post<TemporaryDispatchResult>('/admin/groups/temporary-dispatch', {
+    group_ids: groupIds,
+    account_id: accountId,
+    duration_minutes: durationMinutes
+  })
+  return data
+}
+
+export async function stopTemporaryDispatch(groupIds: number[]): Promise<{ message: string }> {
+  const { data } = await apiClient.post<{ message: string }>('/admin/groups/temporary-dispatch/stop', {
+    group_ids: groupIds
+  })
+  return data
+}
+
 export const groupsAPI = {
   list,
   getAll,
@@ -498,7 +519,9 @@ export const groupsAPI = {
   batchSetGroupRPMOverrides,
   updateSortOrder,
   getUsageSummary,
-  getCapacitySummary
+  getCapacitySummary,
+  startTemporaryDispatch,
+  stopTemporaryDispatch
 }
 
 export default groupsAPI

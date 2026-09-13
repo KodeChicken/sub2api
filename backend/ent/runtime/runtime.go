@@ -1227,6 +1227,10 @@ func init() {
 	groupDescProfitSafetyBuffer := groupFields[63].Descriptor()
 	// group.DefaultProfitSafetyBuffer holds the default value on creation for the profit_safety_buffer field.
 	group.DefaultProfitSafetyBuffer = groupDescProfitSafetyBuffer.Default.(float64)
+	// groupDescTemporaryDispatchID is the schema descriptor for temporary_dispatch_id field.
+	groupDescTemporaryDispatchID := groupFields[65].Descriptor()
+	// group.TemporaryDispatchIDValidator is a validator for the "temporary_dispatch_id" field. It is called by the builders before save.
+	group.TemporaryDispatchIDValidator = groupDescTemporaryDispatchID.Validators[0].(func(string) error)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
 	idempotencyrecordMixinFields0 := idempotencyrecordMixin[0].Fields()
 	_ = idempotencyrecordMixinFields0

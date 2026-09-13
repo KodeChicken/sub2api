@@ -11,6 +11,8 @@ const {
   getUsageSummary,
   getCapacitySummary,
   getLiveCapability,
+  startTemporaryDispatch,
+  stopTemporaryDispatch,
   listAccounts,
   showError,
   showSuccess,
@@ -24,6 +26,8 @@ const {
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
+  startTemporaryDispatch: vi.fn(),
+  stopTemporaryDispatch: vi.fn(),
   listAccounts: vi.fn(),
   showError: vi.fn(),
   showSuccess: vi.fn(),
@@ -41,10 +45,14 @@ const messages: Record<string, string> = {
   'admin.groups.columns.rateMultiplier': 'Rate Multiplier',
   'admin.groups.columns.type': 'Type',
   'admin.groups.columns.accounts': 'Accounts',
+  'admin.groups.columns.temporaryDispatch': 'Temporary dispatch',
   'admin.groups.columns.capacity': 'Capacity',
   'admin.groups.columns.usage': 'Usage',
   'admin.groups.columns.status': 'Status',
   'admin.groups.columns.actions': 'Actions',
+  'admin.groups.temporaryDispatch.action': 'Temporary account',
+  'admin.groups.temporaryDispatch.start': 'Start takeover',
+  'admin.groups.temporaryDispatch.started': 'Temporary dispatch started',
   'admin.groups.usageToday': 'Today',
   'admin.groups.usageYesterday': 'Yesterday',
   'admin.groups.usageTotal': 'Total',
@@ -59,6 +67,8 @@ vi.mock('@/api/admin', () => ({
       getUsageSummary,
       getCapacitySummary,
       getLiveCapability,
+      startTemporaryDispatch,
+      stopTemporaryDispatch,
       create: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
@@ -154,12 +164,13 @@ const TablePageLayoutStub = {
 }
 
 const DataTableStub = {
-  props: ['columns', 'data'],
-  emits: ['sort'],
+  props: ['columns', 'data', 'selectedKeys'],
+  emits: ['sort', 'update:selectedKeys'],
   template: `
     <div>
       <div data-test="columns">{{ columns.map((col) => col.key).join(',') }}</div>
       <div data-test="rows">{{ data.map((row) => row.name).join(',') }}</div>
+      <button v-if="data.length" data-test="select-first" @click="$emit('update:selectedKeys', [data[0].id])">select</button>
       <div v-if="data.length" data-test="usage-cell">
         <slot name="cell-usage" :row="data[0]" />
       </div>
@@ -243,6 +254,8 @@ describe('admin GroupsView column settings', () => {
     getUsageSummary.mockReset()
     getCapacitySummary.mockReset()
     getLiveCapability.mockReset()
+    startTemporaryDispatch.mockReset()
+    stopTemporaryDispatch.mockReset()
     listAccounts.mockReset()
     showError.mockReset()
     showSuccess.mockReset()
@@ -262,6 +275,11 @@ describe('admin GroupsView column settings', () => {
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
     getLiveCapability.mockResolvedValue({ supported: false })
+    startTemporaryDispatch.mockResolvedValue({
+      dispatch_id: 'td_test', group_ids: [1], account_id: 42,
+      started_at: '2026-07-01T00:00:00Z', expires_at: '2026-07-01T02:00:00Z',
+    })
+    stopTemporaryDispatch.mockResolvedValue({ message: 'ok' })
     listAccounts.mockResolvedValue({ items: [], total: 0, page: 1, page_size: 20, pages: 0 })
     isCurrentStep.mockReturnValue(false)
   })
@@ -297,6 +315,7 @@ describe('admin GroupsView column settings', () => {
       'rate_multiplier',
       'is_exclusive',
       'account_count',
+      'temporary_dispatch',
       'capacity',
       'usage',
       'status',
@@ -304,6 +323,34 @@ describe('admin GroupsView column settings', () => {
     ])
     expect(localStorage.getItem('group-hidden-columns')).toBe(JSON.stringify(['id']))
     expect(localStorage.getItem('group-column-settings-version')).toBe('2')
+  })
+
+  it('starts a temporary dispatch for selected groups', async () => {
+    listAccounts.mockResolvedValue({
+      items: [{ id: 42, name: 'Drain account' }],
+      total: 1,
+      page: 1,
+      page_size: 30,
+      pages: 1,
+    })
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-test="select-first"]').trigger('click')
+    const openButton = wrapper.findAll('button').find((item) => item.text().includes('Temporary account'))
+    expect(openButton).toBeTruthy()
+    await openButton!.trigger('click')
+    await flushPromises()
+
+    const accountButton = wrapper.findAll('button').find((item) => item.text().includes('Drain account'))
+    expect(accountButton).toBeTruthy()
+    await accountButton!.trigger('click')
+    const startButton = wrapper.findAll('button').find((item) => item.text().includes('Start takeover'))
+    expect(startButton).toBeTruthy()
+    await startButton!.trigger('click')
+    await flushPromises()
+
+    expect(startTemporaryDispatch).toHaveBeenCalledWith([1], 42, 120)
+    expect(showSuccess).toHaveBeenCalledWith('Temporary dispatch started')
   })
 
   it('applies saved hidden columns on mount and ignores unknown keys', async () => {
@@ -323,6 +370,7 @@ describe('admin GroupsView column settings', () => {
       'rate_multiplier',
       'is_exclusive',
       'account_count',
+      'temporary_dispatch',
       'status',
       'actions',
     ])
@@ -341,6 +389,7 @@ describe('admin GroupsView column settings', () => {
       'rate_multiplier',
       'is_exclusive',
       'account_count',
+      'temporary_dispatch',
       'capacity',
       'status',
       'actions',
@@ -364,6 +413,7 @@ describe('admin GroupsView column settings', () => {
       'rate_multiplier',
       'is_exclusive',
       'account_count',
+      'temporary_dispatch',
       'capacity',
       'status',
       'actions',
@@ -387,6 +437,7 @@ describe('admin GroupsView column settings', () => {
       'rate_multiplier',
       'is_exclusive',
       'account_count',
+      'temporary_dispatch',
       'capacity',
       'usage',
       'status',

@@ -22178,6 +22178,11 @@ type GroupMutation struct {
 	addprofit_min_margin                    *float64
 	profit_safety_buffer                    *float64
 	addprofit_safety_buffer                 *float64
+	temporary_dispatch_account_id           *int64
+	addtemporary_dispatch_account_id        *int64
+	temporary_dispatch_id                   *string
+	temporary_dispatch_started_at           *time.Time
+	temporary_dispatch_expires_at           *time.Time
 	clearedFields                           map[string]struct{}
 	api_keys                                map[int64]struct{}
 	removedapi_keys                         map[int64]struct{}
@@ -25600,6 +25605,223 @@ func (m *GroupMutation) ResetProfitSafetyBuffer() {
 	m.addprofit_safety_buffer = nil
 }
 
+// SetTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field.
+func (m *GroupMutation) SetTemporaryDispatchAccountID(i int64) {
+	m.temporary_dispatch_account_id = &i
+	m.addtemporary_dispatch_account_id = nil
+}
+
+// TemporaryDispatchAccountID returns the value of the "temporary_dispatch_account_id" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchAccountID() (r int64, exists bool) {
+	v := m.temporary_dispatch_account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchAccountID returns the old "temporary_dispatch_account_id" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchAccountID(ctx context.Context) (v *int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchAccountID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchAccountID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchAccountID: %w", err)
+	}
+	return oldValue.TemporaryDispatchAccountID, nil
+}
+
+// AddTemporaryDispatchAccountID adds i to the "temporary_dispatch_account_id" field.
+func (m *GroupMutation) AddTemporaryDispatchAccountID(i int64) {
+	if m.addtemporary_dispatch_account_id != nil {
+		*m.addtemporary_dispatch_account_id += i
+	} else {
+		m.addtemporary_dispatch_account_id = &i
+	}
+}
+
+// AddedTemporaryDispatchAccountID returns the value that was added to the "temporary_dispatch_account_id" field in this mutation.
+func (m *GroupMutation) AddedTemporaryDispatchAccountID() (r int64, exists bool) {
+	v := m.addtemporary_dispatch_account_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTemporaryDispatchAccountID clears the value of the "temporary_dispatch_account_id" field.
+func (m *GroupMutation) ClearTemporaryDispatchAccountID() {
+	m.temporary_dispatch_account_id = nil
+	m.addtemporary_dispatch_account_id = nil
+	m.clearedFields[group.FieldTemporaryDispatchAccountID] = struct{}{}
+}
+
+// TemporaryDispatchAccountIDCleared returns if the "temporary_dispatch_account_id" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchAccountIDCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchAccountID]
+	return ok
+}
+
+// ResetTemporaryDispatchAccountID resets all changes to the "temporary_dispatch_account_id" field.
+func (m *GroupMutation) ResetTemporaryDispatchAccountID() {
+	m.temporary_dispatch_account_id = nil
+	m.addtemporary_dispatch_account_id = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchAccountID)
+}
+
+// SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
+func (m *GroupMutation) SetTemporaryDispatchID(s string) {
+	m.temporary_dispatch_id = &s
+}
+
+// TemporaryDispatchID returns the value of the "temporary_dispatch_id" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchID() (r string, exists bool) {
+	v := m.temporary_dispatch_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchID returns the old "temporary_dispatch_id" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchID: %w", err)
+	}
+	return oldValue.TemporaryDispatchID, nil
+}
+
+// ClearTemporaryDispatchID clears the value of the "temporary_dispatch_id" field.
+func (m *GroupMutation) ClearTemporaryDispatchID() {
+	m.temporary_dispatch_id = nil
+	m.clearedFields[group.FieldTemporaryDispatchID] = struct{}{}
+}
+
+// TemporaryDispatchIDCleared returns if the "temporary_dispatch_id" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchIDCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchID]
+	return ok
+}
+
+// ResetTemporaryDispatchID resets all changes to the "temporary_dispatch_id" field.
+func (m *GroupMutation) ResetTemporaryDispatchID() {
+	m.temporary_dispatch_id = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchID)
+}
+
+// SetTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field.
+func (m *GroupMutation) SetTemporaryDispatchStartedAt(t time.Time) {
+	m.temporary_dispatch_started_at = &t
+}
+
+// TemporaryDispatchStartedAt returns the value of the "temporary_dispatch_started_at" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchStartedAt() (r time.Time, exists bool) {
+	v := m.temporary_dispatch_started_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchStartedAt returns the old "temporary_dispatch_started_at" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchStartedAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchStartedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchStartedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchStartedAt: %w", err)
+	}
+	return oldValue.TemporaryDispatchStartedAt, nil
+}
+
+// ClearTemporaryDispatchStartedAt clears the value of the "temporary_dispatch_started_at" field.
+func (m *GroupMutation) ClearTemporaryDispatchStartedAt() {
+	m.temporary_dispatch_started_at = nil
+	m.clearedFields[group.FieldTemporaryDispatchStartedAt] = struct{}{}
+}
+
+// TemporaryDispatchStartedAtCleared returns if the "temporary_dispatch_started_at" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchStartedAtCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchStartedAt]
+	return ok
+}
+
+// ResetTemporaryDispatchStartedAt resets all changes to the "temporary_dispatch_started_at" field.
+func (m *GroupMutation) ResetTemporaryDispatchStartedAt() {
+	m.temporary_dispatch_started_at = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchStartedAt)
+}
+
+// SetTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field.
+func (m *GroupMutation) SetTemporaryDispatchExpiresAt(t time.Time) {
+	m.temporary_dispatch_expires_at = &t
+}
+
+// TemporaryDispatchExpiresAt returns the value of the "temporary_dispatch_expires_at" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchExpiresAt() (r time.Time, exists bool) {
+	v := m.temporary_dispatch_expires_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchExpiresAt returns the old "temporary_dispatch_expires_at" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchExpiresAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchExpiresAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchExpiresAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchExpiresAt: %w", err)
+	}
+	return oldValue.TemporaryDispatchExpiresAt, nil
+}
+
+// ClearTemporaryDispatchExpiresAt clears the value of the "temporary_dispatch_expires_at" field.
+func (m *GroupMutation) ClearTemporaryDispatchExpiresAt() {
+	m.temporary_dispatch_expires_at = nil
+	m.clearedFields[group.FieldTemporaryDispatchExpiresAt] = struct{}{}
+}
+
+// TemporaryDispatchExpiresAtCleared returns if the "temporary_dispatch_expires_at" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchExpiresAtCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchExpiresAt]
+	return ok
+}
+
+// ResetTemporaryDispatchExpiresAt resets all changes to the "temporary_dispatch_expires_at" field.
+func (m *GroupMutation) ResetTemporaryDispatchExpiresAt() {
+	m.temporary_dispatch_expires_at = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchExpiresAt)
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *GroupMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -25958,7 +26180,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 67)
+	fields := make([]string, 0, 71)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -26160,6 +26382,18 @@ func (m *GroupMutation) Fields() []string {
 	if m.profit_safety_buffer != nil {
 		fields = append(fields, group.FieldProfitSafetyBuffer)
 	}
+	if m.temporary_dispatch_account_id != nil {
+		fields = append(fields, group.FieldTemporaryDispatchAccountID)
+	}
+	if m.temporary_dispatch_id != nil {
+		fields = append(fields, group.FieldTemporaryDispatchID)
+	}
+	if m.temporary_dispatch_started_at != nil {
+		fields = append(fields, group.FieldTemporaryDispatchStartedAt)
+	}
+	if m.temporary_dispatch_expires_at != nil {
+		fields = append(fields, group.FieldTemporaryDispatchExpiresAt)
+	}
 	return fields
 }
 
@@ -26302,6 +26536,14 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.ProfitMinMargin()
 	case group.FieldProfitSafetyBuffer:
 		return m.ProfitSafetyBuffer()
+	case group.FieldTemporaryDispatchAccountID:
+		return m.TemporaryDispatchAccountID()
+	case group.FieldTemporaryDispatchID:
+		return m.TemporaryDispatchID()
+	case group.FieldTemporaryDispatchStartedAt:
+		return m.TemporaryDispatchStartedAt()
+	case group.FieldTemporaryDispatchExpiresAt:
+		return m.TemporaryDispatchExpiresAt()
 	}
 	return nil, false
 }
@@ -26445,6 +26687,14 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldProfitMinMargin(ctx)
 	case group.FieldProfitSafetyBuffer:
 		return m.OldProfitSafetyBuffer(ctx)
+	case group.FieldTemporaryDispatchAccountID:
+		return m.OldTemporaryDispatchAccountID(ctx)
+	case group.FieldTemporaryDispatchID:
+		return m.OldTemporaryDispatchID(ctx)
+	case group.FieldTemporaryDispatchStartedAt:
+		return m.OldTemporaryDispatchStartedAt(ctx)
+	case group.FieldTemporaryDispatchExpiresAt:
+		return m.OldTemporaryDispatchExpiresAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown Group field %s", name)
 }
@@ -26923,6 +27173,34 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetProfitSafetyBuffer(v)
 		return nil
+	case group.FieldTemporaryDispatchAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchAccountID(v)
+		return nil
+	case group.FieldTemporaryDispatchID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchID(v)
+		return nil
+	case group.FieldTemporaryDispatchStartedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchStartedAt(v)
+		return nil
+	case group.FieldTemporaryDispatchExpiresAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchExpiresAt(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
 }
@@ -27012,6 +27290,9 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addprofit_safety_buffer != nil {
 		fields = append(fields, group.FieldProfitSafetyBuffer)
 	}
+	if m.addtemporary_dispatch_account_id != nil {
+		fields = append(fields, group.FieldTemporaryDispatchAccountID)
+	}
 	return fields
 }
 
@@ -27074,6 +27355,8 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedProfitMinMargin()
 	case group.FieldProfitSafetyBuffer:
 		return m.AddedProfitSafetyBuffer()
+	case group.FieldTemporaryDispatchAccountID:
+		return m.AddedTemporaryDispatchAccountID()
 	}
 	return nil, false
 }
@@ -27272,6 +27555,13 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddProfitSafetyBuffer(v)
 		return nil
+	case group.FieldTemporaryDispatchAccountID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTemporaryDispatchAccountID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Group numeric field %s", name)
 }
@@ -27345,6 +27635,18 @@ func (m *GroupMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(group.FieldModelRouting) {
 		fields = append(fields, group.FieldModelRouting)
+	}
+	if m.FieldCleared(group.FieldTemporaryDispatchAccountID) {
+		fields = append(fields, group.FieldTemporaryDispatchAccountID)
+	}
+	if m.FieldCleared(group.FieldTemporaryDispatchID) {
+		fields = append(fields, group.FieldTemporaryDispatchID)
+	}
+	if m.FieldCleared(group.FieldTemporaryDispatchStartedAt) {
+		fields = append(fields, group.FieldTemporaryDispatchStartedAt)
+	}
+	if m.FieldCleared(group.FieldTemporaryDispatchExpiresAt) {
+		fields = append(fields, group.FieldTemporaryDispatchExpiresAt)
 	}
 	return fields
 }
@@ -27425,6 +27727,18 @@ func (m *GroupMutation) ClearField(name string) error {
 		return nil
 	case group.FieldModelRouting:
 		m.ClearModelRouting()
+		return nil
+	case group.FieldTemporaryDispatchAccountID:
+		m.ClearTemporaryDispatchAccountID()
+		return nil
+	case group.FieldTemporaryDispatchID:
+		m.ClearTemporaryDispatchID()
+		return nil
+	case group.FieldTemporaryDispatchStartedAt:
+		m.ClearTemporaryDispatchStartedAt()
+		return nil
+	case group.FieldTemporaryDispatchExpiresAt:
+		m.ClearTemporaryDispatchExpiresAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Group nullable field %s", name)
@@ -27634,6 +27948,18 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldProfitSafetyBuffer:
 		m.ResetProfitSafetyBuffer()
+		return nil
+	case group.FieldTemporaryDispatchAccountID:
+		m.ResetTemporaryDispatchAccountID()
+		return nil
+	case group.FieldTemporaryDispatchID:
+		m.ResetTemporaryDispatchID()
+		return nil
+	case group.FieldTemporaryDispatchStartedAt:
+		m.ResetTemporaryDispatchStartedAt()
+		return nil
+	case group.FieldTemporaryDispatchExpiresAt:
+		m.ResetTemporaryDispatchExpiresAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)

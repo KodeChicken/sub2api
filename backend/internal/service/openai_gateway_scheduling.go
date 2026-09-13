@@ -886,6 +886,12 @@ func (s *OpenAIGatewayService) selectAccountForModelWithExclusions(ctx context.C
 			"model", requestedModel)
 		return nil, fmt.Errorf("%w supporting model: %s (channel pricing restriction)", ErrNoAvailableAccounts, requestedModel)
 	}
+	if account, handled, dispatchErr := s.selectTemporaryDispatchAccount(ctx, groupID, platform, requestedModel, excludedIDs, OpenAIUpstreamTransportAny, requiredCapability, "", requireCompact); handled {
+		if dispatchErr != nil {
+			return nil, dispatchErr
+		}
+		return s.hydrateSelectedAccount(ctx, account)
+	}
 
 	// 1. 尝试粘性会话命中
 	// Try sticky session hit

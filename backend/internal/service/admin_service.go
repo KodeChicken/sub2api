@@ -143,12 +143,13 @@ type AdminService interface {
 type AdminGroupOperation string
 
 const (
-	AdminGroupOperationBasic          AdminGroupOperation = "basic"
-	AdminGroupOperationDuplicate      AdminGroupOperation = "duplicate"
-	AdminGroupOperationCompositeRoute AdminGroupOperation = "composite_route"
-	AdminGroupOperationMultiplier     AdminGroupOperation = "multiplier"
-	AdminGroupOperationRPMOverride    AdminGroupOperation = "rpm_override"
-	AdminGroupOperationSort           AdminGroupOperation = "sort"
+	AdminGroupOperationBasic             AdminGroupOperation = "basic"
+	AdminGroupOperationDuplicate         AdminGroupOperation = "duplicate"
+	AdminGroupOperationCompositeRoute    AdminGroupOperation = "composite_route"
+	AdminGroupOperationMultiplier        AdminGroupOperation = "multiplier"
+	AdminGroupOperationRPMOverride       AdminGroupOperation = "rpm_override"
+	AdminGroupOperationSort              AdminGroupOperation = "sort"
+	AdminGroupOperationTemporaryDispatch AdminGroupOperation = "temporary_dispatch"
 )
 
 func ValidateSimpleModeGroupOperation(cfg *config.Config, operation AdminGroupOperation) error {

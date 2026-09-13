@@ -1232,6 +1232,93 @@ func (_u *GroupUpdate) AddProfitSafetyBuffer(v float64) *GroupUpdate {
 	return _u
 }
 
+// SetTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field.
+func (_u *GroupUpdate) SetTemporaryDispatchAccountID(v int64) *GroupUpdate {
+	_u.mutation.ResetTemporaryDispatchAccountID()
+	_u.mutation.SetTemporaryDispatchAccountID(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchAccountID(v *int64) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchAccountID(*v)
+	}
+	return _u
+}
+
+// AddTemporaryDispatchAccountID adds value to the "temporary_dispatch_account_id" field.
+func (_u *GroupUpdate) AddTemporaryDispatchAccountID(v int64) *GroupUpdate {
+	_u.mutation.AddTemporaryDispatchAccountID(v)
+	return _u
+}
+
+// ClearTemporaryDispatchAccountID clears the value of the "temporary_dispatch_account_id" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchAccountID() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchAccountID()
+	return _u
+}
+
+// SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
+func (_u *GroupUpdate) SetTemporaryDispatchID(v string) *GroupUpdate {
+	_u.mutation.SetTemporaryDispatchID(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchID sets the "temporary_dispatch_id" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchID(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchID(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchID clears the value of the "temporary_dispatch_id" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchID() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchID()
+	return _u
+}
+
+// SetTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field.
+func (_u *GroupUpdate) SetTemporaryDispatchStartedAt(v time.Time) *GroupUpdate {
+	_u.mutation.SetTemporaryDispatchStartedAt(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchStartedAt(v *time.Time) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchStartedAt clears the value of the "temporary_dispatch_started_at" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchStartedAt() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchStartedAt()
+	return _u
+}
+
+// SetTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field.
+func (_u *GroupUpdate) SetTemporaryDispatchExpiresAt(v time.Time) *GroupUpdate {
+	_u.mutation.SetTemporaryDispatchExpiresAt(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchExpiresAt(v *time.Time) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchExpiresAt clears the value of the "temporary_dispatch_expires_at" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchExpiresAt() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchExpiresAt()
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdate) AddAPIKeyIDs(ids ...int64) *GroupUpdate {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -1560,6 +1647,11 @@ func (_u *GroupUpdate) check() error {
 	if v, ok := _u.mutation.MaxReasoningEffortOverLimit(); ok {
 		if err := group.MaxReasoningEffortOverLimitValidator(v); err != nil {
 			return &ValidationError{Name: "max_reasoning_effort_over_limit", err: fmt.Errorf(`ent: validator failed for field "Group.max_reasoning_effort_over_limit": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TemporaryDispatchID(); ok {
+		if err := group.TemporaryDispatchIDValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_id", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_id": %w`, err)}
 		}
 	}
 	return nil
@@ -1933,6 +2025,33 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedProfitSafetyBuffer(); ok {
 		_spec.AddField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchAccountID(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchAccountID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTemporaryDispatchAccountID(); ok {
+		_spec.AddField(group.FieldTemporaryDispatchAccountID, field.TypeInt64, value)
+	}
+	if _u.mutation.TemporaryDispatchAccountIDCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchAccountID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchID(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchID, field.TypeString, value)
+	}
+	if _u.mutation.TemporaryDispatchIDCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchID, field.TypeString)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchStartedAt(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.TemporaryDispatchStartedAtCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchStartedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchExpiresAt(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.TemporaryDispatchExpiresAtCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchExpiresAt, field.TypeTime)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -3443,6 +3562,93 @@ func (_u *GroupUpdateOne) AddProfitSafetyBuffer(v float64) *GroupUpdateOne {
 	return _u
 }
 
+// SetTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchAccountID(v int64) *GroupUpdateOne {
+	_u.mutation.ResetTemporaryDispatchAccountID()
+	_u.mutation.SetTemporaryDispatchAccountID(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchAccountID(v *int64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchAccountID(*v)
+	}
+	return _u
+}
+
+// AddTemporaryDispatchAccountID adds value to the "temporary_dispatch_account_id" field.
+func (_u *GroupUpdateOne) AddTemporaryDispatchAccountID(v int64) *GroupUpdateOne {
+	_u.mutation.AddTemporaryDispatchAccountID(v)
+	return _u
+}
+
+// ClearTemporaryDispatchAccountID clears the value of the "temporary_dispatch_account_id" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchAccountID() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchAccountID()
+	return _u
+}
+
+// SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchID(v string) *GroupUpdateOne {
+	_u.mutation.SetTemporaryDispatchID(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchID sets the "temporary_dispatch_id" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchID(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchID(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchID clears the value of the "temporary_dispatch_id" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchID() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchID()
+	return _u
+}
+
+// SetTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchStartedAt(v time.Time) *GroupUpdateOne {
+	_u.mutation.SetTemporaryDispatchStartedAt(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchStartedAt(v *time.Time) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchStartedAt clears the value of the "temporary_dispatch_started_at" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchStartedAt() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchStartedAt()
+	return _u
+}
+
+// SetTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchExpiresAt(v time.Time) *GroupUpdateOne {
+	_u.mutation.SetTemporaryDispatchExpiresAt(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchExpiresAt(v *time.Time) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchExpiresAt(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchExpiresAt clears the value of the "temporary_dispatch_expires_at" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchExpiresAt() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchExpiresAt()
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdateOne) AddAPIKeyIDs(ids ...int64) *GroupUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -3784,6 +3990,11 @@ func (_u *GroupUpdateOne) check() error {
 	if v, ok := _u.mutation.MaxReasoningEffortOverLimit(); ok {
 		if err := group.MaxReasoningEffortOverLimitValidator(v); err != nil {
 			return &ValidationError{Name: "max_reasoning_effort_over_limit", err: fmt.Errorf(`ent: validator failed for field "Group.max_reasoning_effort_over_limit": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TemporaryDispatchID(); ok {
+		if err := group.TemporaryDispatchIDValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_id", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_id": %w`, err)}
 		}
 	}
 	return nil
@@ -4174,6 +4385,33 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if value, ok := _u.mutation.AddedProfitSafetyBuffer(); ok {
 		_spec.AddField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchAccountID(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchAccountID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedTemporaryDispatchAccountID(); ok {
+		_spec.AddField(group.FieldTemporaryDispatchAccountID, field.TypeInt64, value)
+	}
+	if _u.mutation.TemporaryDispatchAccountIDCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchAccountID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchID(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchID, field.TypeString, value)
+	}
+	if _u.mutation.TemporaryDispatchIDCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchID, field.TypeString)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchStartedAt(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.TemporaryDispatchStartedAtCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchStartedAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchExpiresAt(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchExpiresAt, field.TypeTime, value)
+	}
+	if _u.mutation.TemporaryDispatchExpiresAtCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchExpiresAt, field.TypeTime)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

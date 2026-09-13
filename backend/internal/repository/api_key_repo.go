@@ -230,6 +230,10 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldProfitControlEnabled,
 				group.FieldProfitMinMargin,
 				group.FieldProfitSafetyBuffer,
+				group.FieldTemporaryDispatchAccountID,
+				group.FieldTemporaryDispatchID,
+				group.FieldTemporaryDispatchStartedAt,
+				group.FieldTemporaryDispatchExpiresAt,
 			)
 		}).
 		Only(ctx)
@@ -1031,6 +1035,10 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		ProfitControlEnabled:            g.ProfitControlEnabled,
 		ProfitMinMargin:                 g.ProfitMinMargin,
 		ProfitSafetyBuffer:              g.ProfitSafetyBuffer,
+		TemporaryDispatchAccountID:      g.TemporaryDispatchAccountID,
+		TemporaryDispatchID:             derefString(g.TemporaryDispatchID),
+		TemporaryDispatchStartedAt:      g.TemporaryDispatchStartedAt,
+		TemporaryDispatchExpiresAt:      g.TemporaryDispatchExpiresAt,
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}

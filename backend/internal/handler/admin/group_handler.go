@@ -347,6 +347,70 @@ type CompositeRoutePreviewRequest struct {
 	Endpoint string `json:"endpoint" binding:"omitempty,oneof=any messages count_tokens responses chat_completions embeddings images gemini"`
 }
 
+type StartTemporaryDispatchRequest struct {
+	GroupIDs        []int64 `json:"group_ids" binding:"required"`
+	AccountID       int64   `json:"account_id" binding:"required"`
+	DurationMinutes int     `json:"duration_minutes"`
+}
+
+type StopTemporaryDispatchRequest struct {
+	GroupIDs []int64 `json:"group_ids" binding:"required"`
+}
+
+type temporaryDispatchAdminService interface {
+	StartTemporaryDispatch(ctx context.Context, input service.StartTemporaryDispatchInput) (*service.TemporaryDispatchResult, error)
+	StopTemporaryDispatch(ctx context.Context, groupIDs []int64) error
+}
+
+// StartTemporaryDispatch installs one expiring account override across groups.
+func (h *GroupHandler) StartTemporaryDispatch(c *gin.Context) {
+	if h.rejectUnsupportedSimpleModeOperation(c, "temporary_dispatch") {
+		return
+	}
+	var req StartTemporaryDispatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+	svc, ok := h.adminService.(temporaryDispatchAdminService)
+	if !ok {
+		response.InternalError(c, "Temporary dispatch service is unavailable")
+		return
+	}
+	result, err := svc.StartTemporaryDispatch(c.Request.Context(), service.StartTemporaryDispatchInput{
+		GroupIDs:        req.GroupIDs,
+		AccountID:       req.AccountID,
+		DurationMinutes: req.DurationMinutes,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+// StopTemporaryDispatch removes overlays and immediately restores normal routing.
+func (h *GroupHandler) StopTemporaryDispatch(c *gin.Context) {
+	if h.rejectUnsupportedSimpleModeOperation(c, "temporary_dispatch") {
+		return
+	}
+	var req StopTemporaryDispatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+	svc, ok := h.adminService.(temporaryDispatchAdminService)
+	if !ok {
+		response.InternalError(c, "Temporary dispatch service is unavailable")
+		return
+	}
+	if err := svc.StopTemporaryDispatch(c.Request.Context(), req.GroupIDs); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"message": "Temporary dispatch stopped"})
+}
+
 // List handles listing all groups with pagination
 // GET /api/v1/admin/groups
 func (h *GroupHandler) List(c *gin.Context) {

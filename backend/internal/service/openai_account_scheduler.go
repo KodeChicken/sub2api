@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	openAIAccountScheduleLayerPreviousResponse = "previous_response_id"
-	openAIAccountScheduleLayerGuardianParent   = "guardian_parent"
-	openAIAccountScheduleLayerSessionSticky    = "session_hash"
-	openAIAccountScheduleLayerLoadBalance      = "load_balance"
-	openAIAdvancedSchedulerSettingKey          = "openai_advanced_scheduler_enabled"
+	openAIAccountScheduleLayerPreviousResponse  = "previous_response_id"
+	openAIAccountScheduleLayerGuardianParent    = "guardian_parent"
+	openAIAccountScheduleLayerSessionSticky     = "session_hash"
+	openAIAccountScheduleLayerLoadBalance       = "load_balance"
+	openAIAccountScheduleLayerTemporaryDispatch = "temporary_dispatch"
+	openAIAdvancedSchedulerSettingKey           = "openai_advanced_scheduler_enabled"
 )
 
 const (
@@ -2244,6 +2245,31 @@ func (s *OpenAIGatewayService) selectAccountWithSchedulerOnce(
 	}
 	platform = NormalizeOpenAICompatiblePlatform(platform)
 	decision := OpenAIAccountScheduleDecision{}
+	if account, handled, dispatchErr := s.selectTemporaryDispatchAccount(ctx, groupID, platform, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact); handled {
+		decision.Layer = openAIAccountScheduleLayerTemporaryDispatch
+		if dispatchErr != nil {
+			return nil, decision, dispatchErr
+		}
+		result, acquireErr := s.tryAcquireAccountSlot(ctx, account.ID, account.Concurrency)
+		if acquireErr != nil {
+			return nil, decision, acquireErr
+		}
+		decision.SelectedAccountID = account.ID
+		decision.SelectedAccountType = account.Type
+		decision.CandidateCount = 1
+		if result.Acquired {
+			selection, selectErr := s.newAcquiredSelectionResult(ctx, account, result.ReleaseFunc)
+			return selection, decision, selectErr
+		}
+		cfg := s.schedulingConfig()
+		selection, selectErr := s.newSelectionResult(ctx, account, false, nil, &AccountWaitPlan{
+			AccountID:      account.ID,
+			MaxConcurrency: account.Concurrency,
+			Timeout:        cfg.FallbackWaitTimeout,
+			MaxWaiting:     cfg.FallbackMaxWaiting,
+		})
+		return selection, decision, selectErr
+	}
 	preserveGuardianParentBinding := preserveOpenAIGuardianParentBinding(ctx, sessionHash)
 	guardianParentAccountID := int64(0)
 	if strings.TrimSpace(previousResponseID) == "" {

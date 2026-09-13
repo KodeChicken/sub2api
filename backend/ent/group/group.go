@@ -150,6 +150,14 @@ const (
 	FieldProfitMinMargin = "profit_min_margin"
 	// FieldProfitSafetyBuffer holds the string denoting the profit_safety_buffer field in the database.
 	FieldProfitSafetyBuffer = "profit_safety_buffer"
+	// FieldTemporaryDispatchAccountID holds the string denoting the temporary_dispatch_account_id field in the database.
+	FieldTemporaryDispatchAccountID = "temporary_dispatch_account_id"
+	// FieldTemporaryDispatchID holds the string denoting the temporary_dispatch_id field in the database.
+	FieldTemporaryDispatchID = "temporary_dispatch_id"
+	// FieldTemporaryDispatchStartedAt holds the string denoting the temporary_dispatch_started_at field in the database.
+	FieldTemporaryDispatchStartedAt = "temporary_dispatch_started_at"
+	// FieldTemporaryDispatchExpiresAt holds the string denoting the temporary_dispatch_expires_at field in the database.
+	FieldTemporaryDispatchExpiresAt = "temporary_dispatch_expires_at"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -292,6 +300,10 @@ var Columns = []string{
 	FieldProfitControlEnabled,
 	FieldProfitMinMargin,
 	FieldProfitSafetyBuffer,
+	FieldTemporaryDispatchAccountID,
+	FieldTemporaryDispatchID,
+	FieldTemporaryDispatchStartedAt,
+	FieldTemporaryDispatchExpiresAt,
 }
 
 var (
@@ -439,6 +451,8 @@ var (
 	DefaultProfitMinMargin float64
 	// DefaultProfitSafetyBuffer holds the default value on creation for the "profit_safety_buffer" field.
 	DefaultProfitSafetyBuffer float64
+	// TemporaryDispatchIDValidator is a validator for the "temporary_dispatch_id" field. It is called by the builders before save.
+	TemporaryDispatchIDValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the Group queries.
@@ -742,6 +756,26 @@ func ByProfitMinMargin(opts ...sql.OrderTermOption) OrderOption {
 // ByProfitSafetyBuffer orders the results by the profit_safety_buffer field.
 func ByProfitSafetyBuffer(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProfitSafetyBuffer, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchAccountID orders the results by the temporary_dispatch_account_id field.
+func ByTemporaryDispatchAccountID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchAccountID, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchID orders the results by the temporary_dispatch_id field.
+func ByTemporaryDispatchID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchID, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchStartedAt orders the results by the temporary_dispatch_started_at field.
+func ByTemporaryDispatchStartedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchStartedAt, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchExpiresAt orders the results by the temporary_dispatch_expires_at field.
+func ByTemporaryDispatchExpiresAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchExpiresAt, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

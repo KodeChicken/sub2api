@@ -9,9 +9,10 @@ import (
 )
 
 var (
-	ErrGroupNotFound = infraerrors.NotFound("GROUP_NOT_FOUND", "group not found")
-	ErrGroupExists   = infraerrors.Conflict("GROUP_EXISTS", "group name already exists")
-	ErrGroupNotEmpty = infraerrors.Conflict("GROUP_NOT_EMPTY", "group contains accounts")
+	ErrGroupNotFound             = infraerrors.NotFound("GROUP_NOT_FOUND", "group not found")
+	ErrGroupExists               = infraerrors.Conflict("GROUP_EXISTS", "group name already exists")
+	ErrGroupNotEmpty             = infraerrors.Conflict("GROUP_NOT_EMPTY", "group contains accounts")
+	ErrTemporaryDispatchConflict = infraerrors.Conflict("TEMPORARY_DISPATCH_CONFLICT", "one or more groups already have an active temporary dispatch")
 )
 
 type GroupRepository interface {

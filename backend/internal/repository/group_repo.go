@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/ent/group"
@@ -74,6 +75,75 @@ func NewAdminGroupRepository(client *dbent.Client, sqlDB *sql.DB) service.AdminG
 
 func newGroupRepositoryWithSQL(client *dbent.Client, sqlq sqlExecutor) *groupRepository {
 	return &groupRepository{client: client, sql: sqlq}
+}
+
+// SetTemporaryDispatch atomically installs one batch overlay. A live overlay
+// cannot be silently replaced by a concurrent administrator operation.
+func (r *groupRepository) SetTemporaryDispatch(ctx context.Context, groupIDs []int64, accountID int64, dispatchID string, startedAt, expiresAt time.Time) error {
+	if len(groupIDs) == 0 {
+		return errors.New("group ids are empty")
+	}
+	rows, err := r.sql.QueryContext(ctx, `
+		WITH requested AS (
+			SELECT DISTINCT unnest($5::bigint[]) AS id
+		), eligible AS (
+			SELECT g.id
+			FROM groups g
+			JOIN requested r ON r.id = g.id
+			WHERE g.deleted_at IS NULL
+			  AND (g.temporary_dispatch_account_id IS NULL
+			       OR g.temporary_dispatch_expires_at IS NULL
+			       OR g.temporary_dispatch_expires_at <= $3)
+			FOR UPDATE
+		), updated AS (
+			UPDATE groups g
+			SET temporary_dispatch_account_id = $1,
+			    temporary_dispatch_id = $2,
+			    temporary_dispatch_started_at = $3,
+			    temporary_dispatch_expires_at = $4,
+			    updated_at = NOW()
+			FROM eligible e
+			WHERE g.id = e.id
+			  AND (SELECT COUNT(*) FROM eligible) = (SELECT COUNT(*) FROM requested)
+			RETURNING g.id
+		)
+		SELECT COUNT(*) FROM updated
+	`, accountID, dispatchID, startedAt, expiresAt, pq.Array(groupIDs))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	var count int64
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return errors.New("temporary dispatch update returned no result")
+	}
+	if err := rows.Scan(&count); err != nil {
+		return err
+	}
+	if count != int64(len(groupIDs)) {
+		return service.ErrTemporaryDispatchConflict
+	}
+	return nil
+}
+
+// ClearTemporaryDispatch removes overlays without touching account_groups.
+func (r *groupRepository) ClearTemporaryDispatch(ctx context.Context, groupIDs []int64) error {
+	if len(groupIDs) == 0 {
+		return nil
+	}
+	_, err := r.sql.ExecContext(ctx, `
+		UPDATE groups
+		SET temporary_dispatch_account_id = NULL,
+		    temporary_dispatch_id = NULL,
+		    temporary_dispatch_started_at = NULL,
+		    temporary_dispatch_expires_at = NULL,
+		    updated_at = NOW()
+		WHERE id = ANY($1) AND deleted_at IS NULL
+	`, pq.Array(groupIDs))
+	return err
 }
 
 func (r *groupRepository) Create(ctx context.Context, groupIn *service.Group) error {

@@ -165,6 +165,10 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		AccountCount:                g.AccountCount,
 		ActiveAccountCount:          g.ActiveAccountCount,
 		RateLimitedAccountCount:     g.RateLimitedAccountCount,
+		TemporaryDispatchAccountID:  g.TemporaryDispatchAccountID,
+		TemporaryDispatchID:         g.TemporaryDispatchID,
+		TemporaryDispatchStartedAt:  g.TemporaryDispatchStartedAt,
+		TemporaryDispatchExpiresAt:  g.TemporaryDispatchExpiresAt,
 		SortOrder:                   g.SortOrder,
 	}
 	if len(g.AccountGroups) > 0 {

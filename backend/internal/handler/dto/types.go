@@ -195,11 +195,15 @@ type AdminGroup struct {
 	CodexModelsManifestConfig domain.GroupCodexModelsManifestConfig `json:"codex_models_manifest_config"`
 
 	// 支持的模型系列（仅 antigravity 平台使用）
-	SupportedModelScopes    []string       `json:"supported_model_scopes"`
-	AccountGroups           []AccountGroup `json:"account_groups,omitempty"`
-	AccountCount            int64          `json:"account_count,omitempty"`
-	ActiveAccountCount      int64          `json:"active_account_count,omitempty"`
-	RateLimitedAccountCount int64          `json:"rate_limited_account_count,omitempty"`
+	SupportedModelScopes       []string       `json:"supported_model_scopes"`
+	AccountGroups              []AccountGroup `json:"account_groups,omitempty"`
+	AccountCount               int64          `json:"account_count,omitempty"`
+	ActiveAccountCount         int64          `json:"active_account_count,omitempty"`
+	RateLimitedAccountCount    int64          `json:"rate_limited_account_count,omitempty"`
+	TemporaryDispatchAccountID *int64         `json:"temporary_dispatch_account_id,omitempty"`
+	TemporaryDispatchID        string         `json:"temporary_dispatch_id,omitempty"`
+	TemporaryDispatchStartedAt *time.Time     `json:"temporary_dispatch_started_at,omitempty"`
+	TemporaryDispatchExpiresAt *time.Time     `json:"temporary_dispatch_expires_at,omitempty"`
 
 	// 分组排序
 	SortOrder int `json:"sort_order"`

@@ -4,16 +4,27 @@ import { defineComponent } from 'vue'
 
 import SubscriptionsView from '../SubscriptionsView.vue'
 
-const { listSubscriptions, getAllGroups, listUsers, searchUsageUsers } = vi.hoisted(() => ({
+const {
+  listSubscriptions,
+  bulkResetQuota,
+  getAllGroups,
+  listUsers,
+  searchUsageUsers,
+  showError,
+  showSuccess
+} = vi.hoisted(() => ({
   listSubscriptions: vi.fn(),
+  bulkResetQuota: vi.fn(),
   getAllGroups: vi.fn(),
   listUsers: vi.fn(),
-  searchUsageUsers: vi.fn()
+  searchUsageUsers: vi.fn(),
+  showError: vi.fn(),
+  showSuccess: vi.fn()
 }))
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
-    subscriptions: { list: listSubscriptions },
+    subscriptions: { list: listSubscriptions, bulkResetQuota },
     groups: { getAll: getAllGroups },
     users: { list: listUsers },
     usage: { searchUsers: searchUsageUsers }
@@ -22,8 +33,8 @@ vi.mock('@/api/admin', () => ({
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
-    showSuccess: vi.fn()
+    showError,
+    showSuccess
   })
 }))
 
@@ -39,9 +50,15 @@ vi.mock('vue-i18n', async () => {
 })
 
 const DataTableStub = {
-  props: ['data'],
+  props: ['data', 'selectedKeys'],
+  emits: ['update:selectedKeys'],
   template: `
     <div>
+      <button
+        v-if="data.length"
+        data-test="select-first-subscription"
+        @click="$emit('update:selectedKeys', [data[0].id])"
+      >select</button>
       <div v-for="row in data" :key="row.id">
         <slot name="cell-user" :row="row" />
       </div>
@@ -89,6 +106,7 @@ describe('admin subscription users', () => {
     searchUsageUsers.mockResolvedValue([
       { id: 14, email: 'deleted@example.com', deleted: true }
     ])
+    bulkResetQuota.mockResolvedValue({ updated_count: 1, subscriptions: [] })
   })
 
   const mountView = () => mount(SubscriptionsView, {
@@ -103,7 +121,11 @@ describe('admin subscription users', () => {
           props: ['show'],
           template: '<div v-if="show"><slot /><slot name="footer" /></div>'
         },
-        ConfirmDialog: true,
+        ConfirmDialog: {
+          props: ['show'],
+          emits: ['confirm', 'cancel'],
+          template: '<button v-if="show" data-test="confirm-dialog" @click="$emit(\'confirm\')">confirm</button>'
+        },
         EmptyState: true,
         Select: true,
         GroupBadge: true,
@@ -208,5 +230,26 @@ describe('admin subscription users', () => {
     const link = wrapper.getComponent(RouterLinkStub)
     expect(link.text()).toBe('User #42')
     expect(link.props('to')).toEqual({ path: '/admin/usage', query: { user_id: 42 } })
+  })
+
+  it('bulk resets all quota windows for selected subscriptions', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+
+    await wrapper.get('[data-test="select-first-subscription"]').trigger('click')
+    await wrapper.get('[data-test="bulk-reset-quota"]').trigger('click')
+    await wrapper.get('[data-test="confirm-dialog"]').trigger('click')
+    await flushPromises()
+
+    expect(bulkResetQuota).toHaveBeenCalledWith({
+      subscription_ids: [9],
+      daily: true,
+      weekly: true,
+      monthly: true
+    })
+    expect(showSuccess).toHaveBeenCalledWith(
+      'admin.subscriptions.bulkQuotaResetSuccess'
+    )
+    expect(wrapper.find('[data-test="bulk-reset-quota"]').exists()).toBe(false)
   })
 })

@@ -154,6 +154,14 @@ type Group struct {
 	ProfitMinMargin float64 `json:"profit_min_margin,omitempty"`
 	// 安全缓冲，小数；与 margin 相加后从下游倍率中扣除，默认 0
 	ProfitSafetyBuffer float64 `json:"profit_safety_buffer,omitempty"`
+	// 临时接管分组流量的账号 ID；不要求存在 account_groups 绑定
+	TemporaryDispatchAccountID *int64 `json:"temporary_dispatch_account_id,omitempty"`
+	// 一次批量临时调度操作的关联 ID
+	TemporaryDispatchID *string `json:"temporary_dispatch_id,omitempty"`
+	// 临时调度开始时间
+	TemporaryDispatchStartedAt *time.Time `json:"temporary_dispatch_started_at,omitempty"`
+	// 临时调度硬过期时间；到期后运行时忽略覆盖
+	TemporaryDispatchExpiresAt *time.Time `json:"temporary_dispatch_expires_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the GroupQuery when eager-loading is set.
 	Edges        GroupEdges `json:"edges"`
@@ -266,11 +274,11 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullBool)
 		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldSearchPricePer1k, group.FieldAudioRealtimePricePerMin, group.FieldAudioTtsPricePerMillionChars, group.FieldAudioSttPricePerHour, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer:
 			values[i] = new(sql.NullFloat64)
-		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit:
+		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit, group.FieldTemporaryDispatchAccountID:
 			values[i] = new(sql.NullInt64)
-		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort, group.FieldMaxReasoningEffortOverLimit:
+		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort, group.FieldMaxReasoningEffortOverLimit, group.FieldTemporaryDispatchID:
 			values[i] = new(sql.NullString)
-		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt:
+		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt, group.FieldTemporaryDispatchStartedAt, group.FieldTemporaryDispatchExpiresAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -730,6 +738,34 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ProfitSafetyBuffer = value.Float64
 			}
+		case group.FieldTemporaryDispatchAccountID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_account_id", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchAccountID = new(int64)
+				*_m.TemporaryDispatchAccountID = value.Int64
+			}
+		case group.FieldTemporaryDispatchID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_id", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchID = new(string)
+				*_m.TemporaryDispatchID = value.String
+			}
+		case group.FieldTemporaryDispatchStartedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_started_at", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchStartedAt = new(time.Time)
+				*_m.TemporaryDispatchStartedAt = value.Time
+			}
+		case group.FieldTemporaryDispatchExpiresAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_expires_at", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchExpiresAt = new(time.Time)
+				*_m.TemporaryDispatchExpiresAt = value.Time
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -1044,6 +1080,26 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("profit_safety_buffer=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ProfitSafetyBuffer))
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchAccountID; v != nil {
+		builder.WriteString("temporary_dispatch_account_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchID; v != nil {
+		builder.WriteString("temporary_dispatch_id=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchStartedAt; v != nil {
+		builder.WriteString("temporary_dispatch_started_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchExpiresAt; v != nil {
+		builder.WriteString("temporary_dispatch_expires_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }

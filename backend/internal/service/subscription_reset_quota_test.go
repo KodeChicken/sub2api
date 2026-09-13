@@ -37,6 +37,10 @@ func (r *resetQuotaUserSubRepoStub) GetByID(_ context.Context, id int64) (*UserS
 	return &cp, nil
 }
 
+func (r *resetQuotaUserSubRepoStub) GetByIDForUpdate(ctx context.Context, id int64) (*UserSubscription, error) {
+	return r.GetByID(ctx, id)
+}
+
 func (r *resetQuotaUserSubRepoStub) ResetUsageWindows(_ context.Context, _ int64, resetDaily, resetWeekly, resetMonthly bool, dailyStart, periodicStart time.Time) error {
 	r.resetDailyCalled = resetDaily
 	r.resetWeeklyCalled = resetWeekly
@@ -271,4 +275,29 @@ func TestAdminResetQuota_ReturnsRefreshedSub(t *testing.T) {
 	// 服务应返回第二次 GetByID 的刷新值而非初始的 99.9
 	require.Equal(t, float64(0), result.DailyUsageUSD, "返回的订阅应反映已归零的用量")
 	require.True(t, stub.resetDailyCalled)
+}
+
+func TestAdminResetQuotaBatchDeduplicatesAndResetsAllWindows(t *testing.T) {
+	stub := &resetQuotaUserSubRepoStub{
+		sub: &UserSubscription{
+			ID:              11,
+			UserID:          10,
+			GroupID:         20,
+			DailyUsageUSD:   1,
+			WeeklyUsageUSD:  2,
+			MonthlyUsageUSD: 3,
+		},
+	}
+	svc := newResetQuotaSvc(stub)
+
+	result, err := svc.AdminResetQuotaBatch(context.Background(), []int64{11, 11}, true, true, true)
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Zero(t, result[0].DailyUsageUSD)
+	require.Zero(t, result[0].WeeklyUsageUSD)
+	require.Zero(t, result[0].MonthlyUsageUSD)
+	require.True(t, stub.resetDailyCalled)
+	require.True(t, stub.resetWeeklyCalled)
+	require.True(t, stub.resetMonthlyCalled)
 }

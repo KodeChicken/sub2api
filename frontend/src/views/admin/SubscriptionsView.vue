@@ -97,6 +97,7 @@
               v-if="selectedSubscriptionIds.length > 0"
               type="button"
               class="btn btn-secondary"
+              data-test="bulk-reset-quota"
               :disabled="resettingBulkQuota"
               @click="showBulkResetQuotaConfirm = true"
             >

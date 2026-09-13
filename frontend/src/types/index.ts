@@ -654,8 +654,22 @@ export interface AdminGroup extends Group {
   model_allowlist?: ModelAllowlist
   codex_models_manifest_config?: CodexModelsManifestConfig
 
+  // Expiring scheduler overlay; original account bindings are untouched.
+  temporary_dispatch_account_id?: number
+  temporary_dispatch_id?: string
+  temporary_dispatch_started_at?: string
+  temporary_dispatch_expires_at?: string
+
   // 分组排序
   sort_order: number
+}
+
+export interface TemporaryDispatchResult {
+  dispatch_id: string
+  group_ids: number[]
+  account_id: number
+  started_at: string
+  expires_at: string
 }
 
 export interface ModelAllowlist {

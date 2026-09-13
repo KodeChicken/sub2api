@@ -306,6 +306,25 @@ func (Group) Fields() []ent.Field {
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}).
 			Default(0).
 			Comment("安全缓冲，小数；与 margin 相加后从下游倍率中扣除，默认 0"),
+
+		// 临时调度覆盖不会改变 account_groups；到期或清除后自动恢复原账号池。
+		field.Int64("temporary_dispatch_account_id").
+			Optional().
+			Nillable().
+			Comment("临时接管分组流量的账号 ID；不要求存在 account_groups 绑定"),
+		field.String("temporary_dispatch_id").
+			MaxLen(64).
+			Optional().
+			Nillable().
+			Comment("一次批量临时调度操作的关联 ID"),
+		field.Time("temporary_dispatch_started_at").
+			Optional().
+			Nillable().
+			Comment("临时调度开始时间"),
+		field.Time("temporary_dispatch_expires_at").
+			Optional().
+			Nillable().
+			Comment("临时调度硬过期时间；到期后运行时忽略覆盖"),
 	}
 }
 

@@ -133,6 +133,13 @@ type Group struct {
 	ProfitMinMargin      float64 // 最低毛利率，小数存储（0.30=30%）
 	ProfitSafetyBuffer   float64 // 安全缓冲，小数，与 margin 相加后从 D 中扣除
 
+	// TemporaryDispatch* is an expiring scheduler overlay. The original
+	// account-group bindings remain untouched and resume when this expires.
+	TemporaryDispatchAccountID *int64
+	TemporaryDispatchID        string
+	TemporaryDispatchStartedAt *time.Time
+	TemporaryDispatchExpiresAt *time.Time
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
@@ -140,6 +147,14 @@ type Group struct {
 	AccountCount            int64
 	ActiveAccountCount      int64
 	RateLimitedAccountCount int64
+}
+
+// HasActiveTemporaryDispatch reports whether the scheduler overlay is active
+// at the supplied instant. A complete rule always has an account and expiry.
+func (g *Group) HasActiveTemporaryDispatch(at time.Time) bool {
+	return g != nil &&
+		g.TemporaryDispatchAccountID != nil && *g.TemporaryDispatchAccountID > 0 &&
+		g.TemporaryDispatchExpiresAt != nil && at.Before(*g.TemporaryDispatchExpiresAt)
 }
 
 // IsGroupBindableInSimpleMode is the shared policy for groups that may be

@@ -50,6 +50,22 @@
             class="flex w-full flex-shrink-0 flex-wrap items-center justify-end gap-3 lg:w-auto"
           >
             <button
+              v-if="!authStore.isSimpleMode && selectedGroupIds.length > 0"
+              @click="openTemporaryDispatchModal"
+              class="btn btn-primary"
+            >
+              <Icon name="bolt" size="md" class="mr-2" />
+              {{ t("admin.groups.temporaryDispatch.action") }}
+            </button>
+            <button
+              v-if="!authStore.isSimpleMode && selectedGroups.some((group) => group.temporary_dispatch_account_id)"
+              @click="stopTemporaryDispatch"
+              :disabled="temporaryDispatchSubmitting"
+              class="btn btn-secondary"
+            >
+              {{ t("admin.groups.temporaryDispatch.stopAction") }}
+            </button>
+            <button
               @click="loadGroups"
               :disabled="loading"
               class="btn btn-secondary"
@@ -119,6 +135,9 @@
           :columns="columns"
           :data="groups"
           :loading="loading"
+          :selectable="!authStore.isSimpleMode"
+          row-key="id"
+          v-model:selected-keys="selectedGroupIds"
           :server-side-sort="true"
           default-sort-key="sort_order"
           default-sort-order="asc"
@@ -377,6 +396,18 @@
             >
               {{ t("admin.accounts.status." + value) }}
             </span>
+          </template>
+
+          <template #cell-temporary_dispatch="{ row }">
+            <div v-if="isTemporaryDispatchActive(row)" class="space-y-0.5 text-xs">
+              <span class="badge badge-warning">
+                {{ t("admin.groups.temporaryDispatch.active", { account: row.temporary_dispatch_account_id }) }}
+              </span>
+              <div class="whitespace-nowrap text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.temporaryDispatch.expiresAt", { time: formatTemporaryDispatchTime(row.temporary_dispatch_expires_at) }) }}
+              </div>
+            </div>
+            <span v-else class="text-xs text-gray-400">—</span>
           </template>
 
           <template #cell-actions="{ row }">
@@ -3788,6 +3819,69 @@
       </template>
     </BaseDialog>
 
+    <BaseDialog
+      :show="showTemporaryDispatchModal"
+      :title="t('admin.groups.temporaryDispatch.title')"
+      width="normal"
+      @close="closeTemporaryDispatchModal"
+    >
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+          {{ t("admin.groups.temporaryDispatch.selectedGroups", { count: selectedGroups.length }) }}
+        </p>
+        <div>
+          <label class="input-label">{{ t("admin.groups.temporaryDispatch.targetAccount") }}</label>
+          <input
+            v-model="temporaryAccountSearch"
+            type="text"
+            class="input"
+            :placeholder="t('admin.groups.temporaryDispatch.searchAccount')"
+            @input="searchTemporaryAccounts"
+          />
+          <div class="mt-2 max-h-52 overflow-y-auto rounded-lg border border-gray-200 dark:border-dark-600">
+            <button
+              v-for="account in temporaryAccountResults"
+              :key="account.id"
+              type="button"
+              @click="temporarySelectedAccount = account"
+              :class="[
+                'flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-dark-700',
+                temporarySelectedAccount?.id === account.id ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300' : '',
+              ]"
+            >
+              <span>{{ account.name }}</span>
+              <span class="font-mono text-xs text-gray-400">#{{ account.id }}</span>
+            </button>
+            <p v-if="temporaryAccountResults.length === 0" class="p-3 text-sm text-gray-400">
+              {{ t("admin.groups.temporaryDispatch.noAccounts") }}
+            </p>
+          </div>
+        </div>
+        <div>
+          <label class="input-label">{{ t("admin.groups.temporaryDispatch.duration") }}</label>
+          <input v-model.number="temporaryDispatchDuration" type="number" min="1" max="1440" class="input" />
+          <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            {{ t("admin.groups.temporaryDispatch.durationHint") }}
+          </p>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-3 pt-4">
+          <button type="button" class="btn btn-secondary" @click="closeTemporaryDispatchModal">
+            {{ t("common.cancel") }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="temporaryDispatchSubmitting || !temporarySelectedAccount"
+            @click="startTemporaryDispatch"
+          >
+            {{ t("admin.groups.temporaryDispatch.start") }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
     <!-- Delete Confirmation Dialog -->
     <ConfirmDialog
       :show="showDeleteDialog"
@@ -4497,6 +4591,7 @@ const allColumns = computed<Column[]>(() => {
     { key: "rate_multiplier", label: t("admin.groups.columns.rateMultiplier"), sortable: true },
     { key: "is_exclusive", label: t("admin.groups.columns.type"), sortable: true },
     basic[3],
+    { key: "temporary_dispatch", label: t("admin.groups.columns.temporaryDispatch"), sortable: false },
     { key: "capacity", label: t("admin.groups.columns.capacity"), sortable: false },
     { key: "usage", label: t("admin.groups.columns.usage"), sortable: false },
     ...basic.slice(4),
@@ -4852,6 +4947,18 @@ let liveCapabilityRequest: Promise<{
 const showSortModal = ref(false);
 const submitting = ref(false);
 const sortSubmitting = ref(false);
+const selectedGroupIds = ref<Array<string | number>>([]);
+const selectedGroups = computed(() => {
+  const ids = new Set(selectedGroupIds.value.map(Number));
+  return groups.value.filter((group) => ids.has(group.id));
+});
+const showTemporaryDispatchModal = ref(false);
+const temporaryDispatchSubmitting = ref(false);
+const temporaryDispatchDuration = ref(120);
+const temporaryAccountSearch = ref("");
+const temporaryAccountResults = ref<Array<{ id: number; name: string }>>([]);
+const temporarySelectedAccount = ref<{ id: number; name: string } | null>(null);
+let temporaryAccountSearchTimer: ReturnType<typeof setTimeout> | null = null;
 const editingGroup = ref<AdminGroup | null>(null);
 const deletingGroup = ref<AdminGroup | null>(null);
 const duplicatingGroupIds = reactive(new Set<number>());
@@ -5636,6 +5743,8 @@ const loadGroups = async () => {
     );
     if (signal.aborted) return;
     groups.value = response.items;
+    const visibleIDs = new Set(groups.value.map((group) => group.id));
+    selectedGroupIds.value = selectedGroupIds.value.filter((id) => visibleIDs.has(Number(id)));
     pagination.total = response.total;
     pagination.pages = response.pages;
     if (hasVisibleUsageSummaryConsumer.value) {
@@ -5660,6 +5769,115 @@ const loadGroups = async () => {
     if (abortController === currentController && !signal.aborted) {
       loading.value = false;
     }
+  }
+};
+
+const isTemporaryDispatchActive = (group: AdminGroup): boolean => {
+  if (!group.temporary_dispatch_account_id || !group.temporary_dispatch_expires_at) return false;
+  return new Date(group.temporary_dispatch_expires_at).getTime() > Date.now();
+};
+
+const formatTemporaryDispatchTime = (value?: string): string => {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+};
+
+const loadTemporaryAccounts = async () => {
+  const platform = selectedGroups.value[0]?.platform;
+  if (!platform || platform === "composite") {
+    temporaryAccountResults.value = [];
+    return;
+  }
+  try {
+    const response = await adminAPI.accounts.list(1, 30, {
+      platform,
+      status: "active",
+      search: temporaryAccountSearch.value.trim() || undefined,
+    });
+    temporaryAccountResults.value = response.items.map((account) => ({
+      id: account.id,
+      name: account.name,
+    }));
+  } catch (error) {
+    temporaryAccountResults.value = [];
+    console.error("Failed to load temporary dispatch accounts:", error);
+  }
+};
+
+const searchTemporaryAccounts = () => {
+  if (temporaryAccountSearchTimer) clearTimeout(temporaryAccountSearchTimer);
+  temporaryAccountSearchTimer = setTimeout(loadTemporaryAccounts, 250);
+};
+
+const openTemporaryDispatchModal = () => {
+  if (selectedGroups.value.length === 0) {
+    appStore.showError(t("admin.groups.temporaryDispatch.selectGroups"));
+    return;
+  }
+  const platforms = new Set(selectedGroups.value.map((group) => group.platform));
+  if (platforms.size !== 1) {
+    appStore.showError(t("admin.groups.temporaryDispatch.samePlatform"));
+    return;
+  }
+  if (selectedGroups.value.some((group) => group.platform === "composite")) {
+    appStore.showError(t("admin.groups.temporaryDispatch.compositeUnsupported"));
+    return;
+  }
+  showTemporaryDispatchModal.value = true;
+  temporarySelectedAccount.value = null;
+  temporaryAccountSearch.value = "";
+  void loadTemporaryAccounts();
+};
+
+const closeTemporaryDispatchModal = () => {
+  showTemporaryDispatchModal.value = false;
+  temporarySelectedAccount.value = null;
+  temporaryAccountResults.value = [];
+  if (temporaryAccountSearchTimer) {
+    clearTimeout(temporaryAccountSearchTimer);
+    temporaryAccountSearchTimer = null;
+  }
+};
+
+const startTemporaryDispatch = async () => {
+  if (!temporarySelectedAccount.value) {
+    appStore.showError(t("admin.groups.temporaryDispatch.selectAccount"));
+    return;
+  }
+  temporaryDispatchSubmitting.value = true;
+  try {
+    await adminAPI.groups.startTemporaryDispatch(
+      selectedGroups.value.map((group) => group.id),
+      temporarySelectedAccount.value.id,
+      temporaryDispatchDuration.value,
+    );
+    appStore.showSuccess(t("admin.groups.temporaryDispatch.started"));
+    closeTemporaryDispatchModal();
+    selectedGroupIds.value = [];
+    await loadGroups();
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error) || t("admin.groups.temporaryDispatch.failed"));
+  } finally {
+    temporaryDispatchSubmitting.value = false;
+  }
+};
+
+const stopTemporaryDispatch = async () => {
+  const ids = selectedGroups.value
+    .filter((group) => group.temporary_dispatch_account_id)
+    .map((group) => group.id);
+  if (ids.length === 0) return;
+  temporaryDispatchSubmitting.value = true;
+  try {
+    await adminAPI.groups.stopTemporaryDispatch(ids);
+    appStore.showSuccess(t("admin.groups.temporaryDispatch.stopped"));
+    selectedGroupIds.value = [];
+    await loadGroups();
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error) || t("admin.groups.temporaryDispatch.failed"));
+  } finally {
+    temporaryDispatchSubmitting.value = false;
   }
 };
 

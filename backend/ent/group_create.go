@@ -920,6 +920,62 @@ func (_c *GroupCreate) SetNillableProfitSafetyBuffer(v *float64) *GroupCreate {
 	return _c
 }
 
+// SetTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field.
+func (_c *GroupCreate) SetTemporaryDispatchAccountID(v int64) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchAccountID(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchAccountID(v *int64) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchAccountID(*v)
+	}
+	return _c
+}
+
+// SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
+func (_c *GroupCreate) SetTemporaryDispatchID(v string) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchID(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchID sets the "temporary_dispatch_id" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchID(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchID(*v)
+	}
+	return _c
+}
+
+// SetTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field.
+func (_c *GroupCreate) SetTemporaryDispatchStartedAt(v time.Time) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchStartedAt(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchStartedAt(v *time.Time) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchStartedAt(*v)
+	}
+	return _c
+}
+
+// SetTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field.
+func (_c *GroupCreate) SetTemporaryDispatchExpiresAt(v time.Time) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchExpiresAt(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchExpiresAt(v *time.Time) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchExpiresAt(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *GroupCreate) AddAPIKeyIDs(ids ...int64) *GroupCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -1439,6 +1495,11 @@ func (_c *GroupCreate) check() error {
 	if _, ok := _c.mutation.ProfitSafetyBuffer(); !ok {
 		return &ValidationError{Name: "profit_safety_buffer", err: errors.New(`ent: missing required field "Group.profit_safety_buffer"`)}
 	}
+	if v, ok := _c.mutation.TemporaryDispatchID(); ok {
+		if err := group.TemporaryDispatchIDValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_id", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_id": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -1733,6 +1794,22 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ProfitSafetyBuffer(); ok {
 		_spec.SetField(group.FieldProfitSafetyBuffer, field.TypeFloat64, value)
 		_node.ProfitSafetyBuffer = value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchAccountID(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchAccountID, field.TypeInt64, value)
+		_node.TemporaryDispatchAccountID = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchID(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchID, field.TypeString, value)
+		_node.TemporaryDispatchID = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchStartedAt(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchStartedAt, field.TypeTime, value)
+		_node.TemporaryDispatchStartedAt = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchExpiresAt(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchExpiresAt, field.TypeTime, value)
+		_node.TemporaryDispatchExpiresAt = &value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -2955,6 +3032,84 @@ func (u *GroupUpsert) UpdateProfitSafetyBuffer() *GroupUpsert {
 // AddProfitSafetyBuffer adds v to the "profit_safety_buffer" field.
 func (u *GroupUpsert) AddProfitSafetyBuffer(v float64) *GroupUpsert {
 	u.Add(group.FieldProfitSafetyBuffer, v)
+	return u
+}
+
+// SetTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field.
+func (u *GroupUpsert) SetTemporaryDispatchAccountID(v int64) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchAccountID, v)
+	return u
+}
+
+// UpdateTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchAccountID() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchAccountID)
+	return u
+}
+
+// AddTemporaryDispatchAccountID adds v to the "temporary_dispatch_account_id" field.
+func (u *GroupUpsert) AddTemporaryDispatchAccountID(v int64) *GroupUpsert {
+	u.Add(group.FieldTemporaryDispatchAccountID, v)
+	return u
+}
+
+// ClearTemporaryDispatchAccountID clears the value of the "temporary_dispatch_account_id" field.
+func (u *GroupUpsert) ClearTemporaryDispatchAccountID() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchAccountID)
+	return u
+}
+
+// SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
+func (u *GroupUpsert) SetTemporaryDispatchID(v string) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchID, v)
+	return u
+}
+
+// UpdateTemporaryDispatchID sets the "temporary_dispatch_id" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchID() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchID)
+	return u
+}
+
+// ClearTemporaryDispatchID clears the value of the "temporary_dispatch_id" field.
+func (u *GroupUpsert) ClearTemporaryDispatchID() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchID)
+	return u
+}
+
+// SetTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field.
+func (u *GroupUpsert) SetTemporaryDispatchStartedAt(v time.Time) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchStartedAt, v)
+	return u
+}
+
+// UpdateTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchStartedAt() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchStartedAt)
+	return u
+}
+
+// ClearTemporaryDispatchStartedAt clears the value of the "temporary_dispatch_started_at" field.
+func (u *GroupUpsert) ClearTemporaryDispatchStartedAt() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchStartedAt)
+	return u
+}
+
+// SetTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field.
+func (u *GroupUpsert) SetTemporaryDispatchExpiresAt(v time.Time) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchExpiresAt, v)
+	return u
+}
+
+// UpdateTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchExpiresAt() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchExpiresAt)
+	return u
+}
+
+// ClearTemporaryDispatchExpiresAt clears the value of the "temporary_dispatch_expires_at" field.
+func (u *GroupUpsert) ClearTemporaryDispatchExpiresAt() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchExpiresAt)
 	return u
 }
 
@@ -4249,6 +4404,97 @@ func (u *GroupUpsertOne) AddProfitSafetyBuffer(v float64) *GroupUpsertOne {
 func (u *GroupUpsertOne) UpdateProfitSafetyBuffer() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateProfitSafetyBuffer()
+	})
+}
+
+// SetTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchAccountID(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchAccountID(v)
+	})
+}
+
+// AddTemporaryDispatchAccountID adds v to the "temporary_dispatch_account_id" field.
+func (u *GroupUpsertOne) AddTemporaryDispatchAccountID(v int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddTemporaryDispatchAccountID(v)
+	})
+}
+
+// UpdateTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchAccountID() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchAccountID()
+	})
+}
+
+// ClearTemporaryDispatchAccountID clears the value of the "temporary_dispatch_account_id" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchAccountID() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchAccountID()
+	})
+}
+
+// SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchID(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchID(v)
+	})
+}
+
+// UpdateTemporaryDispatchID sets the "temporary_dispatch_id" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchID() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchID()
+	})
+}
+
+// ClearTemporaryDispatchID clears the value of the "temporary_dispatch_id" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchID() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchID()
+	})
+}
+
+// SetTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchStartedAt(v time.Time) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchStartedAt(v)
+	})
+}
+
+// UpdateTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchStartedAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchStartedAt()
+	})
+}
+
+// ClearTemporaryDispatchStartedAt clears the value of the "temporary_dispatch_started_at" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchStartedAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchStartedAt()
+	})
+}
+
+// SetTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchExpiresAt(v time.Time) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchExpiresAt(v)
+	})
+}
+
+// UpdateTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchExpiresAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchExpiresAt()
+	})
+}
+
+// ClearTemporaryDispatchExpiresAt clears the value of the "temporary_dispatch_expires_at" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchExpiresAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchExpiresAt()
 	})
 }
 
@@ -5709,6 +5955,97 @@ func (u *GroupUpsertBulk) AddProfitSafetyBuffer(v float64) *GroupUpsertBulk {
 func (u *GroupUpsertBulk) UpdateProfitSafetyBuffer() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.UpdateProfitSafetyBuffer()
+	})
+}
+
+// SetTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchAccountID(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchAccountID(v)
+	})
+}
+
+// AddTemporaryDispatchAccountID adds v to the "temporary_dispatch_account_id" field.
+func (u *GroupUpsertBulk) AddTemporaryDispatchAccountID(v int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddTemporaryDispatchAccountID(v)
+	})
+}
+
+// UpdateTemporaryDispatchAccountID sets the "temporary_dispatch_account_id" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchAccountID() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchAccountID()
+	})
+}
+
+// ClearTemporaryDispatchAccountID clears the value of the "temporary_dispatch_account_id" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchAccountID() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchAccountID()
+	})
+}
+
+// SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchID(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchID(v)
+	})
+}
+
+// UpdateTemporaryDispatchID sets the "temporary_dispatch_id" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchID() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchID()
+	})
+}
+
+// ClearTemporaryDispatchID clears the value of the "temporary_dispatch_id" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchID() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchID()
+	})
+}
+
+// SetTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchStartedAt(v time.Time) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchStartedAt(v)
+	})
+}
+
+// UpdateTemporaryDispatchStartedAt sets the "temporary_dispatch_started_at" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchStartedAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchStartedAt()
+	})
+}
+
+// ClearTemporaryDispatchStartedAt clears the value of the "temporary_dispatch_started_at" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchStartedAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchStartedAt()
+	})
+}
+
+// SetTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchExpiresAt(v time.Time) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchExpiresAt(v)
+	})
+}
+
+// UpdateTemporaryDispatchExpiresAt sets the "temporary_dispatch_expires_at" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchExpiresAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchExpiresAt()
+	})
+}
+
+// ClearTemporaryDispatchExpiresAt clears the value of the "temporary_dispatch_expires_at" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchExpiresAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchExpiresAt()
 	})
 }
 
