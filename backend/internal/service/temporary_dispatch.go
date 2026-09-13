@@ -35,7 +35,13 @@ func temporaryDispatchAccount(ctx context.Context, repo AccountRepository, group
 	if !active || repo == nil {
 		return nil, false, nil
 	}
-	accountID := *group.TemporaryDispatchAccountID
+	pool := group.TemporaryDispatchAccountPool()
+	if len(pool) != 1 {
+		// Multi-account overlays continue through the normal scheduler with a
+		// candidate-pool override supplied by temporaryDispatchPoolAccounts.
+		return nil, false, nil
+	}
+	accountID := pool[0]
 	account, err := repo.GetByID(ctx, accountID)
 	if err != nil {
 		if errors.Is(err, ErrAccountNotFound) {
@@ -53,6 +59,65 @@ func temporaryDispatchAccount(ctx context.Context, repo AccountRepository, group
 		return nil, true, temporaryDispatchSelectionError(requestedModel, "target account already failed this request")
 	}
 	return account, true, nil
+}
+
+// temporaryDispatchPoolAccounts loads an unbound multi-account overlay for the
+// normal scheduler. handled=false with an active but empty pool deliberately
+// lets the current request resume the original group while async cleanup
+// removes the final unavailable members.
+func temporaryDispatchPoolAccounts(ctx context.Context, repo AccountRepository, groupID *int64, platform string) ([]Account, bool, error) {
+	group, active := activeTemporaryDispatchGroup(ctx, groupID)
+	if !active || repo == nil {
+		return nil, false, nil
+	}
+	pool := group.TemporaryDispatchAccountPool()
+	if len(pool) <= 1 {
+		return nil, false, nil
+	}
+	loaded, err := repo.GetByIDs(ctx, pool)
+	if err != nil {
+		return nil, true, err
+	}
+	byID := make(map[int64]*Account, len(loaded))
+	for _, account := range loaded {
+		if account != nil {
+			byID[account.ID] = account
+		}
+	}
+	accounts := make([]Account, 0, len(pool))
+	for _, accountID := range pool {
+		account := byID[accountID]
+		if account == nil {
+			notifyTemporaryDispatchAccountUnavailable(accountID, "account_deleted")
+			continue
+		}
+		if account.Platform != platform || !account.IsSchedulable() {
+			notifyTemporaryDispatchAccountUnavailable(accountID, "account_unavailable")
+			continue
+		}
+		candidate := *account
+		if groupID != nil {
+			candidate.GroupIDs = append([]int64(nil), account.GroupIDs...)
+			candidate.GroupIDs = append(candidate.GroupIDs, *groupID)
+			candidate.AccountGroups = append([]AccountGroup(nil), account.AccountGroups...)
+			candidate.AccountGroups = append(candidate.AccountGroups, AccountGroup{
+				AccountID: candidate.ID, GroupID: *groupID, Priority: candidate.Priority,
+			})
+		}
+		accounts = append(accounts, candidate)
+	}
+	if len(accounts) == 0 {
+		return nil, false, nil
+	}
+	return accounts, true, nil
+}
+
+func temporaryDispatchAllowsAccount(ctx context.Context, groupID *int64, accountID int64) (bool, bool) {
+	group, active := activeTemporaryDispatchGroup(ctx, groupID)
+	if !active {
+		return false, false
+	}
+	return group.IsTemporaryDispatchAccount(accountID), true
 }
 
 func (s *GatewayService) selectTemporaryDispatchAccount(ctx context.Context, groupID *int64, group *Group, platform, requestedModel string, excludedIDs map[int64]struct{}) (*Account, bool, error) {

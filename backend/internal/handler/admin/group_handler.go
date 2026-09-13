@@ -348,8 +348,10 @@ type CompositeRoutePreviewRequest struct {
 }
 
 type StartTemporaryDispatchRequest struct {
-	GroupIDs           []int64 `json:"group_ids" binding:"required"`
-	AccountID          int64   `json:"account_id" binding:"required"`
+	GroupIDs []int64                                 `json:"group_ids" binding:"required"`
+	Accounts []service.TemporaryDispatchAccountInput `json:"accounts"`
+	// Legacy single-account fields remain accepted for older admin clients.
+	AccountID          int64   `json:"account_id"`
 	Mode               string  `json:"mode" binding:"omitempty,oneof=time usage hybrid"`
 	DurationMinutes    int     `json:"duration_minutes"`
 	QuotaWindow        string  `json:"quota_window" binding:"omitempty,oneof=5h 7d"`
@@ -402,6 +404,7 @@ func (h *GroupHandler) StartTemporaryDispatch(c *gin.Context) {
 	}
 	result, err := svc.StartTemporaryDispatch(c.Request.Context(), service.StartTemporaryDispatchInput{
 		GroupIDs:           req.GroupIDs,
+		Accounts:           req.Accounts,
 		AccountID:          req.AccountID,
 		Mode:               req.Mode,
 		DurationMinutes:    req.DurationMinutes,

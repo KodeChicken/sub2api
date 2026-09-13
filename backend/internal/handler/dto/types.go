@@ -201,6 +201,7 @@ type AdminGroup struct {
 	ActiveAccountCount               int64          `json:"active_account_count,omitempty"`
 	RateLimitedAccountCount          int64          `json:"rate_limited_account_count,omitempty"`
 	TemporaryDispatchAccountID       *int64         `json:"temporary_dispatch_account_id,omitempty"`
+	TemporaryDispatchAccountIDs      []int64        `json:"temporary_dispatch_account_ids,omitempty"`
 	TemporaryDispatchID              string         `json:"temporary_dispatch_id,omitempty"`
 	TemporaryDispatchStartedAt       *time.Time     `json:"temporary_dispatch_started_at,omitempty"`
 	TemporaryDispatchExpiresAt       *time.Time     `json:"temporary_dispatch_expires_at,omitempty"`

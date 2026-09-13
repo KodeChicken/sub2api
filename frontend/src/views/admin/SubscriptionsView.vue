@@ -248,6 +248,15 @@
                     <span class="text-gray-400">/</span>
                     ${{ row.group?.daily_limit_usd?.toFixed(2) }}
                   </span>
+                  <span
+                    class="usage-percentage"
+                    data-test="daily-usage-percentage"
+                    :title="t('admin.subscriptions.usedPercentage', {
+                      percentage: formatUsagePercentage(row.daily_usage_usd, row.group?.daily_limit_usd)
+                    })"
+                  >
+                    {{ formatUsagePercentage(row.daily_usage_usd, row.group?.daily_limit_usd) }}
+                  </span>
                 </div>
                 <div class="reset-info" v-if="row.daily_window_start">
                   <svg
@@ -285,6 +294,15 @@
                     <span class="text-gray-400">/</span>
                     ${{ row.group?.weekly_limit_usd?.toFixed(2) }}
                   </span>
+                  <span
+                    class="usage-percentage"
+                    data-test="weekly-usage-percentage"
+                    :title="t('admin.subscriptions.usedPercentage', {
+                      percentage: formatUsagePercentage(row.weekly_usage_usd, row.group?.weekly_limit_usd)
+                    })"
+                  >
+                    {{ formatUsagePercentage(row.weekly_usage_usd, row.group?.weekly_limit_usd) }}
+                  </span>
                 </div>
                 <div class="reset-info" v-if="row.weekly_window_start">
                   <svg
@@ -321,6 +339,15 @@
                     ${{ row.monthly_usage_usd?.toFixed(2) || '0.00' }}
                     <span class="text-gray-400">/</span>
                     ${{ row.group?.monthly_limit_usd?.toFixed(2) }}
+                  </span>
+                  <span
+                    class="usage-percentage"
+                    data-test="monthly-usage-percentage"
+                    :title="t('admin.subscriptions.usedPercentage', {
+                      percentage: formatUsagePercentage(row.monthly_usage_usd, row.group?.monthly_limit_usd)
+                    })"
+                  >
+                    {{ formatUsagePercentage(row.monthly_usage_usd, row.group?.monthly_limit_usd) }}
                   </span>
                 </div>
                 <div class="reset-info" v-if="row.monthly_window_start">
@@ -1430,6 +1457,15 @@ const getProgressWidth = (used: number | null | undefined, limit: number | null)
   return `${percentage}%`
 }
 
+const formatUsagePercentage = (
+  used: number | null | undefined,
+  limit: number | null | undefined
+): string => {
+  if (typeof limit !== 'number' || !Number.isFinite(limit) || limit <= 0) return '—'
+  const usedValue = typeof used === 'number' && Number.isFinite(used) ? Math.max(used, 0) : 0
+  return `${((usedValue / limit) * 100).toFixed(1)}%`
+}
+
 const getProgressClass = (used: number | null | undefined, limit: number | null): string => {
   if (!limit || limit === 0) return 'bg-gray-400'
   const usedValue = used ?? 0
@@ -1538,6 +1574,10 @@ onUnmounted(() => {
 
 .usage-amount {
   @apply whitespace-nowrap text-xs tabular-nums text-gray-600 dark:text-gray-300;
+}
+
+.usage-percentage {
+  @apply min-w-12 whitespace-nowrap rounded bg-gray-100 px-1.5 py-0.5 text-right text-[10px] font-semibold tabular-nums text-gray-600 dark:bg-dark-600 dark:text-gray-300;
 }
 
 .reset-info {

@@ -156,6 +156,10 @@ type Group struct {
 	ProfitSafetyBuffer float64 `json:"profit_safety_buffer,omitempty"`
 	// 临时接管分组流量的账号 ID；不要求存在 account_groups 绑定
 	TemporaryDispatchAccountID *int64 `json:"temporary_dispatch_account_id,omitempty"`
+	// 临时接管分组流量的账号池 ID；不要求存在 account_groups 绑定
+	TemporaryDispatchAccountIds []int64 `json:"temporary_dispatch_account_ids,omitempty"`
+	// 临时账号池各账号的硬截止时间，键为账号 ID
+	TemporaryDispatchAccountDeadlines map[string]time.Time `json:"temporary_dispatch_account_deadlines,omitempty"`
 	// 一次批量临时调度操作的关联 ID
 	TemporaryDispatchID *string `json:"temporary_dispatch_id,omitempty"`
 	// 临时调度开始时间
@@ -280,7 +284,7 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case group.FieldVideoModelPrices, group.FieldModelPricing, group.FieldModelRouting, group.FieldSupportedModelScopes, group.FieldMessagesDispatchModelConfig, group.FieldModelAllowlist, group.FieldCodexModelsManifestConfig, group.FieldReasoningEffortMappings:
+		case group.FieldVideoModelPrices, group.FieldModelPricing, group.FieldModelRouting, group.FieldSupportedModelScopes, group.FieldMessagesDispatchModelConfig, group.FieldModelAllowlist, group.FieldCodexModelsManifestConfig, group.FieldReasoningEffortMappings, group.FieldTemporaryDispatchAccountIds, group.FieldTemporaryDispatchAccountDeadlines:
 			values[i] = new([]byte)
 		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldIsCarpool, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldLongContextPricingEnabled, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldForceOpenaiFast, group.FieldFreeOpenaiFast, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled:
 			values[i] = new(sql.NullBool)
@@ -757,6 +761,22 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 				_m.TemporaryDispatchAccountID = new(int64)
 				*_m.TemporaryDispatchAccountID = value.Int64
 			}
+		case group.FieldTemporaryDispatchAccountIds:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_account_ids", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.TemporaryDispatchAccountIds); err != nil {
+					return fmt.Errorf("unmarshal field temporary_dispatch_account_ids: %w", err)
+				}
+			}
+		case group.FieldTemporaryDispatchAccountDeadlines:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_account_deadlines", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.TemporaryDispatchAccountDeadlines); err != nil {
+					return fmt.Errorf("unmarshal field temporary_dispatch_account_deadlines: %w", err)
+				}
+			}
 		case group.FieldTemporaryDispatchID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field temporary_dispatch_id", values[i])
@@ -1139,6 +1159,12 @@ func (_m *Group) String() string {
 		builder.WriteString("temporary_dispatch_account_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("temporary_dispatch_account_ids=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TemporaryDispatchAccountIds))
+	builder.WriteString(", ")
+	builder.WriteString("temporary_dispatch_account_deadlines=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TemporaryDispatchAccountDeadlines))
 	builder.WriteString(", ")
 	if v := _m.TemporaryDispatchID; v != nil {
 		builder.WriteString("temporary_dispatch_id=")

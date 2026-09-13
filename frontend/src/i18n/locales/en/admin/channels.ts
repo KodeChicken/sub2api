@@ -670,6 +670,7 @@ export default {
       daily: 'Daily',
       weekly: 'Weekly',
       monthly: 'Monthly',
+      usedPercentage: 'Used {percentage}',
       noLimits: 'No limits configured',
       unlimited: 'Unlimited',
       resetNow: 'Resetting soon',

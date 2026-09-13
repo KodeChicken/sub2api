@@ -971,6 +971,8 @@ var (
 		{Name: "profit_min_margin", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
 		{Name: "profit_safety_buffer", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
 		{Name: "temporary_dispatch_account_id", Type: field.TypeInt64, Nullable: true},
+		{Name: "temporary_dispatch_account_ids", Type: field.TypeJSON},
+		{Name: "temporary_dispatch_account_deadlines", Type: field.TypeJSON},
 		{Name: "temporary_dispatch_id", Type: field.TypeString, Nullable: true, Size: 64},
 		{Name: "temporary_dispatch_started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "temporary_dispatch_expires_at", Type: field.TypeTime, Nullable: true},

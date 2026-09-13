@@ -1259,6 +1259,24 @@ func (_u *GroupUpdate) ClearTemporaryDispatchAccountID() *GroupUpdate {
 	return _u
 }
 
+// SetTemporaryDispatchAccountIds sets the "temporary_dispatch_account_ids" field.
+func (_u *GroupUpdate) SetTemporaryDispatchAccountIds(v []int64) *GroupUpdate {
+	_u.mutation.SetTemporaryDispatchAccountIds(v)
+	return _u
+}
+
+// AppendTemporaryDispatchAccountIds appends value to the "temporary_dispatch_account_ids" field.
+func (_u *GroupUpdate) AppendTemporaryDispatchAccountIds(v []int64) *GroupUpdate {
+	_u.mutation.AppendTemporaryDispatchAccountIds(v)
+	return _u
+}
+
+// SetTemporaryDispatchAccountDeadlines sets the "temporary_dispatch_account_deadlines" field.
+func (_u *GroupUpdate) SetTemporaryDispatchAccountDeadlines(v map[string]time.Time) *GroupUpdate {
+	_u.mutation.SetTemporaryDispatchAccountDeadlines(v)
+	return _u
+}
+
 // SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
 func (_u *GroupUpdate) SetTemporaryDispatchID(v string) *GroupUpdate {
 	_u.mutation.SetTemporaryDispatchID(v)
@@ -2185,6 +2203,17 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.TemporaryDispatchAccountIDCleared() {
 		_spec.ClearField(group.FieldTemporaryDispatchAccountID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchAccountIds(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchAccountIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedTemporaryDispatchAccountIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, group.FieldTemporaryDispatchAccountIds, value)
+		})
+	}
+	if value, ok := _u.mutation.TemporaryDispatchAccountDeadlines(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchAccountDeadlines, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.TemporaryDispatchID(); ok {
 		_spec.SetField(group.FieldTemporaryDispatchID, field.TypeString, value)
@@ -3785,6 +3814,24 @@ func (_u *GroupUpdateOne) ClearTemporaryDispatchAccountID() *GroupUpdateOne {
 	return _u
 }
 
+// SetTemporaryDispatchAccountIds sets the "temporary_dispatch_account_ids" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchAccountIds(v []int64) *GroupUpdateOne {
+	_u.mutation.SetTemporaryDispatchAccountIds(v)
+	return _u
+}
+
+// AppendTemporaryDispatchAccountIds appends value to the "temporary_dispatch_account_ids" field.
+func (_u *GroupUpdateOne) AppendTemporaryDispatchAccountIds(v []int64) *GroupUpdateOne {
+	_u.mutation.AppendTemporaryDispatchAccountIds(v)
+	return _u
+}
+
+// SetTemporaryDispatchAccountDeadlines sets the "temporary_dispatch_account_deadlines" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchAccountDeadlines(v map[string]time.Time) *GroupUpdateOne {
+	_u.mutation.SetTemporaryDispatchAccountDeadlines(v)
+	return _u
+}
+
 // SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
 func (_u *GroupUpdateOne) SetTemporaryDispatchID(v string) *GroupUpdateOne {
 	_u.mutation.SetTemporaryDispatchID(v)
@@ -4741,6 +4788,17 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if _u.mutation.TemporaryDispatchAccountIDCleared() {
 		_spec.ClearField(group.FieldTemporaryDispatchAccountID, field.TypeInt64)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchAccountIds(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchAccountIds, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedTemporaryDispatchAccountIds(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, group.FieldTemporaryDispatchAccountIds, value)
+		})
+	}
+	if value, ok := _u.mutation.TemporaryDispatchAccountDeadlines(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchAccountDeadlines, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.TemporaryDispatchID(); ok {
 		_spec.SetField(group.FieldTemporaryDispatchID, field.TypeString, value)

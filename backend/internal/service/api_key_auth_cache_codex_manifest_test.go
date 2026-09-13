@@ -21,8 +21,13 @@ func TestAPIKeyAuthSnapshotGroupCodexModelsManifestRoundtrip(t *testing.T) {
 		User: &User{ID: 46, Status: StatusActive},
 		Group: &Group{
 			ID: groupID, Name: "codex-manifest-roundtrip", Platform: PlatformOpenAI, Status: StatusActive,
-			Hydrated:                   true,
-			TemporaryDispatchAccountID: &temporaryDispatchAccountID,
+			Hydrated:                    true,
+			TemporaryDispatchAccountID:  &temporaryDispatchAccountID,
+			TemporaryDispatchAccountIDs: []int64{88, 89},
+			TemporaryDispatchAccountDeadlines: map[string]time.Time{
+				"88": temporaryDispatchStartedAt.Add(time.Hour),
+				"89": temporaryDispatchExpiresAt,
+			},
 			TemporaryDispatchID:        "temporary-dispatch-roundtrip",
 			TemporaryDispatchStartedAt: &temporaryDispatchStartedAt,
 			TemporaryDispatchExpiresAt: &temporaryDispatchExpiresAt,
@@ -48,6 +53,9 @@ func TestAPIKeyAuthSnapshotGroupCodexModelsManifestRoundtrip(t *testing.T) {
 	require.Equal(t, []int64{7, 8}, materialized.Group.CodexModelsManifestConfig.AccountIDs)
 	require.True(t, materialized.Group.CodexModelsManifestConfig.FallbackToScheduler)
 	require.Equal(t, &temporaryDispatchAccountID, materialized.Group.TemporaryDispatchAccountID)
+	require.Equal(t, []int64{88, 89}, materialized.Group.TemporaryDispatchAccountIDs)
+	require.Equal(t, temporaryDispatchStartedAt.Add(time.Hour), materialized.Group.TemporaryDispatchAccountDeadlines["88"])
+	require.Equal(t, temporaryDispatchExpiresAt, materialized.Group.TemporaryDispatchAccountDeadlines["89"])
 	require.Equal(t, "temporary-dispatch-roundtrip", materialized.Group.TemporaryDispatchID)
 	require.Equal(t, temporaryDispatchStartedAt, *materialized.Group.TemporaryDispatchStartedAt)
 	require.Equal(t, temporaryDispatchExpiresAt, *materialized.Group.TemporaryDispatchExpiresAt)

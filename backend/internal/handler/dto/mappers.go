@@ -166,6 +166,7 @@ func GroupFromServiceAdmin(g *service.Group) *AdminGroup {
 		ActiveAccountCount:               g.ActiveAccountCount,
 		RateLimitedAccountCount:          g.RateLimitedAccountCount,
 		TemporaryDispatchAccountID:       g.TemporaryDispatchAccountID,
+		TemporaryDispatchAccountIDs:      append([]int64(nil), g.TemporaryDispatchAccountIDs...),
 		TemporaryDispatchID:              g.TemporaryDispatchID,
 		TemporaryDispatchStartedAt:       g.TemporaryDispatchStartedAt,
 		TemporaryDispatchExpiresAt:       g.TemporaryDispatchExpiresAt,

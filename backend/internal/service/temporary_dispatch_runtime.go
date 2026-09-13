@@ -66,6 +66,8 @@ type TemporaryDispatchRuntime struct {
 	latest  sync.Map // account id -> *OpenAICodexUsageSnapshot
 	pending sync.Map
 
+	mutationMu sync.Mutex
+
 	unavailableQueue   chan int64
 	unavailableReason  sync.Map // account id -> string
 	unavailablePending sync.Map
@@ -195,7 +197,9 @@ func (r *TemporaryDispatchRuntime) Create(ctx context.Context, spec TemporaryDis
 }
 
 func (r *TemporaryDispatchRuntime) StopGroups(ctx context.Context, groupIDs []int64) error {
+	r.mutationMu.Lock()
 	groupIDs, err := r.store.StopTemporaryDispatchGroups(ctx, groupIDs)
+	r.mutationMu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -269,7 +273,9 @@ func (r *TemporaryDispatchRuntime) runUnavailableCleanup() {
 			reasonValue, _ := r.unavailableReason.LoadAndDelete(accountID)
 			reason, _ := reasonValue.(string)
 			ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
+			r.mutationMu.Lock()
 			groupIDs, err := r.store.StopTemporaryDispatchAccount(ctx, accountID)
+			r.mutationMu.Unlock()
 			cancel()
 			if err != nil {
 				slog.Warn("temporary_dispatch_account_cleanup_failed", "account_id", accountID, "reason", reason, "error", err)
@@ -297,7 +303,9 @@ func (r *TemporaryDispatchRuntime) observeSnapshot(accountID int64, snapshot *Op
 			continue
 		}
 		ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
+		r.mutationMu.Lock()
 		groupIDs, err := r.store.ObserveTemporaryDispatchQuota(ctx, accountID, item.window, *item.used, observedAt)
+		r.mutationMu.Unlock()
 		cancel()
 		if err != nil {
 			slog.Warn("temporary_dispatch_quota_observe_failed", "account_id", accountID, "window", item.window, "error", err)
@@ -325,7 +333,9 @@ func (r *TemporaryDispatchRuntime) runScanner() {
 func (r *TemporaryDispatchRuntime) scanOnce() {
 	now := time.Now().UTC()
 	ctx, cancel := context.WithTimeout(r.ctx, 10*time.Second)
+	r.mutationMu.Lock()
 	groupIDs, err := r.store.CleanupTemporaryDispatches(ctx, now, 200)
+	r.mutationMu.Unlock()
 	cancel()
 	if err != nil {
 		slog.Warn("temporary_dispatch_cleanup_failed", "error", err)
@@ -391,7 +401,9 @@ func (r *TemporaryDispatchRuntime) observeUsage(accountID int64, usage *OpenAIQu
 			continue
 		}
 		ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
+		r.mutationMu.Lock()
 		groupIDs, err := r.store.ObserveTemporaryDispatchQuota(ctx, accountID, window, used, now)
+		r.mutationMu.Unlock()
 		cancel()
 		if err != nil {
 			slog.Warn("temporary_dispatch_quota_poll_persist_failed", "account_id", accountID, "window", window, "error", err)

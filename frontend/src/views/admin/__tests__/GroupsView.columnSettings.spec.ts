@@ -361,11 +361,13 @@ describe('admin GroupsView column settings', () => {
 
     expect(startTemporaryDispatch).toHaveBeenCalledWith({
       group_ids: [1],
-      account_id: 42,
+      accounts: [{
+        account_id: 42,
+        duration_minutes: 120,
+        quota_window: undefined,
+        target_delta_percent: undefined,
+      }],
       mode: 'time',
-      duration_minutes: 120,
-      quota_window: undefined,
-      target_delta_percent: undefined,
     })
     expect(showSuccess).toHaveBeenCalledWith('Temporary dispatch started')
   })
@@ -403,12 +405,84 @@ describe('admin GroupsView column settings', () => {
 
     expect(startTemporaryDispatch).toHaveBeenCalledWith({
       group_ids: [1],
-      account_id: 42,
+      accounts: [{
+        account_id: 42,
+        duration_minutes: 120,
+        quota_window: '5h',
+        target_delta_percent: 30,
+      }],
       mode: 'hybrid',
-      duration_minutes: 120,
-      quota_window: '5h',
-      target_delta_percent: 30,
     })
+  })
+
+  it('selects multiple temporary accounts with independent durations', async () => {
+    listAccounts.mockResolvedValue({
+      items: [
+        { id: 42, name: 'Drain one', type: 'apikey' },
+        { id: 43, name: 'Drain two', type: 'apikey' },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 30,
+      pages: 1,
+    })
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-test="select-first"]').trigger('click')
+    await wrapper.findAll('button').find((item) => item.text().includes('Temporary account'))!.trigger('click')
+    await flushPromises()
+
+    await wrapper.findAll('button').find((item) => item.text().includes('Drain one'))!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((item) => item.text().includes('Drain two') && item.text().includes('#43'))!.trigger('click')
+    await flushPromises()
+
+    const durations = wrapper.findAll('input[type="number"]')
+    expect(durations).toHaveLength(2)
+    await durations[0].setValue(15)
+    await durations[1].setValue(90)
+
+    await wrapper.findAll('button').find((item) => item.text().includes('Start takeover'))!.trigger('click')
+    await flushPromises()
+
+    expect(startTemporaryDispatch).toHaveBeenCalledWith({
+      group_ids: [1],
+      accounts: [
+        { account_id: 42, duration_minutes: 15, quota_window: undefined, target_delta_percent: undefined },
+        { account_id: 43, duration_minutes: 90, quota_window: undefined, target_delta_percent: undefined },
+      ],
+      mode: 'time',
+    })
+  })
+
+  it('removes a selected temporary account from its chip button', async () => {
+    listAccounts.mockResolvedValue({
+      items: [
+        { id: 42, name: 'Drain one', type: 'apikey' },
+        { id: 43, name: 'Drain two', type: 'apikey' },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 30,
+      pages: 1,
+    })
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-test="select-first"]').trigger('click')
+    await wrapper.findAll('button').find((item) => item.text().includes('Temporary account'))!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((item) => item.text().includes('Drain one'))!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((item) => item.text().includes('Drain two') && item.text().includes('#43'))!.trigger('click')
+    await flushPromises()
+
+    await wrapper.get('button[aria-label="admin.groups.temporaryDispatch.removeAccount"]').trigger('click')
+    await wrapper.findAll('button').find((item) => item.text().includes('Start takeover'))!.trigger('click')
+    await flushPromises()
+
+    expect(startTemporaryDispatch).toHaveBeenCalledWith(expect.objectContaining({
+      accounts: [expect.objectContaining({ account_id: 43 })],
+    }))
   })
 
   it('applies saved hidden columns on mount and ignores unknown keys', async () => {

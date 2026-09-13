@@ -656,6 +656,7 @@ export interface AdminGroup extends Group {
 
   // Expiring scheduler overlay; original account bindings are untouched.
   temporary_dispatch_account_id?: number
+  temporary_dispatch_account_ids?: number[]
   temporary_dispatch_id?: string
   temporary_dispatch_started_at?: string
   temporary_dispatch_expires_at?: string
@@ -674,6 +675,7 @@ export interface TemporaryDispatchResult {
   dispatch_id: string
   group_ids: number[]
   account_id: number
+  accounts: TemporaryDispatchAccountResult[]
   mode: TemporaryDispatchMode
   quota_window?: TemporaryDispatchQuotaWindow
   baseline_percent?: number
@@ -684,13 +686,28 @@ export interface TemporaryDispatchResult {
   expires_at: string
 }
 
+export interface TemporaryDispatchAccountResult {
+  account_id: number
+  duration_minutes?: number
+  quota_window?: TemporaryDispatchQuotaWindow
+  baseline_percent?: number
+  target_percent?: number
+  current_percent?: number
+  quota_reset_at?: string
+  expires_at: string
+}
+
 export type TemporaryDispatchMode = 'time' | 'usage' | 'hybrid'
 export type TemporaryDispatchQuotaWindow = '5h' | '7d'
 
 export interface StartTemporaryDispatchInput {
   group_ids: number[]
-  account_id: number
+  accounts: TemporaryDispatchAccountInput[]
   mode: TemporaryDispatchMode
+}
+
+export interface TemporaryDispatchAccountInput {
+  account_id: number
   duration_minutes?: number
   quota_window?: TemporaryDispatchQuotaWindow
   target_delta_percent?: number

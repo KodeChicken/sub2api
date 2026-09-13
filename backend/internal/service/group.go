@@ -135,16 +135,18 @@ type Group struct {
 
 	// TemporaryDispatch* is an expiring scheduler overlay. The original
 	// account-group bindings remain untouched and resume when this expires.
-	TemporaryDispatchAccountID       *int64
-	TemporaryDispatchID              string
-	TemporaryDispatchStartedAt       *time.Time
-	TemporaryDispatchExpiresAt       *time.Time
-	TemporaryDispatchMode            string
-	TemporaryDispatchQuotaWindow     string
-	TemporaryDispatchBaselinePercent *float64
-	TemporaryDispatchTargetPercent   *float64
-	TemporaryDispatchCurrentPercent  *float64
-	TemporaryDispatchQuotaResetAt    *time.Time
+	TemporaryDispatchAccountID        *int64
+	TemporaryDispatchAccountIDs       []int64
+	TemporaryDispatchAccountDeadlines map[string]time.Time
+	TemporaryDispatchID               string
+	TemporaryDispatchStartedAt        *time.Time
+	TemporaryDispatchExpiresAt        *time.Time
+	TemporaryDispatchMode             string
+	TemporaryDispatchQuotaWindow      string
+	TemporaryDispatchBaselinePercent  *float64
+	TemporaryDispatchTargetPercent    *float64
+	TemporaryDispatchCurrentPercent   *float64
+	TemporaryDispatchQuotaResetAt     *time.Time
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -159,8 +161,48 @@ type Group struct {
 // at the supplied instant. A complete rule always has an account and expiry.
 func (g *Group) HasActiveTemporaryDispatch(at time.Time) bool {
 	return g != nil &&
-		g.TemporaryDispatchAccountID != nil && *g.TemporaryDispatchAccountID > 0 &&
+		len(g.TemporaryDispatchAccountPoolAt(at)) > 0 &&
 		g.TemporaryDispatchExpiresAt != nil && at.Before(*g.TemporaryDispatchExpiresAt)
+}
+
+// TemporaryDispatchAccountPool returns the active overlay candidates while
+// retaining compatibility with single-account snapshots created before pools.
+func (g *Group) TemporaryDispatchAccountPool() []int64 {
+	return g.TemporaryDispatchAccountPoolAt(time.Now())
+}
+
+func (g *Group) TemporaryDispatchAccountPoolAt(at time.Time) []int64 {
+	if g == nil {
+		return nil
+	}
+	seen := make(map[int64]struct{}, len(g.TemporaryDispatchAccountIDs)+1)
+	ids := make([]int64, 0, len(g.TemporaryDispatchAccountIDs)+1)
+	for _, id := range g.TemporaryDispatchAccountIDs {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		if deadline, ok := g.TemporaryDispatchAccountDeadlines[fmt.Sprintf("%d", id)]; ok && !at.Before(deadline) {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(g.TemporaryDispatchAccountIDs) == 0 && g.TemporaryDispatchAccountID != nil && *g.TemporaryDispatchAccountID > 0 {
+		ids = append(ids, *g.TemporaryDispatchAccountID)
+	}
+	return ids
+}
+
+func (g *Group) IsTemporaryDispatchAccount(accountID int64) bool {
+	for _, id := range g.TemporaryDispatchAccountPool() {
+		if id == accountID {
+			return true
+		}
+	}
+	return false
 }
 
 // IsGroupBindableInSimpleMode is the shared policy for groups that may be

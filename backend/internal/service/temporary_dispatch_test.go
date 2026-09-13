@@ -4,12 +4,25 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/stretchr/testify/require"
 )
+
+type temporaryDispatchQuotaByAccountStub struct {
+	usage map[int64]*OpenAIQuotaUsage
+}
+
+func (s *temporaryDispatchQuotaByAccountStub) QueryRateLimitUsage(_ context.Context, accountID int64) (*OpenAIQuotaUsage, error) {
+	usage := s.usage[accountID]
+	if usage == nil {
+		return nil, fmt.Errorf("missing quota for account %d", accountID)
+	}
+	return usage, nil
+}
 
 func temporaryDispatchTestGroup(accountID int64, expiresAt time.Time) *Group {
 	return &Group{
@@ -22,6 +35,19 @@ func temporaryDispatchTestGroup(accountID int64, expiresAt time.Time) *Group {
 		TemporaryDispatchID:        "td_test",
 		TemporaryDispatchExpiresAt: &expiresAt,
 	}
+}
+
+func TestTemporaryDispatchAccountPoolFiltersEachAccountDeadline(t *testing.T) {
+	now := time.Now().UTC()
+	group := temporaryDispatchTestGroup(98, now.Add(time.Hour))
+	group.TemporaryDispatchAccountIDs = []int64{98, 99}
+	group.TemporaryDispatchAccountDeadlines = map[string]time.Time{
+		"98": now.Add(-time.Second),
+		"99": now.Add(time.Hour),
+	}
+
+	require.Equal(t, []int64{99}, group.TemporaryDispatchAccountPoolAt(now))
+	require.True(t, group.HasActiveTemporaryDispatch(now))
 }
 
 func TestGatewayTemporaryDispatchSelectsUnboundTargetBeforeNormalPool(t *testing.T) {
@@ -68,6 +94,27 @@ func TestGatewayTemporaryDispatchDoesNotFailOverWithinRequest(t *testing.T) {
 
 	_, err := svc.SelectAccountForModelWithExclusions(ctx, temporaryDispatchInt64Ptr(7), "", "", map[int64]struct{}{99: {}})
 	require.ErrorIs(t, err, ErrNoAvailableAccounts)
+}
+
+func TestGatewayTemporaryDispatchPoolUsesOnlySelectedAccounts(t *testing.T) {
+	expires := time.Now().Add(time.Hour)
+	first := Account{ID: 98, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 1}
+	second := Account{ID: 99, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 1}
+	normal := Account{ID: 1, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Concurrency: 1, Priority: 100, GroupIDs: []int64{7}}
+	repo := &mockAccountRepoForPlatform{
+		accounts: []Account{normal},
+		accountsByID: map[int64]*Account{
+			1: &normal, 98: &first, 99: &second,
+		},
+	}
+	group := temporaryDispatchTestGroup(first.ID, expires)
+	group.TemporaryDispatchAccountIDs = []int64{first.ID, second.ID}
+	ctx := context.WithValue(context.Background(), ctxkey.Group, group)
+	svc := &GatewayService{accountRepo: repo, groupRepo: &mockGroupRepoForGateway{groups: map[int64]*Group{7: group}}, cfg: testConfig()}
+
+	selected, err := svc.SelectAccountForModelWithExclusions(ctx, temporaryDispatchInt64Ptr(7), "", "", map[int64]struct{}{first.ID: {}})
+	require.NoError(t, err)
+	require.Equal(t, second.ID, selected.ID)
 }
 
 func TestOpenAITemporaryDispatchSelectsTargetOutsideOriginalGroup(t *testing.T) {
@@ -124,14 +171,30 @@ func (r *temporaryDispatchGroupRepoStub) ClearTemporaryDispatch(_ context.Contex
 
 type temporaryDispatchAccountRepoStub struct {
 	AccountRepository
-	account *Account
+	account  *Account
+	accounts map[int64]*Account
 }
 
 func (r *temporaryDispatchAccountRepoStub) GetByID(_ context.Context, id int64) (*Account, error) {
+	if account := r.accounts[id]; account != nil {
+		return account, nil
+	}
 	if r.account == nil || r.account.ID != id {
 		return nil, ErrAccountNotFound
 	}
 	return r.account, nil
+}
+
+func (r *temporaryDispatchAccountRepoStub) GetByIDs(_ context.Context, ids []int64) ([]*Account, error) {
+	accounts := make([]*Account, 0, len(ids))
+	for _, id := range ids {
+		account, err := r.GetByID(context.Background(), id)
+		if err != nil {
+			continue
+		}
+		accounts = append(accounts, account)
+	}
+	return accounts, nil
 }
 
 func TestAdminTemporaryDispatchStartsAndStopsWithoutChangingBindings(t *testing.T) {
@@ -154,6 +217,88 @@ func TestAdminTemporaryDispatchStartsAndStopsWithoutChangingBindings(t *testing.
 
 	require.NoError(t, svc.StopTemporaryDispatch(context.Background(), []int64{8, 7}))
 	require.Equal(t, []int64{8, 7}, groupRepo.clearGroupIDs)
+}
+
+func TestAdminTemporaryDispatchCreatesIndependentAccountDeadlines(t *testing.T) {
+	groupRepo := &temporaryDispatchGroupRepoStub{groups: map[int64]*Group{
+		7: {ID: 7, Platform: PlatformAnthropic, Status: StatusActive},
+	}}
+	first := &Account{ID: 41, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true}
+	second := &Account{ID: 42, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true}
+	accountRepo := &temporaryDispatchAccountRepoStub{accounts: map[int64]*Account{41: first, 42: second}}
+	store := &temporaryDispatchStoreStub{}
+	runtime := NewTemporaryDispatchRuntime(store, nil, nil)
+	svc := &adminServiceImpl{cfg: testConfig(), groupRepo: groupRepo, accountRepo: accountRepo, temporaryDispatchRuntime: runtime}
+
+	result, err := svc.StartTemporaryDispatch(context.Background(), StartTemporaryDispatchInput{
+		GroupIDs: []int64{7},
+		Mode:     TemporaryDispatchModeTime,
+		Accounts: []TemporaryDispatchAccountInput{
+			{AccountID: 41, DurationMinutes: 15},
+			{AccountID: 42, DurationMinutes: 90},
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, store.created)
+	require.Len(t, store.created.Accounts, 2)
+	require.WithinDuration(t, store.created.StartedAt.Add(15*time.Minute), store.created.Accounts[0].ExpiresAt, time.Second)
+	require.WithinDuration(t, store.created.StartedAt.Add(90*time.Minute), store.created.Accounts[1].ExpiresAt, time.Second)
+	require.WithinDuration(t, store.created.Accounts[1].ExpiresAt, result.ExpiresAt, time.Second)
+	require.Equal(t, []int64{41, 42}, []int64{result.Accounts[0].AccountID, result.Accounts[1].AccountID})
+}
+
+func TestAdminTemporaryDispatchCreatesIndependentQuotaTargets(t *testing.T) {
+	now := time.Now().UTC()
+	groupRepo := &temporaryDispatchGroupRepoStub{groups: map[int64]*Group{
+		7: {ID: 7, Platform: PlatformOpenAI, Status: StatusActive},
+	}}
+	first := &Account{ID: 41, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true}
+	second := &Account{ID: 42, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true}
+	accountRepo := &temporaryDispatchAccountRepoStub{accounts: map[int64]*Account{41: first, 42: second}}
+	store := &temporaryDispatchStoreStub{}
+	quota := &temporaryDispatchQuotaByAccountStub{usage: map[int64]*OpenAIQuotaUsage{
+		41: temporaryDispatchQuotaUsage(now, 10, 20),
+		42: temporaryDispatchQuotaUsage(now, 30, 40),
+	}}
+	runtime := NewTemporaryDispatchRuntime(store, quota, nil)
+	svc := &adminServiceImpl{cfg: testConfig(), groupRepo: groupRepo, accountRepo: accountRepo, temporaryDispatchRuntime: runtime}
+
+	result, err := svc.StartTemporaryDispatch(context.Background(), StartTemporaryDispatchInput{
+		GroupIDs: []int64{7}, Mode: TemporaryDispatchModeHybrid,
+		Accounts: []TemporaryDispatchAccountInput{
+			{AccountID: 41, DurationMinutes: 60, QuotaWindow: TemporaryDispatchQuotaWindow5h, TargetDeltaPercent: 15},
+			{AccountID: 42, DurationMinutes: 120, QuotaWindow: TemporaryDispatchQuotaWindow7d, TargetDeltaPercent: 25},
+		},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, result.Accounts, 2)
+	require.Equal(t, TemporaryDispatchQuotaWindow5h, result.Accounts[0].QuotaWindow)
+	require.InDelta(t, 10, *result.Accounts[0].BaselinePercent, 0.001)
+	require.InDelta(t, 25, *result.Accounts[0].TargetPercent, 0.001)
+	require.Equal(t, TemporaryDispatchQuotaWindow7d, result.Accounts[1].QuotaWindow)
+	require.InDelta(t, 40, *result.Accounts[1].BaselinePercent, 0.001)
+	require.InDelta(t, 65, *result.Accounts[1].TargetPercent, 0.001)
+}
+
+func TestAdminTemporaryDispatchRejectsDuplicatePoolAccounts(t *testing.T) {
+	groupRepo := &temporaryDispatchGroupRepoStub{groups: map[int64]*Group{
+		7: {ID: 7, Platform: PlatformAnthropic, Status: StatusActive},
+	}}
+	account := &Account{ID: 41, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true}
+	svc := &adminServiceImpl{
+		cfg: testConfig(), groupRepo: groupRepo,
+		accountRepo: &temporaryDispatchAccountRepoStub{accounts: map[int64]*Account{41: account}},
+	}
+
+	_, err := svc.StartTemporaryDispatch(context.Background(), StartTemporaryDispatchInput{
+		GroupIDs: []int64{7}, Mode: TemporaryDispatchModeTime,
+		Accounts: []TemporaryDispatchAccountInput{{AccountID: 41}, {AccountID: 41}},
+	})
+
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "DUPLICATE_TEMPORARY_DISPATCH_ACCOUNT")
 }
 
 func TestAdminTemporaryDispatchRejectsMixedPlatforms(t *testing.T) {

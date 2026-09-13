@@ -22180,6 +22180,9 @@ type GroupMutation struct {
 	addprofit_safety_buffer                 *float64
 	temporary_dispatch_account_id           *int64
 	addtemporary_dispatch_account_id        *int64
+	temporary_dispatch_account_ids          *[]int64
+	appendtemporary_dispatch_account_ids    []int64
+	temporary_dispatch_account_deadlines    *map[string]time.Time
 	temporary_dispatch_id                   *string
 	temporary_dispatch_started_at           *time.Time
 	temporary_dispatch_expires_at           *time.Time
@@ -25684,6 +25687,93 @@ func (m *GroupMutation) ResetTemporaryDispatchAccountID() {
 	delete(m.clearedFields, group.FieldTemporaryDispatchAccountID)
 }
 
+// SetTemporaryDispatchAccountIds sets the "temporary_dispatch_account_ids" field.
+func (m *GroupMutation) SetTemporaryDispatchAccountIds(i []int64) {
+	m.temporary_dispatch_account_ids = &i
+	m.appendtemporary_dispatch_account_ids = nil
+}
+
+// TemporaryDispatchAccountIds returns the value of the "temporary_dispatch_account_ids" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchAccountIds() (r []int64, exists bool) {
+	v := m.temporary_dispatch_account_ids
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchAccountIds returns the old "temporary_dispatch_account_ids" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchAccountIds(ctx context.Context) (v []int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchAccountIds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchAccountIds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchAccountIds: %w", err)
+	}
+	return oldValue.TemporaryDispatchAccountIds, nil
+}
+
+// AppendTemporaryDispatchAccountIds adds i to the "temporary_dispatch_account_ids" field.
+func (m *GroupMutation) AppendTemporaryDispatchAccountIds(i []int64) {
+	m.appendtemporary_dispatch_account_ids = append(m.appendtemporary_dispatch_account_ids, i...)
+}
+
+// AppendedTemporaryDispatchAccountIds returns the list of values that were appended to the "temporary_dispatch_account_ids" field in this mutation.
+func (m *GroupMutation) AppendedTemporaryDispatchAccountIds() ([]int64, bool) {
+	if len(m.appendtemporary_dispatch_account_ids) == 0 {
+		return nil, false
+	}
+	return m.appendtemporary_dispatch_account_ids, true
+}
+
+// ResetTemporaryDispatchAccountIds resets all changes to the "temporary_dispatch_account_ids" field.
+func (m *GroupMutation) ResetTemporaryDispatchAccountIds() {
+	m.temporary_dispatch_account_ids = nil
+	m.appendtemporary_dispatch_account_ids = nil
+}
+
+// SetTemporaryDispatchAccountDeadlines sets the "temporary_dispatch_account_deadlines" field.
+func (m *GroupMutation) SetTemporaryDispatchAccountDeadlines(value map[string]time.Time) {
+	m.temporary_dispatch_account_deadlines = &value
+}
+
+// TemporaryDispatchAccountDeadlines returns the value of the "temporary_dispatch_account_deadlines" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchAccountDeadlines() (r map[string]time.Time, exists bool) {
+	v := m.temporary_dispatch_account_deadlines
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchAccountDeadlines returns the old "temporary_dispatch_account_deadlines" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchAccountDeadlines(ctx context.Context) (v map[string]time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchAccountDeadlines is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchAccountDeadlines requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchAccountDeadlines: %w", err)
+	}
+	return oldValue.TemporaryDispatchAccountDeadlines, nil
+}
+
+// ResetTemporaryDispatchAccountDeadlines resets all changes to the "temporary_dispatch_account_deadlines" field.
+func (m *GroupMutation) ResetTemporaryDispatchAccountDeadlines() {
+	m.temporary_dispatch_account_deadlines = nil
+}
+
 // SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
 func (m *GroupMutation) SetTemporaryDispatchID(s string) {
 	m.temporary_dispatch_id = &s
@@ -26546,7 +26636,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 77)
+	fields := make([]string, 0, 79)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -26751,6 +26841,12 @@ func (m *GroupMutation) Fields() []string {
 	if m.temporary_dispatch_account_id != nil {
 		fields = append(fields, group.FieldTemporaryDispatchAccountID)
 	}
+	if m.temporary_dispatch_account_ids != nil {
+		fields = append(fields, group.FieldTemporaryDispatchAccountIds)
+	}
+	if m.temporary_dispatch_account_deadlines != nil {
+		fields = append(fields, group.FieldTemporaryDispatchAccountDeadlines)
+	}
 	if m.temporary_dispatch_id != nil {
 		fields = append(fields, group.FieldTemporaryDispatchID)
 	}
@@ -26922,6 +27018,10 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.ProfitSafetyBuffer()
 	case group.FieldTemporaryDispatchAccountID:
 		return m.TemporaryDispatchAccountID()
+	case group.FieldTemporaryDispatchAccountIds:
+		return m.TemporaryDispatchAccountIds()
+	case group.FieldTemporaryDispatchAccountDeadlines:
+		return m.TemporaryDispatchAccountDeadlines()
 	case group.FieldTemporaryDispatchID:
 		return m.TemporaryDispatchID()
 	case group.FieldTemporaryDispatchStartedAt:
@@ -27085,6 +27185,10 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldProfitSafetyBuffer(ctx)
 	case group.FieldTemporaryDispatchAccountID:
 		return m.OldTemporaryDispatchAccountID(ctx)
+	case group.FieldTemporaryDispatchAccountIds:
+		return m.OldTemporaryDispatchAccountIds(ctx)
+	case group.FieldTemporaryDispatchAccountDeadlines:
+		return m.OldTemporaryDispatchAccountDeadlines(ctx)
 	case group.FieldTemporaryDispatchID:
 		return m.OldTemporaryDispatchID(ctx)
 	case group.FieldTemporaryDispatchStartedAt:
@@ -27587,6 +27691,20 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetTemporaryDispatchAccountID(v)
+		return nil
+	case group.FieldTemporaryDispatchAccountIds:
+		v, ok := value.([]int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchAccountIds(v)
+		return nil
+	case group.FieldTemporaryDispatchAccountDeadlines:
+		v, ok := value.(map[string]time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchAccountDeadlines(v)
 		return nil
 	case group.FieldTemporaryDispatchID:
 		v, ok := value.(string)
@@ -28473,6 +28591,12 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldTemporaryDispatchAccountID:
 		m.ResetTemporaryDispatchAccountID()
+		return nil
+	case group.FieldTemporaryDispatchAccountIds:
+		m.ResetTemporaryDispatchAccountIds()
+		return nil
+	case group.FieldTemporaryDispatchAccountDeadlines:
+		m.ResetTemporaryDispatchAccountDeadlines()
 		return nil
 	case group.FieldTemporaryDispatchID:
 		m.ResetTemporaryDispatchID()

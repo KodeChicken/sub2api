@@ -2,6 +2,7 @@ package schema
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/ent/schema/mixins"
 	"github.com/Wei-Shaw/sub2api/internal/domain"
@@ -312,6 +313,12 @@ func (Group) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("临时接管分组流量的账号 ID；不要求存在 account_groups 绑定"),
+		field.JSON("temporary_dispatch_account_ids", []int64{}).
+			Default([]int64{}).
+			Comment("临时接管分组流量的账号池 ID；不要求存在 account_groups 绑定"),
+		field.JSON("temporary_dispatch_account_deadlines", map[string]time.Time{}).
+			Default(map[string]time.Time{}).
+			Comment("临时账号池各账号的硬截止时间，键为账号 ID"),
 		field.String("temporary_dispatch_id").
 			MaxLen(64).
 			Optional().

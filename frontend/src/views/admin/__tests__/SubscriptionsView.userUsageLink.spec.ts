@@ -61,6 +61,7 @@ const DataTableStub = {
       >select</button>
       <div v-for="row in data" :key="row.id">
         <slot name="cell-user" :row="row" />
+        <slot name="cell-usage" :row="row" />
       </div>
     </div>
   `
@@ -198,6 +199,47 @@ describe('admin subscription users', () => {
     const link = wrapper.getComponent(RouterLinkStub)
     expect(link.text()).toBe('reader@example.com')
     expect(link.props('to')).toEqual({ path: '/admin/usage', query: { user_id: 42 } })
+  })
+
+  it('shows the used percentage for every configured quota window without capping overage', async () => {
+    listSubscriptions.mockResolvedValue({
+      items: [{
+        id: 9,
+        user_id: 42,
+        group_id: 3,
+        status: 'active',
+        starts_at: '2026-01-01T00:00:00Z',
+        expires_at: null,
+        daily_usage_usd: 2.5,
+        weekly_usage_usd: 22.5,
+        monthly_usage_usd: 0,
+        daily_window_start: null,
+        weekly_window_start: null,
+        monthly_window_start: null,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+        user: { email: 'reader@example.com', username: 'Reader' },
+        group: {
+          id: 3,
+          name: 'Pro',
+          platform: 'openai',
+          subscription_type: 'subscription',
+          rate_multiplier: 1,
+          daily_limit_usd: 10,
+          weekly_limit_usd: 20,
+          monthly_limit_usd: 100
+        }
+      }],
+      total: 1,
+      pages: 1
+    })
+
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="daily-usage-percentage"]').text()).toBe('25.0%')
+    expect(wrapper.get('[data-test="weekly-usage-percentage"]').text()).toBe('112.5%')
+    expect(wrapper.get('[data-test="monthly-usage-percentage"]').text()).toBe('0.0%')
   })
 
   it('uses the user ID label for the usage link when username mode has no username', async () => {

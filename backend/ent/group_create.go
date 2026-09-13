@@ -934,6 +934,18 @@ func (_c *GroupCreate) SetNillableTemporaryDispatchAccountID(v *int64) *GroupCre
 	return _c
 }
 
+// SetTemporaryDispatchAccountIds sets the "temporary_dispatch_account_ids" field.
+func (_c *GroupCreate) SetTemporaryDispatchAccountIds(v []int64) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchAccountIds(v)
+	return _c
+}
+
+// SetTemporaryDispatchAccountDeadlines sets the "temporary_dispatch_account_deadlines" field.
+func (_c *GroupCreate) SetTemporaryDispatchAccountDeadlines(v map[string]time.Time) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchAccountDeadlines(v)
+	return _c
+}
+
 // SetTemporaryDispatchID sets the "temporary_dispatch_id" field.
 func (_c *GroupCreate) SetTemporaryDispatchID(v string) *GroupCreate {
 	_c.mutation.SetTemporaryDispatchID(v)
@@ -1369,6 +1381,14 @@ func (_c *GroupCreate) defaults() error {
 		v := group.DefaultProfitSafetyBuffer
 		_c.mutation.SetProfitSafetyBuffer(v)
 	}
+	if _, ok := _c.mutation.TemporaryDispatchAccountIds(); !ok {
+		v := group.DefaultTemporaryDispatchAccountIds
+		_c.mutation.SetTemporaryDispatchAccountIds(v)
+	}
+	if _, ok := _c.mutation.TemporaryDispatchAccountDeadlines(); !ok {
+		v := group.DefaultTemporaryDispatchAccountDeadlines
+		_c.mutation.SetTemporaryDispatchAccountDeadlines(v)
+	}
 	return nil
 }
 
@@ -1578,6 +1598,12 @@ func (_c *GroupCreate) check() error {
 	}
 	if _, ok := _c.mutation.ProfitSafetyBuffer(); !ok {
 		return &ValidationError{Name: "profit_safety_buffer", err: errors.New(`ent: missing required field "Group.profit_safety_buffer"`)}
+	}
+	if _, ok := _c.mutation.TemporaryDispatchAccountIds(); !ok {
+		return &ValidationError{Name: "temporary_dispatch_account_ids", err: errors.New(`ent: missing required field "Group.temporary_dispatch_account_ids"`)}
+	}
+	if _, ok := _c.mutation.TemporaryDispatchAccountDeadlines(); !ok {
+		return &ValidationError{Name: "temporary_dispatch_account_deadlines", err: errors.New(`ent: missing required field "Group.temporary_dispatch_account_deadlines"`)}
 	}
 	if v, ok := _c.mutation.TemporaryDispatchID(); ok {
 		if err := group.TemporaryDispatchIDValidator(v); err != nil {
@@ -1892,6 +1918,14 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.TemporaryDispatchAccountID(); ok {
 		_spec.SetField(group.FieldTemporaryDispatchAccountID, field.TypeInt64, value)
 		_node.TemporaryDispatchAccountID = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchAccountIds(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchAccountIds, field.TypeJSON, value)
+		_node.TemporaryDispatchAccountIds = value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchAccountDeadlines(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchAccountDeadlines, field.TypeJSON, value)
+		_node.TemporaryDispatchAccountDeadlines = value
 	}
 	if value, ok := _c.mutation.TemporaryDispatchID(); ok {
 		_spec.SetField(group.FieldTemporaryDispatchID, field.TypeString, value)
@@ -3174,6 +3208,30 @@ func (u *GroupUpsert) AddTemporaryDispatchAccountID(v int64) *GroupUpsert {
 // ClearTemporaryDispatchAccountID clears the value of the "temporary_dispatch_account_id" field.
 func (u *GroupUpsert) ClearTemporaryDispatchAccountID() *GroupUpsert {
 	u.SetNull(group.FieldTemporaryDispatchAccountID)
+	return u
+}
+
+// SetTemporaryDispatchAccountIds sets the "temporary_dispatch_account_ids" field.
+func (u *GroupUpsert) SetTemporaryDispatchAccountIds(v []int64) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchAccountIds, v)
+	return u
+}
+
+// UpdateTemporaryDispatchAccountIds sets the "temporary_dispatch_account_ids" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchAccountIds() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchAccountIds)
+	return u
+}
+
+// SetTemporaryDispatchAccountDeadlines sets the "temporary_dispatch_account_deadlines" field.
+func (u *GroupUpsert) SetTemporaryDispatchAccountDeadlines(v map[string]time.Time) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchAccountDeadlines, v)
+	return u
+}
+
+// UpdateTemporaryDispatchAccountDeadlines sets the "temporary_dispatch_account_deadlines" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchAccountDeadlines() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchAccountDeadlines)
 	return u
 }
 
@@ -4676,6 +4734,34 @@ func (u *GroupUpsertOne) UpdateTemporaryDispatchAccountID() *GroupUpsertOne {
 func (u *GroupUpsertOne) ClearTemporaryDispatchAccountID() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.ClearTemporaryDispatchAccountID()
+	})
+}
+
+// SetTemporaryDispatchAccountIds sets the "temporary_dispatch_account_ids" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchAccountIds(v []int64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchAccountIds(v)
+	})
+}
+
+// UpdateTemporaryDispatchAccountIds sets the "temporary_dispatch_account_ids" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchAccountIds() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchAccountIds()
+	})
+}
+
+// SetTemporaryDispatchAccountDeadlines sets the "temporary_dispatch_account_deadlines" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchAccountDeadlines(v map[string]time.Time) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchAccountDeadlines(v)
+	})
+}
+
+// UpdateTemporaryDispatchAccountDeadlines sets the "temporary_dispatch_account_deadlines" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchAccountDeadlines() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchAccountDeadlines()
 	})
 }
 
@@ -6374,6 +6460,34 @@ func (u *GroupUpsertBulk) UpdateTemporaryDispatchAccountID() *GroupUpsertBulk {
 func (u *GroupUpsertBulk) ClearTemporaryDispatchAccountID() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.ClearTemporaryDispatchAccountID()
+	})
+}
+
+// SetTemporaryDispatchAccountIds sets the "temporary_dispatch_account_ids" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchAccountIds(v []int64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchAccountIds(v)
+	})
+}
+
+// UpdateTemporaryDispatchAccountIds sets the "temporary_dispatch_account_ids" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchAccountIds() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchAccountIds()
+	})
+}
+
+// SetTemporaryDispatchAccountDeadlines sets the "temporary_dispatch_account_deadlines" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchAccountDeadlines(v map[string]time.Time) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchAccountDeadlines(v)
+	})
+}
+
+// UpdateTemporaryDispatchAccountDeadlines sets the "temporary_dispatch_account_deadlines" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchAccountDeadlines() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchAccountDeadlines()
 	})
 }
 

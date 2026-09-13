@@ -110,11 +110,13 @@ type APIKeyAuthGroupSnapshot struct {
 	ModelAllowlist              GroupModelAllowlist               `json:"model_allowlist,omitempty"`
 	// CodexModelsManifestConfig 与 ModelAllowlist 一样在认证快照分组里透传，
 	// Codex /models handler 直接读认证分组对象。
-	CodexModelsManifestConfig  GroupCodexModelsManifestConfig `json:"codex_models_manifest_config,omitempty"`
-	TemporaryDispatchAccountID *int64                         `json:"temporary_dispatch_account_id,omitempty"`
-	TemporaryDispatchID        string                         `json:"temporary_dispatch_id,omitempty"`
-	TemporaryDispatchStartedAt *time.Time                     `json:"temporary_dispatch_started_at,omitempty"`
-	TemporaryDispatchExpiresAt *time.Time                     `json:"temporary_dispatch_expires_at,omitempty"`
+	CodexModelsManifestConfig         GroupCodexModelsManifestConfig `json:"codex_models_manifest_config,omitempty"`
+	TemporaryDispatchAccountID        *int64                         `json:"temporary_dispatch_account_id,omitempty"`
+	TemporaryDispatchAccountIDs       []int64                        `json:"temporary_dispatch_account_ids,omitempty"`
+	TemporaryDispatchAccountDeadlines map[string]time.Time           `json:"temporary_dispatch_account_deadlines,omitempty"`
+	TemporaryDispatchID               string                         `json:"temporary_dispatch_id,omitempty"`
+	TemporaryDispatchStartedAt        *time.Time                     `json:"temporary_dispatch_started_at,omitempty"`
+	TemporaryDispatchExpiresAt        *time.Time                     `json:"temporary_dispatch_expires_at,omitempty"`
 
 	// RPMLimit 分组级每分钟请求数上限（0 = 不限制）；用于 billing_cache_service.checkRPM 级联判断。
 	RPMLimit int `json:"rpm_limit"`

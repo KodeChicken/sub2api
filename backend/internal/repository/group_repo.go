@@ -25,6 +25,10 @@ type sqlExecutor interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
+type sqlTxBeginner interface {
+	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
+}
+
 type groupRepository struct {
 	client *dbent.Client
 	sql    sqlExecutor
@@ -98,6 +102,8 @@ func (r *groupRepository) SetTemporaryDispatch(ctx context.Context, groupIDs []i
 		), updated AS (
 			UPDATE groups g
 			SET temporary_dispatch_account_id = $1,
+			    temporary_dispatch_account_ids = jsonb_build_array($1::bigint),
+			    temporary_dispatch_account_deadlines = jsonb_build_object($1::text, $4),
 			    temporary_dispatch_id = $2,
 			    temporary_dispatch_started_at = $3,
 			    temporary_dispatch_expires_at = $4,
@@ -138,6 +144,8 @@ func (r *groupRepository) ClearTemporaryDispatch(ctx context.Context, groupIDs [
 	_, err := r.sql.ExecContext(ctx, `
 		UPDATE groups
 		SET temporary_dispatch_account_id = NULL,
+		    temporary_dispatch_account_ids = '[]'::jsonb,
+		    temporary_dispatch_account_deadlines = '{}'::jsonb,
 		    temporary_dispatch_id = NULL,
 		    temporary_dispatch_started_at = NULL,
 		    temporary_dispatch_expires_at = NULL,
@@ -157,6 +165,35 @@ func (r *groupRepository) ClearTemporaryDispatch(ctx context.Context, groupIDs [
 // group overlays. If any requested group is missing or still has a live
 // overlay, neither the task nor a partial batch is persisted.
 func (r *groupRepository) CreateTemporaryDispatch(ctx context.Context, spec service.TemporaryDispatchCreateSpec) error {
+	members := append([]service.TemporaryDispatchAccountSpec(nil), spec.Accounts...)
+	if len(members) == 0 {
+		members = []service.TemporaryDispatchAccountSpec{{
+			AccountID: spec.AccountID, Position: 0, QuotaWindow: spec.QuotaWindow,
+			BaselinePercent: spec.BaselinePercent, TargetPercent: spec.TargetPercent,
+			CurrentPercent: spec.CurrentPercent, QuotaResetAt: spec.QuotaResetAt,
+			ExpiresAt: spec.ExpiresAt,
+		}}
+	}
+	membersJSON, err := json.Marshal(members)
+	if err != nil {
+		return fmt.Errorf("marshal temporary dispatch accounts: %w", err)
+	}
+	accountIDs := make([]int64, 0, len(members))
+	for _, member := range members {
+		accountIDs = append(accountIDs, member.AccountID)
+	}
+	accountIDsJSON, err := json.Marshal(accountIDs)
+	if err != nil {
+		return fmt.Errorf("marshal temporary dispatch account ids: %w", err)
+	}
+	deadlines := make(map[string]time.Time, len(members))
+	for _, member := range members {
+		deadlines[fmt.Sprintf("%d", member.AccountID)] = member.ExpiresAt
+	}
+	deadlinesJSON, err := json.Marshal(deadlines)
+	if err != nil {
+		return fmt.Errorf("marshal temporary dispatch account deadlines: %w", err)
+	}
 	rows, err := r.sql.QueryContext(ctx, `
 		WITH requested AS (
 			SELECT DISTINCT unnest($11::bigint[]) AS id
@@ -178,9 +215,28 @@ func (r *groupRepository) CreateTemporaryDispatch(ctx context.Context, spec serv
 			SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10
 			WHERE (SELECT COUNT(*) FROM eligible) = (SELECT COUNT(*) FROM requested)
 			RETURNING dispatch_id
+		), inserted_members AS (
+			INSERT INTO group_temporary_dispatch_accounts (
+				dispatch_id, account_id, position, quota_window, baseline_percent,
+				target_percent, current_percent, quota_reset_at, expires_at,
+				last_checked_at, created_at
+			)
+			SELECT $1, member.account_id, member.position, member.quota_window,
+			       member.baseline_percent, member.target_percent, member.current_percent,
+			       member.quota_reset_at, member.expires_at, $10, $10
+			FROM inserted,
+			     jsonb_to_recordset($12::jsonb) AS member(
+				account_id bigint, position integer, quota_window varchar(2),
+				baseline_percent decimal(7,3), target_percent decimal(7,3),
+				current_percent decimal(7,3), quota_reset_at timestamptz,
+				expires_at timestamptz
+			     )
+			RETURNING account_id
 		), updated AS (
 			UPDATE groups g
 			SET temporary_dispatch_account_id = $2,
+			    temporary_dispatch_account_ids = $13::jsonb,
+			    temporary_dispatch_account_deadlines = $14::jsonb,
 			    temporary_dispatch_id = $1,
 			    temporary_dispatch_started_at = $10,
 			    temporary_dispatch_expires_at = $9,
@@ -193,12 +249,13 @@ func (r *groupRepository) CreateTemporaryDispatch(ctx context.Context, spec serv
 			    updated_at = NOW()
 			FROM eligible e, inserted i
 			WHERE g.id = e.id
+			  AND (SELECT COUNT(*) FROM inserted_members) > 0
 			RETURNING g.id
 		)
 		SELECT id FROM updated ORDER BY id
 	`, spec.DispatchID, spec.AccountID, spec.Mode, nullableString(spec.QuotaWindow),
 		spec.BaselinePercent, spec.TargetPercent, spec.CurrentPercent, spec.QuotaResetAt,
-		spec.ExpiresAt, spec.StartedAt, pq.Array(spec.GroupIDs))
+		spec.ExpiresAt, spec.StartedAt, pq.Array(spec.GroupIDs), membersJSON, accountIDsJSON, deadlinesJSON)
 	if err != nil {
 		return err
 	}
@@ -223,8 +280,48 @@ func nullableString(value string) any {
 	return value
 }
 
+func runTemporaryDispatchMutation(
+	ctx context.Context,
+	exec sqlExecutor,
+	mutation func(sqlExecutor) ([]int64, error),
+) ([]int64, error) {
+	beginner, ok := exec.(sqlTxBeginner)
+	if !ok {
+		// The executor is already transaction-bound (for example *sql.Tx).
+		return mutation(exec)
+	}
+	tx, err := beginner.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return nil, err
+	}
+	ids, err := mutation(tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func scanStringRows(rows *sql.Rows) ([]string, error) {
+	defer func() { _ = rows.Close() }()
+	values := make([]string, 0)
+	for rows.Next() {
+		var value string
+		if err := rows.Scan(&value); err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, rows.Err()
+}
+
 const clearTemporaryDispatchSQL = `
 		temporary_dispatch_account_id = NULL,
+		temporary_dispatch_account_ids = '[]'::jsonb,
+		temporary_dispatch_account_deadlines = '{}'::jsonb,
 		temporary_dispatch_id = NULL,
 		temporary_dispatch_started_at = NULL,
 		temporary_dispatch_expires_at = NULL,
@@ -237,11 +334,32 @@ const clearTemporaryDispatchSQL = `
 		updated_at = NOW()`
 
 func (r *groupRepository) StopTemporaryDispatchGroups(ctx context.Context, groupIDs []int64) ([]int64, error) {
-	rows, err := r.sql.QueryContext(ctx, `
+	if len(groupIDs) == 0 {
+		return nil, nil
+	}
+	return runTemporaryDispatchMutation(ctx, r.sql, func(exec sqlExecutor) ([]int64, error) {
+		lockRows, err := exec.QueryContext(ctx, `
+			SELECT t.dispatch_id
+			FROM group_temporary_dispatches t
+			WHERE EXISTS (
+				SELECT 1 FROM groups g
+				WHERE g.id = ANY($1) AND g.deleted_at IS NULL
+				  AND g.temporary_dispatch_id = t.dispatch_id
+			)
+			ORDER BY t.dispatch_id
+			FOR UPDATE OF t
+		`, pq.Array(groupIDs))
+		if err != nil {
+			return nil, err
+		}
+		dispatchIDs, err := scanStringRows(lockRows)
+		if err != nil {
+			return nil, err
+		}
+
+		rows, err := exec.QueryContext(ctx, `
 		WITH selected_tasks AS MATERIALIZED (
-			SELECT DISTINCT temporary_dispatch_id AS dispatch_id
-			FROM groups
-			WHERE id = ANY($1) AND deleted_at IS NULL AND temporary_dispatch_id IS NOT NULL
+			SELECT unnest($2::varchar[]) AS dispatch_id
 		), cleared AS (
 			UPDATE groups SET `+clearTemporaryDispatchSQL+`
 			WHERE id = ANY($1) AND deleted_at IS NULL AND temporary_dispatch_account_id IS NOT NULL
@@ -258,86 +376,246 @@ func (r *groupRepository) StopTemporaryDispatchGroups(ctx context.Context, group
 			RETURNING t.dispatch_id
 		)
 		SELECT id FROM cleared ORDER BY id
-	`, pq.Array(groupIDs))
-	if err != nil {
-		return nil, err
-	}
-	return scanInt64Rows(rows)
+		`, pq.Array(groupIDs), pq.Array(dispatchIDs))
+		if err != nil {
+			return nil, err
+		}
+		return scanInt64Rows(rows)
+	})
 }
 
 func (r *groupRepository) ObserveTemporaryDispatchQuota(ctx context.Context, accountID int64, window string, usedPercent float64, observedAt time.Time) ([]int64, error) {
-	rows, err := r.sql.QueryContext(ctx, `
+	return runTemporaryDispatchMutation(ctx, r.sql, func(exec sqlExecutor) ([]int64, error) {
+		lockRows, err := exec.QueryContext(ctx, `
+			SELECT t.dispatch_id
+			FROM group_temporary_dispatches t
+			WHERE EXISTS (
+				SELECT 1 FROM group_temporary_dispatch_accounts m
+				WHERE m.dispatch_id = t.dispatch_id
+				  AND m.account_id = $1 AND m.quota_window = $2
+				  AND m.created_at <= $3 AND m.expires_at > $3
+			)
+			ORDER BY t.dispatch_id
+			FOR UPDATE OF t
+		`, accountID, window, observedAt)
+		if err != nil {
+			return nil, err
+		}
+		dispatchIDs, err := scanStringRows(lockRows)
+		if err != nil || len(dispatchIDs) == 0 {
+			return nil, err
+		}
+
+		rows, err := exec.QueryContext(ctx, `
 		WITH matched AS MATERIALIZED (
-			SELECT dispatch_id, target_percent
-			FROM group_temporary_dispatches
+			SELECT dispatch_id, account_id, target_percent
+			FROM group_temporary_dispatch_accounts
 			WHERE account_id = $1 AND quota_window = $2
 			  AND created_at <= $4 AND expires_at > $4
+			  AND dispatch_id = ANY($5)
 			FOR UPDATE
-		), completed AS MATERIALIZED (
-			SELECT dispatch_id FROM matched WHERE target_percent <= $3
-		), updated_tasks AS (
-			UPDATE group_temporary_dispatches t
+		), updated_members AS (
+			UPDATE group_temporary_dispatch_accounts t
 			SET current_percent = $3, last_checked_at = $4
 			FROM matched m
-			WHERE t.dispatch_id = m.dispatch_id
-			  AND NOT EXISTS (SELECT 1 FROM completed c WHERE c.dispatch_id = t.dispatch_id)
+			WHERE t.dispatch_id = m.dispatch_id AND t.account_id = m.account_id
+			RETURNING t.dispatch_id, t.account_id, t.target_percent
+		), completed AS MATERIALIZED (
+			SELECT dispatch_id, account_id FROM updated_members WHERE target_percent <= $3
+		), removed_members AS (
+			DELETE FROM group_temporary_dispatch_accounts t
+			USING completed c
+			WHERE t.dispatch_id = c.dispatch_id AND t.account_id = c.account_id
+			RETURNING t.dispatch_id
+		), affected AS MATERIALIZED (
+			SELECT DISTINCT dispatch_id FROM matched
+		), remaining AS MATERIALIZED (
+			SELECT m.dispatch_id,
+			       jsonb_agg(m.account_id ORDER BY m.position, m.account_id) AS account_ids,
+			       jsonb_object_agg(m.account_id::text, m.expires_at) AS account_deadlines,
+			       MAX(m.expires_at) AS expires_at
+			FROM group_temporary_dispatch_accounts m
+			JOIN affected a ON a.dispatch_id = m.dispatch_id
+			WHERE NOT EXISTS (
+				SELECT 1 FROM completed c
+				WHERE c.dispatch_id = m.dispatch_id AND c.account_id = m.account_id
+			)
+			GROUP BY m.dispatch_id
+		), first_remaining AS MATERIALIZED (
+			SELECT DISTINCT ON (m.dispatch_id) m.*
+			FROM group_temporary_dispatch_accounts m
+			JOIN affected a ON a.dispatch_id = m.dispatch_id
+			WHERE NOT EXISTS (
+				SELECT 1 FROM completed c
+				WHERE c.dispatch_id = m.dispatch_id AND c.account_id = m.account_id
+			)
+			ORDER BY m.dispatch_id, m.position, m.account_id
+		), updated_tasks AS (
+			UPDATE group_temporary_dispatches t
+			SET account_id = f.account_id, quota_window = f.quota_window,
+			    baseline_percent = f.baseline_percent, target_percent = f.target_percent,
+			    current_percent = f.current_percent, quota_reset_at = f.quota_reset_at,
+			    expires_at = r.expires_at
+			FROM first_remaining f JOIN remaining r USING (dispatch_id)
+			WHERE t.dispatch_id = f.dispatch_id
 			RETURNING t.dispatch_id
 		), updated_groups AS (
 			UPDATE groups g
-			SET temporary_dispatch_current_percent = $3
-			FROM matched m
-			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = m.dispatch_id
-			  AND NOT EXISTS (SELECT 1 FROM completed c WHERE c.dispatch_id = m.dispatch_id)
+			SET temporary_dispatch_account_id = f.account_id,
+			    temporary_dispatch_account_ids = r.account_ids,
+			    temporary_dispatch_account_deadlines = r.account_deadlines,
+			    temporary_dispatch_expires_at = r.expires_at,
+			    temporary_dispatch_quota_window = f.quota_window,
+			    temporary_dispatch_baseline_percent = f.baseline_percent,
+			    temporary_dispatch_target_percent = f.target_percent,
+			    temporary_dispatch_current_percent = f.current_percent,
+			    temporary_dispatch_quota_reset_at = f.quota_reset_at,
+			    updated_at = NOW()
+			FROM first_remaining f JOIN remaining r USING (dispatch_id)
+			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = f.dispatch_id
 			RETURNING g.id
 		), cleared AS (
 			UPDATE groups g SET `+clearTemporaryDispatchSQL+`
-			FROM completed c
-			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = c.dispatch_id
+			FROM affected a
+			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = a.dispatch_id
+			  AND NOT EXISTS (SELECT 1 FROM remaining r WHERE r.dispatch_id = a.dispatch_id)
 			RETURNING g.id
 		), removed AS (
 			DELETE FROM group_temporary_dispatches t
-			USING completed c
-			WHERE t.dispatch_id = c.dispatch_id
+			USING affected a
+			WHERE t.dispatch_id = a.dispatch_id
+			  AND NOT EXISTS (SELECT 1 FROM remaining r WHERE r.dispatch_id = a.dispatch_id)
 			RETURNING t.dispatch_id
 		)
-		SELECT id FROM cleared ORDER BY id
-	`, accountID, window, usedPercent, observedAt)
-	if err != nil {
-		return nil, err
-	}
-	return scanInt64Rows(rows)
+		SELECT id FROM updated_groups
+		UNION
+		SELECT id FROM cleared
+		ORDER BY id
+		`, accountID, window, usedPercent, observedAt, pq.Array(dispatchIDs))
+		if err != nil {
+			return nil, err
+		}
+		return scanInt64Rows(rows)
+	})
 }
 
 func (r *groupRepository) CleanupTemporaryDispatches(ctx context.Context, now time.Time, limit int) ([]int64, error) {
 	if limit <= 0 {
 		limit = 200
 	}
-	rows, err := r.sql.QueryContext(ctx, `
-		WITH due_tasks AS MATERIALIZED (
+	return runTemporaryDispatchMutation(ctx, r.sql, func(exec sqlExecutor) ([]int64, error) {
+		lockRows, err := exec.QueryContext(ctx, `
+			WITH candidates AS MATERIALIZED (
+				SELECT m.dispatch_id
+				FROM group_temporary_dispatch_accounts m
+				WHERE m.expires_at <= $1
+				   OR NOT EXISTS (
+					SELECT 1 FROM accounts a
+					WHERE a.id = m.account_id AND a.deleted_at IS NULL AND a.status = 'active'
+					  AND a.schedulable IS TRUE
+					  AND (NOT a.auto_pause_on_expired OR a.expires_at IS NULL OR a.expires_at > $1)
+					  AND (a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= $1)
+					  AND (a.overload_until IS NULL OR a.overload_until <= $1)
+					  AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= $1)
+				   )
+				ORDER BY m.expires_at, m.dispatch_id, m.position
+				LIMIT $2
+			)
 			SELECT t.dispatch_id
 			FROM group_temporary_dispatches t
-			WHERE t.expires_at <= $1
+			JOIN (SELECT DISTINCT dispatch_id FROM candidates) c USING (dispatch_id)
+			ORDER BY t.dispatch_id
+			FOR UPDATE OF t SKIP LOCKED
+		`, now, limit)
+		if err != nil {
+			return nil, err
+		}
+		dispatchIDs, err := scanStringRows(lockRows)
+		if err != nil {
+			return nil, err
+		}
+
+		rows, err := exec.QueryContext(ctx, `
+		WITH due_members AS MATERIALIZED (
+			SELECT m.dispatch_id, m.account_id
+			FROM group_temporary_dispatch_accounts m
+			WHERE m.dispatch_id = ANY($3)
+			  AND (m.expires_at <= $1
 			   OR NOT EXISTS (
 				SELECT 1 FROM accounts a
-				WHERE a.id = t.account_id AND a.deleted_at IS NULL AND a.status = 'active'
+				WHERE a.id = m.account_id AND a.deleted_at IS NULL AND a.status = 'active'
 				  AND a.schedulable IS TRUE
 				  AND (NOT a.auto_pause_on_expired OR a.expires_at IS NULL OR a.expires_at > $1)
 				  AND (a.rate_limit_reset_at IS NULL OR a.rate_limit_reset_at <= $1)
 				  AND (a.overload_until IS NULL OR a.overload_until <= $1)
 				  AND (a.temp_unschedulable_until IS NULL OR a.temp_unschedulable_until <= $1)
-			   )
-			ORDER BY t.expires_at
+			   ))
+			ORDER BY m.expires_at, m.dispatch_id, m.position
 			LIMIT $2
 			FOR UPDATE SKIP LOCKED
+		), removed_members AS (
+			DELETE FROM group_temporary_dispatch_accounts m
+			USING due_members d
+			WHERE m.dispatch_id = d.dispatch_id AND m.account_id = d.account_id
+			RETURNING m.dispatch_id
+		), affected AS MATERIALIZED (
+			SELECT DISTINCT dispatch_id FROM due_members
+		), remaining AS MATERIALIZED (
+			SELECT m.dispatch_id,
+			       jsonb_agg(m.account_id ORDER BY m.position, m.account_id) AS account_ids,
+			       jsonb_object_agg(m.account_id::text, m.expires_at) AS account_deadlines,
+			       MAX(m.expires_at) AS expires_at
+			FROM group_temporary_dispatch_accounts m
+			JOIN affected a ON a.dispatch_id = m.dispatch_id
+			WHERE NOT EXISTS (
+				SELECT 1 FROM due_members d
+				WHERE d.dispatch_id = m.dispatch_id AND d.account_id = m.account_id
+			)
+			GROUP BY m.dispatch_id
+		), first_remaining AS MATERIALIZED (
+			SELECT DISTINCT ON (m.dispatch_id) m.*
+			FROM group_temporary_dispatch_accounts m
+			JOIN affected a ON a.dispatch_id = m.dispatch_id
+			WHERE NOT EXISTS (
+				SELECT 1 FROM due_members d
+				WHERE d.dispatch_id = m.dispatch_id AND d.account_id = m.account_id
+			)
+			ORDER BY m.dispatch_id, m.position, m.account_id
+		), updated_tasks AS (
+			UPDATE group_temporary_dispatches t
+			SET account_id = f.account_id, quota_window = f.quota_window,
+			    baseline_percent = f.baseline_percent, target_percent = f.target_percent,
+			    current_percent = f.current_percent, quota_reset_at = f.quota_reset_at,
+			    expires_at = r.expires_at
+			FROM first_remaining f JOIN remaining r USING (dispatch_id)
+			WHERE t.dispatch_id = f.dispatch_id
+			RETURNING t.dispatch_id
+		), updated_groups AS (
+			UPDATE groups g
+			SET temporary_dispatch_account_id = f.account_id,
+			    temporary_dispatch_account_ids = r.account_ids,
+			    temporary_dispatch_account_deadlines = r.account_deadlines,
+			    temporary_dispatch_expires_at = r.expires_at,
+			    temporary_dispatch_quota_window = f.quota_window,
+			    temporary_dispatch_baseline_percent = f.baseline_percent,
+			    temporary_dispatch_target_percent = f.target_percent,
+			    temporary_dispatch_current_percent = f.current_percent,
+			    temporary_dispatch_quota_reset_at = f.quota_reset_at,
+			    updated_at = NOW()
+			FROM first_remaining f JOIN remaining r USING (dispatch_id)
+			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = f.dispatch_id
+			RETURNING g.id
 		), cleared_tasks AS (
 			UPDATE groups g SET `+clearTemporaryDispatchSQL+`
-			FROM due_tasks d
-			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = d.dispatch_id
+			FROM affected a
+			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = a.dispatch_id
+			  AND NOT EXISTS (SELECT 1 FROM remaining r WHERE r.dispatch_id = a.dispatch_id)
 			RETURNING g.id
 		), removed_tasks AS (
 			DELETE FROM group_temporary_dispatches t
-			USING due_tasks d
-			WHERE t.dispatch_id = d.dispatch_id
+			USING affected a
+			WHERE t.dispatch_id = a.dispatch_id
+			  AND NOT EXISTS (SELECT 1 FROM remaining r WHERE r.dispatch_id = a.dispatch_id)
 			RETURNING t.dispatch_id
 		), orphan_candidates AS MATERIALIZED (
 			SELECT g.id
@@ -359,45 +637,124 @@ func (r *groupRepository) CleanupTemporaryDispatches(ctx context.Context, now ti
 		)
 		SELECT id FROM cleared_tasks
 		UNION
+		SELECT id FROM updated_groups
+		UNION
 		SELECT id FROM cleared_orphans
 		ORDER BY id
-	`, now, limit)
-	if err != nil {
-		return nil, err
-	}
-	return scanInt64Rows(rows)
+		`, now, limit, pq.Array(dispatchIDs))
+		if err != nil {
+			return nil, err
+		}
+		return scanInt64Rows(rows)
+	})
 }
 
-// StopTemporaryDispatchAccount clears all active overlays for an account.
-// It is used when the request path detects deletion, disablement, expiry, or
-// quota pause before the periodic scanner sees the persisted account state.
+// StopTemporaryDispatchAccount removes one unavailable account from every
+// temporary pool. A dispatch is cleared only after its last member leaves.
 func (r *groupRepository) StopTemporaryDispatchAccount(ctx context.Context, accountID int64) ([]int64, error) {
 	if accountID <= 0 {
 		return nil, nil
 	}
-	rows, err := r.sql.QueryContext(ctx, `
-		WITH selected_tasks AS MATERIALIZED (
-			SELECT dispatch_id
-			FROM group_temporary_dispatches
-			WHERE account_id = $1
+	return runTemporaryDispatchMutation(ctx, r.sql, func(exec sqlExecutor) ([]int64, error) {
+		lockRows, err := exec.QueryContext(ctx, `
+			SELECT t.dispatch_id
+			FROM group_temporary_dispatches t
+			WHERE EXISTS (
+				SELECT 1 FROM group_temporary_dispatch_accounts m
+				WHERE m.dispatch_id = t.dispatch_id AND m.account_id = $1
+			)
+			ORDER BY t.dispatch_id
+			FOR UPDATE OF t
+		`, accountID)
+		if err != nil {
+			return nil, err
+		}
+		dispatchIDs, err := scanStringRows(lockRows)
+		if err != nil || len(dispatchIDs) == 0 {
+			return nil, err
+		}
+
+		rows, err := exec.QueryContext(ctx, `
+		WITH selected_members AS MATERIALIZED (
+			SELECT dispatch_id, account_id
+			FROM group_temporary_dispatch_accounts
+			WHERE account_id = $1 AND dispatch_id = ANY($2)
 			FOR UPDATE
+		), removed_members AS (
+			DELETE FROM group_temporary_dispatch_accounts m
+			USING selected_members s
+			WHERE m.dispatch_id = s.dispatch_id AND m.account_id = s.account_id
+			RETURNING m.dispatch_id
+		), affected AS MATERIALIZED (
+			SELECT DISTINCT dispatch_id FROM selected_members
+		), remaining AS MATERIALIZED (
+			SELECT m.dispatch_id,
+			       jsonb_agg(m.account_id ORDER BY m.position, m.account_id) AS account_ids,
+			       jsonb_object_agg(m.account_id::text, m.expires_at) AS account_deadlines,
+			       MAX(m.expires_at) AS expires_at
+			FROM group_temporary_dispatch_accounts m
+			JOIN affected a ON a.dispatch_id = m.dispatch_id
+			WHERE NOT EXISTS (
+				SELECT 1 FROM selected_members s
+				WHERE s.dispatch_id = m.dispatch_id AND s.account_id = m.account_id
+			)
+			GROUP BY m.dispatch_id
+		), first_remaining AS MATERIALIZED (
+			SELECT DISTINCT ON (m.dispatch_id) m.*
+			FROM group_temporary_dispatch_accounts m
+			JOIN affected a ON a.dispatch_id = m.dispatch_id
+			WHERE NOT EXISTS (
+				SELECT 1 FROM selected_members s
+				WHERE s.dispatch_id = m.dispatch_id AND s.account_id = m.account_id
+			)
+			ORDER BY m.dispatch_id, m.position, m.account_id
+		), updated_tasks AS (
+			UPDATE group_temporary_dispatches t
+			SET account_id = f.account_id, quota_window = f.quota_window,
+			    baseline_percent = f.baseline_percent, target_percent = f.target_percent,
+			    current_percent = f.current_percent, quota_reset_at = f.quota_reset_at,
+			    expires_at = r.expires_at
+			FROM first_remaining f JOIN remaining r USING (dispatch_id)
+			WHERE t.dispatch_id = f.dispatch_id
+			RETURNING t.dispatch_id
+		), updated_groups AS (
+			UPDATE groups g
+			SET temporary_dispatch_account_id = f.account_id,
+			    temporary_dispatch_account_ids = r.account_ids,
+			    temporary_dispatch_account_deadlines = r.account_deadlines,
+			    temporary_dispatch_expires_at = r.expires_at,
+			    temporary_dispatch_quota_window = f.quota_window,
+			    temporary_dispatch_baseline_percent = f.baseline_percent,
+			    temporary_dispatch_target_percent = f.target_percent,
+			    temporary_dispatch_current_percent = f.current_percent,
+			    temporary_dispatch_quota_reset_at = f.quota_reset_at,
+			    updated_at = NOW()
+			FROM first_remaining f JOIN remaining r USING (dispatch_id)
+			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = f.dispatch_id
+			RETURNING g.id
 		), cleared AS (
 			UPDATE groups g SET `+clearTemporaryDispatchSQL+`
-			WHERE g.deleted_at IS NULL
-			  AND g.temporary_dispatch_account_id = $1
+			FROM affected a
+			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = a.dispatch_id
+			  AND NOT EXISTS (SELECT 1 FROM remaining r WHERE r.dispatch_id = a.dispatch_id)
 			RETURNING g.id
 		), removed AS (
 			DELETE FROM group_temporary_dispatches t
-			USING selected_tasks s
-			WHERE t.dispatch_id = s.dispatch_id
+			USING affected a
+			WHERE t.dispatch_id = a.dispatch_id
+			  AND NOT EXISTS (SELECT 1 FROM remaining r WHERE r.dispatch_id = a.dispatch_id)
 			RETURNING t.dispatch_id
 		)
-		SELECT id FROM cleared ORDER BY id
-	`, accountID)
-	if err != nil {
-		return nil, err
-	}
-	return scanInt64Rows(rows)
+		SELECT id FROM updated_groups
+		UNION
+		SELECT id FROM cleared
+		ORDER BY id
+		`, accountID, pq.Array(dispatchIDs))
+		if err != nil {
+			return nil, err
+		}
+		return scanInt64Rows(rows)
+	})
 }
 
 func (r *groupRepository) ClaimStaleTemporaryDispatchAccounts(ctx context.Context, staleBefore, claimedAt time.Time, limit int) ([]int64, error) {
@@ -407,14 +764,14 @@ func (r *groupRepository) ClaimStaleTemporaryDispatchAccounts(ctx context.Contex
 	rows, err := r.sql.QueryContext(ctx, `
 		WITH picked AS MATERIALIZED (
 			SELECT account_id
-			FROM group_temporary_dispatches
+			FROM group_temporary_dispatch_accounts
 			WHERE quota_window IS NOT NULL AND expires_at > $2
 			  AND (last_checked_at IS NULL OR last_checked_at <= $1)
 			GROUP BY account_id
 			ORDER BY MIN(last_checked_at) NULLS FIRST, account_id
 			LIMIT $3
 		), claimed AS (
-			UPDATE group_temporary_dispatches t
+			UPDATE group_temporary_dispatch_accounts t
 			SET last_checked_at = $2
 			FROM picked p
 			WHERE t.account_id = p.account_id

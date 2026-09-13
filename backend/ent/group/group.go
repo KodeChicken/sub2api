@@ -152,6 +152,10 @@ const (
 	FieldProfitSafetyBuffer = "profit_safety_buffer"
 	// FieldTemporaryDispatchAccountID holds the string denoting the temporary_dispatch_account_id field in the database.
 	FieldTemporaryDispatchAccountID = "temporary_dispatch_account_id"
+	// FieldTemporaryDispatchAccountIds holds the string denoting the temporary_dispatch_account_ids field in the database.
+	FieldTemporaryDispatchAccountIds = "temporary_dispatch_account_ids"
+	// FieldTemporaryDispatchAccountDeadlines holds the string denoting the temporary_dispatch_account_deadlines field in the database.
+	FieldTemporaryDispatchAccountDeadlines = "temporary_dispatch_account_deadlines"
 	// FieldTemporaryDispatchID holds the string denoting the temporary_dispatch_id field in the database.
 	FieldTemporaryDispatchID = "temporary_dispatch_id"
 	// FieldTemporaryDispatchStartedAt holds the string denoting the temporary_dispatch_started_at field in the database.
@@ -313,6 +317,8 @@ var Columns = []string{
 	FieldProfitMinMargin,
 	FieldProfitSafetyBuffer,
 	FieldTemporaryDispatchAccountID,
+	FieldTemporaryDispatchAccountIds,
+	FieldTemporaryDispatchAccountDeadlines,
 	FieldTemporaryDispatchID,
 	FieldTemporaryDispatchStartedAt,
 	FieldTemporaryDispatchExpiresAt,
@@ -469,6 +475,10 @@ var (
 	DefaultProfitMinMargin float64
 	// DefaultProfitSafetyBuffer holds the default value on creation for the "profit_safety_buffer" field.
 	DefaultProfitSafetyBuffer float64
+	// DefaultTemporaryDispatchAccountIds holds the default value on creation for the "temporary_dispatch_account_ids" field.
+	DefaultTemporaryDispatchAccountIds []int64
+	// DefaultTemporaryDispatchAccountDeadlines holds the default value on creation for the "temporary_dispatch_account_deadlines" field.
+	DefaultTemporaryDispatchAccountDeadlines map[string]time.Time
 	// TemporaryDispatchIDValidator is a validator for the "temporary_dispatch_id" field. It is called by the builders before save.
 	TemporaryDispatchIDValidator func(string) error
 	// TemporaryDispatchModeValidator is a validator for the "temporary_dispatch_mode" field. It is called by the builders before save.

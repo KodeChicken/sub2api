@@ -82,6 +82,35 @@ func TestGroupHandlerStartsTemporaryDispatch(t *testing.T) {
 	require.Contains(t, recorder.Body.String(), `"dispatch_id":"td_handler_test"`)
 }
 
+func TestGroupHandlerStartsTemporaryDispatchAccountPool(t *testing.T) {
+	svc := &temporaryDispatchAdminServiceStub{}
+	router := setupTemporaryDispatchGroupRouter(svc)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups/temporary-dispatch", strings.NewReader(`{
+		"group_ids":[11,12],
+		"mode":"hybrid",
+		"accounts":[
+			{"account_id":88,"duration_minutes":30,"quota_window":"5h","target_delta_percent":10},
+			{"account_id":89,"duration_minutes":90,"quota_window":"7d","target_delta_percent":25}
+		]
+	}`))
+	request.Header.Set("Content-Type", "application/json")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, 1, svc.startCalls)
+	require.Len(t, svc.startInput.Accounts, 2)
+	require.Equal(t, int64(88), svc.startInput.Accounts[0].AccountID)
+	require.Equal(t, 30, svc.startInput.Accounts[0].DurationMinutes)
+	require.Equal(t, service.TemporaryDispatchQuotaWindow5h, svc.startInput.Accounts[0].QuotaWindow)
+	require.InDelta(t, 10, svc.startInput.Accounts[0].TargetDeltaPercent, 0.001)
+	require.Equal(t, int64(89), svc.startInput.Accounts[1].AccountID)
+	require.Equal(t, 90, svc.startInput.Accounts[1].DurationMinutes)
+	require.Equal(t, service.TemporaryDispatchQuotaWindow7d, svc.startInput.Accounts[1].QuotaWindow)
+	require.InDelta(t, 25, svc.startInput.Accounts[1].TargetDeltaPercent, 0.001)
+}
+
 func TestGroupHandlerStopsTemporaryDispatch(t *testing.T) {
 	svc := &temporaryDispatchAdminServiceStub{}
 	router := setupTemporaryDispatchGroupRouter(svc)

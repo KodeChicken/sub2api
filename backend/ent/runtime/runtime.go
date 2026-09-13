@@ -1227,16 +1227,24 @@ func init() {
 	groupDescProfitSafetyBuffer := groupFields[63].Descriptor()
 	// group.DefaultProfitSafetyBuffer holds the default value on creation for the profit_safety_buffer field.
 	group.DefaultProfitSafetyBuffer = groupDescProfitSafetyBuffer.Default.(float64)
+	// groupDescTemporaryDispatchAccountIds is the schema descriptor for temporary_dispatch_account_ids field.
+	groupDescTemporaryDispatchAccountIds := groupFields[65].Descriptor()
+	// group.DefaultTemporaryDispatchAccountIds holds the default value on creation for the temporary_dispatch_account_ids field.
+	group.DefaultTemporaryDispatchAccountIds = groupDescTemporaryDispatchAccountIds.Default.([]int64)
+	// groupDescTemporaryDispatchAccountDeadlines is the schema descriptor for temporary_dispatch_account_deadlines field.
+	groupDescTemporaryDispatchAccountDeadlines := groupFields[66].Descriptor()
+	// group.DefaultTemporaryDispatchAccountDeadlines holds the default value on creation for the temporary_dispatch_account_deadlines field.
+	group.DefaultTemporaryDispatchAccountDeadlines = groupDescTemporaryDispatchAccountDeadlines.Default.(map[string]time.Time)
 	// groupDescTemporaryDispatchID is the schema descriptor for temporary_dispatch_id field.
-	groupDescTemporaryDispatchID := groupFields[65].Descriptor()
+	groupDescTemporaryDispatchID := groupFields[67].Descriptor()
 	// group.TemporaryDispatchIDValidator is a validator for the "temporary_dispatch_id" field. It is called by the builders before save.
 	group.TemporaryDispatchIDValidator = groupDescTemporaryDispatchID.Validators[0].(func(string) error)
 	// groupDescTemporaryDispatchMode is the schema descriptor for temporary_dispatch_mode field.
-	groupDescTemporaryDispatchMode := groupFields[68].Descriptor()
+	groupDescTemporaryDispatchMode := groupFields[70].Descriptor()
 	// group.TemporaryDispatchModeValidator is a validator for the "temporary_dispatch_mode" field. It is called by the builders before save.
 	group.TemporaryDispatchModeValidator = groupDescTemporaryDispatchMode.Validators[0].(func(string) error)
 	// groupDescTemporaryDispatchQuotaWindow is the schema descriptor for temporary_dispatch_quota_window field.
-	groupDescTemporaryDispatchQuotaWindow := groupFields[69].Descriptor()
+	groupDescTemporaryDispatchQuotaWindow := groupFields[71].Descriptor()
 	// group.TemporaryDispatchQuotaWindowValidator is a validator for the "temporary_dispatch_quota_window" field. It is called by the builders before save.
 	group.TemporaryDispatchQuotaWindowValidator = groupDescTemporaryDispatchQuotaWindow.Validators[0].(func(string) error)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()
