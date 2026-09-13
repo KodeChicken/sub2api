@@ -745,9 +745,9 @@ func (r *groupRepository) ObserveTemporaryDispatchQuota(ctx context.Context, acc
 	})
 }
 
-// ObserveTemporaryDispatchCosts refreshes account-cost targets from persisted
-// usage logs. Cost is the account-side cost (including account_rate_multiplier),
-// which follows the product's 1:1 USD/RMB accounting convention.
+// ObserveTemporaryDispatchCosts refreshes user-spend targets from persisted
+// usage logs. Progress uses the final amount charged to users and only includes
+// requests from groups in this dispatch that were served by the target account.
 func (r *groupRepository) ObserveTemporaryDispatchCosts(ctx context.Context, observedAt time.Time, limit int) ([]int64, error) {
 	if limit <= 0 {
 		limit = 200
@@ -780,10 +780,17 @@ func (r *groupRepository) ObserveTemporaryDispatchCosts(ctx context.Context, obs
 		WITH matched AS MATERIALIZED (
 			SELECT m.dispatch_id, m.account_id, m.target_percent,
 			       COALESCE((
-				   SELECT SUM(COALESCE(u.account_stats_cost, u.total_cost) * COALESCE(u.account_rate_multiplier, 1))
+				   SELECT SUM(u.actual_cost)
 				   FROM usage_logs u
 				   WHERE u.account_id = m.account_id
 				     AND u.created_at >= m.created_at AND u.created_at <= $1
+				     AND u.actual_cost > 0
+				     AND EXISTS (
+				         SELECT 1
+				         FROM groups g
+				         WHERE g.id = u.group_id
+				           AND g.temporary_dispatch_id = m.dispatch_id
+				     )
 			       ), 0)::decimal(18,6) AS current_cost
 			FROM group_temporary_dispatch_accounts m
 			WHERE m.dispatch_id = ANY($2)

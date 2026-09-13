@@ -419,14 +419,13 @@ func TestAdminTemporaryDispatchCreatesIndependentQuotaTargets(t *testing.T) {
 	require.InDelta(t, 65, *result.Accounts[1].TargetPercent, 0.001)
 }
 
-func TestAdminTemporaryDispatchCreatesAccountCostTargetForAPIKeyUpstream(t *testing.T) {
-	rateMultiplier := 0.04
+func TestAdminTemporaryDispatchCreatesUserSpendTargetForAPIKeyUpstream(t *testing.T) {
 	groupRepo := &temporaryDispatchGroupRepoStub{groups: map[int64]*Group{
 		7: {ID: 7, Platform: PlatformOpenAI, Status: StatusActive},
 	}}
 	account := &Account{
-		ID: 42, Name: "0.04x upstream", Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
-		Status: StatusActive, Schedulable: true, RateMultiplier: &rateMultiplier,
+		ID: 42, Name: "upstream", Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Status: StatusActive, Schedulable: true,
 	}
 	accountRepo := &temporaryDispatchAccountRepoStub{accounts: map[int64]*Account{account.ID: account}}
 	store := &temporaryDispatchStoreStub{}

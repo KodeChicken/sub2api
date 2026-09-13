@@ -3948,7 +3948,6 @@
               <span class="flex items-center gap-2">
                 <span>{{ account.name }}</span>
                 <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-dark-600 dark:text-gray-300">{{ account.type }}</span>
-                <span v-if="typeof account.rateMultiplier === 'number'" class="font-mono text-xs text-amber-600 dark:text-amber-400">{{ account.rateMultiplier }}x</span>
               </span>
               <span class="font-mono text-xs opacity-70">#{{ account.id }}</span>
               <button
@@ -3993,7 +3992,6 @@
               <span class="flex items-center gap-2">
                 <span>{{ account.name }}</span>
                 <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-dark-600 dark:text-gray-300">{{ account.type }}</span>
-                <span v-if="typeof account.rateMultiplier === 'number'" class="font-mono text-xs text-amber-600 dark:text-amber-400">{{ account.rateMultiplier }}x</span>
               </span>
               <span class="flex items-center gap-2">
                 <span v-if="isTemporaryAccountSelected(account.id)" class="text-primary-600">✓</span>
@@ -4049,6 +4047,9 @@
                 <div>{{ t("admin.groups.temporaryDispatch.quotaTarget") }}<strong class="ml-1">{{ temporaryAccountQuotaTarget(account).toFixed(1) }}%</strong></div>
                 <div>{{ t("admin.groups.temporaryDispatch.quotaReset") }}<strong class="ml-1">{{ formatTemporaryDispatchTime(account.quotaPreview.resetAt) }}</strong></div>
               </div>
+              <p class="text-xs text-amber-600 dark:text-amber-400">
+                {{ t("admin.groups.temporaryDispatch.sharedQuotaHint") }}
+              </p>
             </div>
             <div v-else-if="temporaryDispatchUsesQuota" class="space-y-3">
               <div>
@@ -4074,9 +4075,12 @@
                 <label class="input-label">{{ t("admin.groups.temporaryDispatch.targetCost") }}</label>
                 <input v-model.number="account.targetCost" type="number" min="0.01" step="1" class="input" />
                 <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  {{ t("admin.groups.temporaryDispatch.targetCostHint", { rate: account.rateMultiplier ?? 1 }) }}
+                  {{ t("admin.groups.temporaryDispatch.targetCostHint") }}
                 </p>
               </div>
+              <p class="text-xs text-amber-600 dark:text-amber-400">
+                {{ t("admin.groups.temporaryDispatch.userSpendHint") }}
+              </p>
             </div>
             <div v-if="temporaryDispatchUsesTime">
               <label class="input-label">{{ t("admin.groups.temporaryDispatch.duration") }}</label>
@@ -4086,9 +4090,6 @@
               </p>
             </div>
           </div>
-          <p v-if="temporaryDispatchUsesQuota" class="text-xs text-amber-600 dark:text-amber-400">
-            {{ t("admin.groups.temporaryDispatch.sharedQuotaHint") }}
-          </p>
         </div>
       </div>
       <template #footer>
@@ -5187,7 +5188,6 @@ type TemporaryAccountOption = {
   name: string;
   type: string;
   parentAccountId?: number | null;
-  rateMultiplier?: number;
 };
 type TemporarySelectedAccount = TemporaryAccountOption & {
   durationMinutes: number;
@@ -6110,7 +6110,6 @@ const loadTemporaryAccounts = async () => {
         name: account.name,
         type: account.type,
         parentAccountId: account.parent_account_id,
-        rateMultiplier: account.rate_multiplier,
       }));
   } catch (error) {
     temporaryAccountResults.value = [];

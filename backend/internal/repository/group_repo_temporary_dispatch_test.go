@@ -137,6 +137,18 @@ func TestTemporaryDispatchSQLGuardsCleanupByDispatchIdentity(t *testing.T) {
 	require.Contains(t, source, "t.last_checked_at IS NULL OR t.last_checked_at <= $1")
 }
 
+func TestTemporaryDispatchUserSpendUsesChargedCostWithinDispatchScope(t *testing.T) {
+	data, err := os.ReadFile("group_repo.go")
+	require.NoError(t, err)
+	source := string(data)
+
+	require.Contains(t, source, "SELECT SUM(u.actual_cost)")
+	require.Contains(t, source, "u.actual_cost > 0")
+	require.Contains(t, source, "g.id = u.group_id")
+	require.Contains(t, source, "g.temporary_dispatch_id = m.dispatch_id")
+	require.NotContains(t, source, "SELECT SUM(COALESCE(u.account_stats_cost, u.total_cost) * COALESCE(u.account_rate_multiplier, 1))")
+}
+
 func TestStopTemporaryDispatchGroupsReturnsOnlyClearedGroups(t *testing.T) {
 	repo, mock := newTemporaryDispatchRepoTest(t)
 	mock.ExpectBegin()
