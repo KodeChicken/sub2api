@@ -375,6 +375,11 @@ func TemporaryDispatchMode(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchMode, v))
 }
 
+// TemporaryDispatchUsageMetric applies equality check predicate on the "temporary_dispatch_usage_metric" field. It's identical to TemporaryDispatchUsageMetricEQ.
+func TemporaryDispatchUsageMetric(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchUsageMetric, v))
+}
+
 // TemporaryDispatchQuotaWindow applies equality check predicate on the "temporary_dispatch_quota_window" field. It's identical to TemporaryDispatchQuotaWindowEQ.
 func TemporaryDispatchQuotaWindow(v string) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchQuotaWindow, v))
@@ -3013,6 +3018,81 @@ func TemporaryDispatchModeEqualFold(v string) predicate.Group {
 // TemporaryDispatchModeContainsFold applies the ContainsFold predicate on the "temporary_dispatch_mode" field.
 func TemporaryDispatchModeContainsFold(v string) predicate.Group {
 	return predicate.Group(sql.FieldContainsFold(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchUsageMetricEQ applies the EQ predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchUsageMetric, v))
+}
+
+// TemporaryDispatchUsageMetricNEQ applies the NEQ predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldTemporaryDispatchUsageMetric, v))
+}
+
+// TemporaryDispatchUsageMetricIn applies the In predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldTemporaryDispatchUsageMetric, vs...))
+}
+
+// TemporaryDispatchUsageMetricNotIn applies the NotIn predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldTemporaryDispatchUsageMetric, vs...))
+}
+
+// TemporaryDispatchUsageMetricGT applies the GT predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldTemporaryDispatchUsageMetric, v))
+}
+
+// TemporaryDispatchUsageMetricGTE applies the GTE predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldTemporaryDispatchUsageMetric, v))
+}
+
+// TemporaryDispatchUsageMetricLT applies the LT predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldTemporaryDispatchUsageMetric, v))
+}
+
+// TemporaryDispatchUsageMetricLTE applies the LTE predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldTemporaryDispatchUsageMetric, v))
+}
+
+// TemporaryDispatchUsageMetricContains applies the Contains predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldTemporaryDispatchUsageMetric, v))
+}
+
+// TemporaryDispatchUsageMetricHasPrefix applies the HasPrefix predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldTemporaryDispatchUsageMetric, v))
+}
+
+// TemporaryDispatchUsageMetricHasSuffix applies the HasSuffix predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldTemporaryDispatchUsageMetric, v))
+}
+
+// TemporaryDispatchUsageMetricIsNil applies the IsNil predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldTemporaryDispatchUsageMetric))
+}
+
+// TemporaryDispatchUsageMetricNotNil applies the NotNil predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldTemporaryDispatchUsageMetric))
+}
+
+// TemporaryDispatchUsageMetricEqualFold applies the EqualFold predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldTemporaryDispatchUsageMetric, v))
+}
+
+// TemporaryDispatchUsageMetricContainsFold applies the ContainsFold predicate on the "temporary_dispatch_usage_metric" field.
+func TemporaryDispatchUsageMetricContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldTemporaryDispatchUsageMetric, v))
 }
 
 // TemporaryDispatchQuotaWindowEQ applies the EQ predicate on the "temporary_dispatch_quota_window" field.

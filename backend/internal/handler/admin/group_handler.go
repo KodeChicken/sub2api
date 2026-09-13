@@ -356,6 +356,12 @@ type StartTemporaryDispatchRequest struct {
 	DurationMinutes    int     `json:"duration_minutes"`
 	QuotaWindow        string  `json:"quota_window" binding:"omitempty,oneof=5h 7d"`
 	TargetDeltaPercent float64 `json:"target_delta_percent"`
+	TargetCost         float64 `json:"target_cost"`
+}
+
+type AdjustTemporaryDispatchRequest struct {
+	GroupID  int64                                 `json:"group_id" binding:"required"`
+	Accounts []service.TemporaryDispatchAdjustment `json:"accounts" binding:"required"`
 }
 
 type StopTemporaryDispatchRequest struct {
@@ -366,6 +372,49 @@ type temporaryDispatchAdminService interface {
 	StartTemporaryDispatch(ctx context.Context, input service.StartTemporaryDispatchInput) (*service.TemporaryDispatchResult, error)
 	StopTemporaryDispatch(ctx context.Context, groupIDs []int64) error
 	GetTemporaryDispatchQuotaPreview(ctx context.Context, accountID int64, window string) (*service.TemporaryDispatchQuotaPreview, error)
+	GetTemporaryDispatch(ctx context.Context, groupID int64) (*service.TemporaryDispatchResult, error)
+	AdjustTemporaryDispatch(ctx context.Context, input service.AdjustTemporaryDispatchInput) (*service.TemporaryDispatchResult, error)
+}
+
+func (h *GroupHandler) GetTemporaryDispatch(c *gin.Context) {
+	groupID, err := strconv.ParseInt(c.Query("group_id"), 10, 64)
+	if err != nil || groupID <= 0 {
+		response.BadRequest(c, "Invalid group ID")
+		return
+	}
+	svc, ok := h.adminService.(temporaryDispatchAdminService)
+	if !ok {
+		response.InternalError(c, "Temporary dispatch service is unavailable")
+		return
+	}
+	result, err := svc.GetTemporaryDispatch(c.Request.Context(), groupID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
+}
+
+func (h *GroupHandler) AdjustTemporaryDispatch(c *gin.Context) {
+	if h.rejectUnsupportedSimpleModeOperation(c, "temporary_dispatch") {
+		return
+	}
+	var req AdjustTemporaryDispatchRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, "Invalid request body: "+err.Error())
+		return
+	}
+	svc, ok := h.adminService.(temporaryDispatchAdminService)
+	if !ok {
+		response.InternalError(c, "Temporary dispatch service is unavailable")
+		return
+	}
+	result, err := svc.AdjustTemporaryDispatch(c.Request.Context(), service.AdjustTemporaryDispatchInput{GroupID: req.GroupID, Accounts: req.Accounts})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, result)
 }
 
 func (h *GroupHandler) GetTemporaryDispatchQuotaPreview(c *gin.Context) {
@@ -410,6 +459,7 @@ func (h *GroupHandler) StartTemporaryDispatch(c *gin.Context) {
 		DurationMinutes:    req.DurationMinutes,
 		QuotaWindow:        req.QuotaWindow,
 		TargetDeltaPercent: req.TargetDeltaPercent,
+		TargetCost:         req.TargetCost,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

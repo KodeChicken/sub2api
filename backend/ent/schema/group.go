@@ -337,6 +337,11 @@ func (Group) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("临时调度结束模式：time、usage、hybrid"),
+		field.String("temporary_dispatch_usage_metric").
+			MaxLen(24).
+			Optional().
+			Nillable().
+			Comment("临时调度用量口径：quota_percent 或 account_cost"),
 		field.String("temporary_dispatch_quota_window").
 			MaxLen(2).
 			Optional().
@@ -345,18 +350,18 @@ func (Group) Fields() []ent.Field {
 		field.Float("temporary_dispatch_baseline_percent").
 			Optional().
 			Nillable().
-			SchemaType(map[string]string{dialect.Postgres: "decimal(7,3)"}).
-			Comment("额度模式启动时所选窗口的账号总用量"),
+			SchemaType(map[string]string{dialect.Postgres: "decimal(18,6)"}).
+			Comment("用量模式启动时的基线值；百分比或账号成本由 usage_metric 决定"),
 		field.Float("temporary_dispatch_target_percent").
 			Optional().
 			Nillable().
-			SchemaType(map[string]string{dialect.Postgres: "decimal(7,3)"}).
-			Comment("额度模式所选窗口的账号总用量结束目标"),
+			SchemaType(map[string]string{dialect.Postgres: "decimal(18,6)"}).
+			Comment("用量模式结束目标；百分比或账号成本由 usage_metric 决定"),
 		field.Float("temporary_dispatch_current_percent").
 			Optional().
 			Nillable().
-			SchemaType(map[string]string{dialect.Postgres: "decimal(7,3)"}).
-			Comment("最近一次观测到的所选窗口账号总用量"),
+			SchemaType(map[string]string{dialect.Postgres: "decimal(18,6)"}).
+			Comment("最近一次观测值；百分比或账号成本由 usage_metric 决定"),
 		field.Time("temporary_dispatch_quota_reset_at").
 			Optional().
 			Nillable().

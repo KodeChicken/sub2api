@@ -58,6 +58,15 @@
               {{ t("admin.groups.temporaryDispatch.action") }}
             </button>
             <button
+              v-if="!authStore.isSimpleMode && canAdjustTemporaryDispatch"
+              @click="openAdjustTemporaryDispatchModal"
+              :disabled="temporaryDispatchSubmitting"
+              class="btn btn-secondary"
+            >
+              <Icon name="edit" size="md" class="mr-2" />
+              {{ t("admin.groups.temporaryDispatch.adjustAction") }}
+            </button>
+            <button
               v-if="!authStore.isSimpleMode && selectedGroups.some((group) => isTemporaryDispatchActive(group))"
               @click="stopTemporaryDispatch"
               :disabled="temporaryDispatchSubmitting"
@@ -409,7 +418,12 @@
                 {{ temporaryDispatchModeLabel(row.temporary_dispatch_mode) }}
                 <template v-if="temporaryDispatchAccountIDs(row).length === 1 && row.temporary_dispatch_quota_window">
                   · {{ row.temporary_dispatch_quota_window }}
-                  {{ formatTemporaryDispatchPercent(row.temporary_dispatch_current_percent) }} / {{ formatTemporaryDispatchPercent(row.temporary_dispatch_target_percent) }}
+                  <template v-if="row.temporary_dispatch_usage_metric === 'account_cost'">
+                    {{ formatUsd(row.temporary_dispatch_current_percent) }} / {{ formatUsd(row.temporary_dispatch_target_percent) }}
+                  </template>
+                  <template v-else>
+                    {{ formatTemporaryDispatchPercent(row.temporary_dispatch_current_percent) }} / {{ formatTemporaryDispatchPercent(row.temporary_dispatch_target_percent) }}
+                  </template>
                 </template>
               </div>
               <div class="whitespace-nowrap text-gray-500 dark:text-gray-400">
@@ -2166,6 +2180,71 @@
       </template>
     </BaseDialog>
 
+    <BaseDialog
+      :show="showAdjustTemporaryDispatchModal"
+      :title="t('admin.groups.temporaryDispatch.adjustTitle')"
+      width="normal"
+      @close="closeAdjustTemporaryDispatchModal"
+    >
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+          {{ t("admin.groups.temporaryDispatch.adjustHint") }}
+        </p>
+        <div v-if="adjustTemporaryDispatchLoading" class="py-8 text-center text-sm text-gray-500">
+          {{ t("common.loading") }}
+        </div>
+        <div v-else class="space-y-3">
+          <div
+            v-for="account in adjustTemporaryDispatchAccounts"
+            :key="account.accountId"
+            class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <strong class="text-sm text-gray-800 dark:text-gray-100">{{ account.accountName }} <span class="font-mono text-xs text-gray-400">#{{ account.accountId }}</span></strong>
+              <span class="text-xs text-gray-500 dark:text-gray-400">
+                {{ t("admin.groups.temporaryDispatch.currentProgress", {
+                  current: formatTemporaryAdjustmentValue(account.currentValue, account.usageMetric),
+                  target: formatTemporaryAdjustmentValue(account.targetValue, account.usageMetric),
+                }) }}
+              </span>
+            </div>
+            <div v-if="adjustTemporaryDispatchMode !== 'time'">
+              <label class="input-label">
+                {{ account.usageMetric === 'account_cost'
+                  ? t("admin.groups.temporaryDispatch.additionalCost")
+                  : t("admin.groups.temporaryDispatch.additionalPercent") }}
+              </label>
+              <input
+                v-model.number="account.additionalUsage"
+                type="number"
+                min="0"
+                :max="account.usageMetric === 'quota_percent' ? Math.max(0, 100 - account.targetValue) : undefined"
+                :step="account.usageMetric === 'quota_percent' ? 0.1 : 1"
+                class="input"
+              />
+            </div>
+            <div v-if="adjustTemporaryDispatchMode !== 'usage'">
+              <label class="input-label">{{ t("admin.groups.temporaryDispatch.extendDuration") }}</label>
+              <input v-model.number="account.extendDurationMinutes" type="number" min="0" max="1440" step="1" class="input" />
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-3 pt-4">
+          <button type="button" class="btn btn-secondary" @click="closeAdjustTemporaryDispatchModal">{{ t("common.cancel") }}</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            :disabled="temporaryDispatchSubmitting || adjustTemporaryDispatchLoading || !canSubmitTemporaryDispatchAdjustment"
+            @click="submitTemporaryDispatchAdjustment"
+          >
+            {{ t("admin.groups.temporaryDispatch.adjustSubmit") }}
+          </button>
+        </div>
+      </template>
+    </BaseDialog>
+
     <!-- Edit Group Modal -->
     <BaseDialog
       :show="showEditModal"
@@ -3866,7 +3945,11 @@
               :key="account.id"
               class="inline-flex items-center gap-1 rounded-md bg-primary-50 px-2 py-1 text-sm text-primary-700 dark:bg-primary-900/30 dark:text-primary-300"
             >
-              <span>{{ account.name }}</span>
+              <span class="flex items-center gap-2">
+                <span>{{ account.name }}</span>
+                <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-dark-600 dark:text-gray-300">{{ account.type }}</span>
+                <span v-if="typeof account.rateMultiplier === 'number'" class="font-mono text-xs text-amber-600 dark:text-amber-400">{{ account.rateMultiplier }}x</span>
+              </span>
               <span class="font-mono text-xs opacity-70">#{{ account.id }}</span>
               <button
                 type="button"
@@ -3907,7 +3990,11 @@
                 isTemporaryAccountSelected(account.id) ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300' : '',
               ]"
             >
-              <span>{{ account.name }}</span>
+              <span class="flex items-center gap-2">
+                <span>{{ account.name }}</span>
+                <span class="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500 dark:bg-dark-600 dark:text-gray-300">{{ account.type }}</span>
+                <span v-if="typeof account.rateMultiplier === 'number'" class="font-mono text-xs text-amber-600 dark:text-amber-400">{{ account.rateMultiplier }}x</span>
+              </span>
               <span class="flex items-center gap-2">
                 <span v-if="isTemporaryAccountSelected(account.id)" class="text-primary-600">✓</span>
                 <span class="font-mono text-xs text-gray-400">#{{ account.id }}</span>
@@ -3928,7 +4015,7 @@
               <strong class="text-sm text-gray-800 dark:text-gray-100">{{ account.name }} <span class="font-mono text-xs text-gray-400">#{{ account.id }}</span></strong>
               <button type="button" class="text-gray-400 hover:text-red-500" @click="removeTemporaryAccount(account.id)">×</button>
             </div>
-            <div v-if="temporaryDispatchUsesQuota" class="space-y-3">
+            <div v-if="temporaryDispatchUsesQuota && temporaryAccountUsesQuotaPercent(account)" class="space-y-3">
               <div>
                 <label class="input-label">{{ t("admin.groups.temporaryDispatch.quotaWindow") }}</label>
                 <div class="grid grid-cols-2 gap-2">
@@ -3961,6 +4048,34 @@
                 <div>{{ t("admin.groups.temporaryDispatch.quotaCurrent") }}<strong class="ml-1">{{ account.quotaPreview.used.toFixed(1) }}%</strong></div>
                 <div>{{ t("admin.groups.temporaryDispatch.quotaTarget") }}<strong class="ml-1">{{ temporaryAccountQuotaTarget(account).toFixed(1) }}%</strong></div>
                 <div>{{ t("admin.groups.temporaryDispatch.quotaReset") }}<strong class="ml-1">{{ formatTemporaryDispatchTime(account.quotaPreview.resetAt) }}</strong></div>
+              </div>
+            </div>
+            <div v-else-if="temporaryDispatchUsesQuota" class="space-y-3">
+              <div>
+                <label class="input-label">{{ t("admin.groups.temporaryDispatch.costWindow") }}</label>
+                <div class="grid grid-cols-2 gap-2">
+                  <button
+                    v-for="window in temporaryDispatchQuotaWindows"
+                    :key="window"
+                    type="button"
+                    :class="[
+                      'rounded-lg border px-3 py-2 text-sm transition-colors',
+                      account.quotaWindow === window
+                        ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
+                        : 'border-gray-200 text-gray-600 dark:border-dark-600 dark:text-gray-300',
+                    ]"
+                    @click="account.quotaWindow = window"
+                  >
+                    {{ window }}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label class="input-label">{{ t("admin.groups.temporaryDispatch.targetCost") }}</label>
+                <input v-model.number="account.targetCost" type="number" min="0.01" step="1" class="input" />
+                <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.groups.temporaryDispatch.targetCostHint", { rate: account.rateMultiplier ?? 1 }) }}
+                </p>
               </div>
             </div>
             <div v-if="temporaryDispatchUsesTime">
@@ -4514,6 +4629,8 @@ import type {
   SubscriptionType,
   TemporaryDispatchMode,
   TemporaryDispatchQuotaWindow,
+  TemporaryDispatchResult,
+  TemporaryDispatchUsageMetric,
 } from "@/types";
 import {
   CONCRETE_PLATFORM_OPTIONS,
@@ -5070,11 +5187,13 @@ type TemporaryAccountOption = {
   name: string;
   type: string;
   parentAccountId?: number | null;
+  rateMultiplier?: number;
 };
 type TemporarySelectedAccount = TemporaryAccountOption & {
   durationMinutes: number;
   quotaWindow: TemporaryDispatchQuotaWindow;
   quotaDelta: number;
+  targetCost: number;
   quotaLoading: boolean;
   quotaError: string;
   quotaPreview: { used: number; resetAt: string } | null;
@@ -5086,6 +5205,37 @@ const temporaryDispatchMode = ref<TemporaryDispatchMode>("hybrid");
 const temporaryAccountSearch = ref("");
 const temporaryAccountResults = ref<TemporaryAccountOption[]>([]);
 const temporarySelectedAccounts = ref<TemporarySelectedAccount[]>([]);
+type TemporaryDispatchAdjustmentRow = {
+  accountId: number;
+  accountName: string;
+  usageMetric: TemporaryDispatchUsageMetric;
+  currentValue: number;
+  targetValue: number;
+  additionalUsage: number;
+  extendDurationMinutes: number;
+};
+const showAdjustTemporaryDispatchModal = ref(false);
+const adjustTemporaryDispatchLoading = ref(false);
+const adjustTemporaryDispatchMode = ref<TemporaryDispatchMode>("time");
+const adjustTemporaryDispatchGroupId = ref<number | null>(null);
+const adjustTemporaryDispatchAccounts = ref<TemporaryDispatchAdjustmentRow[]>([]);
+const selectedTemporaryDispatchIDs = computed(() => new Set(
+  selectedGroups.value
+    .filter((group) => isTemporaryDispatchActive(group) && group.temporary_dispatch_id)
+    .map((group) => group.temporary_dispatch_id as string),
+));
+const canAdjustTemporaryDispatch = computed(() =>
+  selectedGroups.value.length > 0 &&
+  selectedGroups.value.every((group) => isTemporaryDispatchActive(group)) &&
+  selectedTemporaryDispatchIDs.value.size === 1,
+);
+const canSubmitTemporaryDispatchAdjustment = computed(() => adjustTemporaryDispatchAccounts.value.some((account) => {
+  const usage = Number(account.additionalUsage || 0);
+  const duration = Number(account.extendDurationMinutes || 0);
+  if (usage < 0 || duration < 0) return false;
+  if (account.usageMetric === "quota_percent" && account.targetValue + usage > 100) return false;
+  return usage > 0 || duration > 0;
+}));
 const maxTemporaryDispatchAccounts = 20;
 const temporaryDispatchModeOptions = computed(() => [
   { value: "time" as const, label: t("admin.groups.temporaryDispatch.modeTime"), requiresQuota: false },
@@ -5098,11 +5248,16 @@ const temporaryDispatchUsesQuota = computed(() => temporaryDispatchMode.value !=
 const temporaryDispatchUsesTime = computed(() => temporaryDispatchMode.value !== "usage");
 const temporaryAccountQuotaTarget = (account: TemporarySelectedAccount): number =>
   (account.quotaPreview?.used ?? 0) + Number(account.quotaDelta || 0);
+const temporaryAccountUsesQuotaPercent = (account: TemporaryAccountOption): boolean =>
+  account.type === "oauth" && !account.parentAccountId;
 const temporaryDispatchCanSubmit = computed(() => {
   if (temporarySelectedAccounts.value.length === 0) return false;
   return temporarySelectedAccounts.value.every((account) => {
     if (temporaryDispatchUsesTime.value && (account.durationMinutes < 1 || account.durationMinutes > 1440)) return false;
     if (!temporaryDispatchUsesQuota.value) return true;
+    if (!temporaryAccountUsesQuotaPercent(account)) {
+      return Number.isFinite(Number(account.targetCost)) && Number(account.targetCost) > 0;
+    }
     const delta = Number(account.quotaDelta);
     return !account.quotaLoading && !account.quotaError && !!account.quotaPreview && delta > 0 && delta <= 100 && temporaryAccountQuotaTarget(account) <= 100;
   });
@@ -5950,13 +6105,12 @@ const loadTemporaryAccounts = async () => {
       status: "active",
       search: temporaryAccountSearch.value.trim() || undefined,
     });
-    temporaryAccountResults.value = response.items
-      .filter((account) => !temporaryDispatchUsesQuota.value || (account.type === "oauth" && !account.parent_account_id))
-      .map((account) => ({
+    temporaryAccountResults.value = response.items.map((account) => ({
         id: account.id,
         name: account.name,
         type: account.type,
         parentAccountId: account.parent_account_id,
+        rateMultiplier: account.rate_multiplier,
       }));
   } catch (error) {
     temporaryAccountResults.value = [];
@@ -5967,7 +6121,7 @@ const loadTemporaryAccounts = async () => {
 const loadTemporaryQuotaPreview = async (account: TemporarySelectedAccount) => {
   account.quotaPreview = null;
   account.quotaError = "";
-  if (!temporaryDispatchUsesQuota.value) return;
+  if (!temporaryDispatchUsesQuota.value || !temporaryAccountUsesQuotaPercent(account)) return;
   const requestVersion = ++account.quotaRequestVersion;
   account.quotaLoading = true;
   try {
@@ -6002,6 +6156,7 @@ const selectTemporaryAccount = (account: TemporaryAccountOption) => {
     durationMinutes: 120,
     quotaWindow: "5h",
     quotaDelta: 30,
+    targetCost: 200,
     quotaLoading: false,
     quotaError: "",
     quotaPreview: null,
@@ -6010,7 +6165,7 @@ const selectTemporaryAccount = (account: TemporaryAccountOption) => {
   temporarySelectedAccounts.value.push(selected);
   const reactiveSelected = temporarySelectedAccounts.value[temporarySelectedAccounts.value.length - 1];
   temporaryAccountSearch.value = "";
-  if (temporaryDispatchUsesQuota.value) void loadTemporaryQuotaPreview(reactiveSelected);
+  if (temporaryDispatchUsesQuota.value && temporaryAccountUsesQuotaPercent(reactiveSelected)) void loadTemporaryQuotaPreview(reactiveSelected);
   void loadTemporaryAccounts();
 };
 
@@ -6030,11 +6185,9 @@ const setTemporaryDispatchMode = (mode: TemporaryDispatchMode) => {
   if (mode !== "time" && !temporaryDispatchSupportsQuota.value) return;
   temporaryDispatchMode.value = mode;
   if (mode !== "time") {
-    const compatible = temporarySelectedAccounts.value.filter((account) => account.type === "oauth" && !account.parentAccountId);
-    const removed = temporarySelectedAccounts.value.length - compatible.length;
-    temporarySelectedAccounts.value = compatible;
-    if (removed > 0) appStore.showError(t("admin.groups.temporaryDispatch.incompatibleAccountsRemoved", { count: removed }));
-    for (const account of temporarySelectedAccounts.value) void loadTemporaryQuotaPreview(account);
+    for (const account of temporarySelectedAccounts.value) {
+      if (temporaryAccountUsesQuotaPercent(account)) void loadTemporaryQuotaPreview(account);
+    }
   }
   void loadTemporaryAccounts();
 };
@@ -6080,6 +6233,65 @@ const closeTemporaryDispatchModal = () => {
   }
 };
 
+const formatTemporaryAdjustmentValue = (value: number, metric: TemporaryDispatchUsageMetric): string =>
+  metric === "account_cost" ? formatUsd(value) : `${value.toFixed(1)}%`;
+
+const closeAdjustTemporaryDispatchModal = () => {
+  showAdjustTemporaryDispatchModal.value = false;
+  adjustTemporaryDispatchGroupId.value = null;
+  adjustTemporaryDispatchAccounts.value = [];
+};
+
+const openAdjustTemporaryDispatchModal = async () => {
+  if (!canAdjustTemporaryDispatch.value) return;
+  const group = selectedGroups.value[0];
+  if (!group) return;
+  showAdjustTemporaryDispatchModal.value = true;
+  adjustTemporaryDispatchLoading.value = true;
+  adjustTemporaryDispatchGroupId.value = group.id;
+  try {
+    const detail: TemporaryDispatchResult = await adminAPI.groups.getTemporaryDispatch(group.id);
+    adjustTemporaryDispatchMode.value = detail.mode;
+    adjustTemporaryDispatchAccounts.value = detail.accounts.map((account) => ({
+      accountId: account.account_id,
+      accountName: account.account_name || `#${account.account_id}`,
+      usageMetric: account.usage_metric || "quota_percent",
+      currentValue: account.current_percent ?? 0,
+      targetValue: account.target_percent ?? 0,
+      additionalUsage: 0,
+      extendDurationMinutes: 0,
+    }));
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error) || t("admin.groups.temporaryDispatch.failed"));
+    closeAdjustTemporaryDispatchModal();
+  } finally {
+    adjustTemporaryDispatchLoading.value = false;
+  }
+};
+
+const submitTemporaryDispatchAdjustment = async () => {
+  if (!adjustTemporaryDispatchGroupId.value || !canSubmitTemporaryDispatchAdjustment.value) return;
+  const accounts = adjustTemporaryDispatchAccounts.value
+    .filter((account) => Number(account.additionalUsage || 0) > 0 || Number(account.extendDurationMinutes || 0) > 0)
+    .map((account) => ({
+      account_id: account.accountId,
+      additional_usage: Number(account.additionalUsage || 0),
+      extend_duration_minutes: Number(account.extendDurationMinutes || 0),
+    }));
+  temporaryDispatchSubmitting.value = true;
+  try {
+    await adminAPI.groups.adjustTemporaryDispatch({ group_id: adjustTemporaryDispatchGroupId.value, accounts });
+    appStore.showSuccess(t("admin.groups.temporaryDispatch.adjusted"));
+    closeAdjustTemporaryDispatchModal();
+    selectedGroupIds.value = [];
+    await loadGroups();
+  } catch (error) {
+    appStore.showError(extractApiErrorMessage(error) || t("admin.groups.temporaryDispatch.failed"));
+  } finally {
+    temporaryDispatchSubmitting.value = false;
+  }
+};
+
 const startTemporaryDispatch = async () => {
   if (temporarySelectedAccounts.value.length === 0) {
     appStore.showError(t("admin.groups.temporaryDispatch.selectAccount"));
@@ -6093,7 +6305,8 @@ const startTemporaryDispatch = async () => {
         account_id: account.id,
         duration_minutes: temporaryDispatchUsesTime.value ? account.durationMinutes : undefined,
         quota_window: temporaryDispatchUsesQuota.value ? account.quotaWindow : undefined,
-        target_delta_percent: temporaryDispatchUsesQuota.value ? account.quotaDelta : undefined,
+        target_delta_percent: temporaryDispatchUsesQuota.value && temporaryAccountUsesQuotaPercent(account) ? account.quotaDelta : undefined,
+        target_cost: temporaryDispatchUsesQuota.value && !temporaryAccountUsesQuotaPercent(account) ? account.targetCost : undefined,
       })),
       mode: temporaryDispatchMode.value,
     });

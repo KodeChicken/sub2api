@@ -1357,6 +1357,26 @@ func (_u *GroupUpdate) ClearTemporaryDispatchMode() *GroupUpdate {
 	return _u
 }
 
+// SetTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field.
+func (_u *GroupUpdate) SetTemporaryDispatchUsageMetric(v string) *GroupUpdate {
+	_u.mutation.SetTemporaryDispatchUsageMetric(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchUsageMetric(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchUsageMetric(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchUsageMetric clears the value of the "temporary_dispatch_usage_metric" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchUsageMetric() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchUsageMetric()
+	return _u
+}
+
 // SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
 func (_u *GroupUpdate) SetTemporaryDispatchQuotaWindow(v string) *GroupUpdate {
 	_u.mutation.SetTemporaryDispatchQuotaWindow(v)
@@ -1818,6 +1838,11 @@ func (_u *GroupUpdate) check() error {
 			return &ValidationError{Name: "temporary_dispatch_mode", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.TemporaryDispatchUsageMetric(); ok {
+		if err := group.TemporaryDispatchUsageMetricValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_usage_metric", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_usage_metric": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.TemporaryDispatchQuotaWindow(); ok {
 		if err := group.TemporaryDispatchQuotaWindowValidator(v); err != nil {
 			return &ValidationError{Name: "temporary_dispatch_quota_window", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_quota_window": %w`, err)}
@@ -2238,6 +2263,12 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.TemporaryDispatchModeCleared() {
 		_spec.ClearField(group.FieldTemporaryDispatchMode, field.TypeString)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchUsageMetric(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchUsageMetric, field.TypeString, value)
+	}
+	if _u.mutation.TemporaryDispatchUsageMetricCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchUsageMetric, field.TypeString)
 	}
 	if value, ok := _u.mutation.TemporaryDispatchQuotaWindow(); ok {
 		_spec.SetField(group.FieldTemporaryDispatchQuotaWindow, field.TypeString, value)
@@ -3912,6 +3943,26 @@ func (_u *GroupUpdateOne) ClearTemporaryDispatchMode() *GroupUpdateOne {
 	return _u
 }
 
+// SetTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchUsageMetric(v string) *GroupUpdateOne {
+	_u.mutation.SetTemporaryDispatchUsageMetric(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchUsageMetric(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchUsageMetric(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchUsageMetric clears the value of the "temporary_dispatch_usage_metric" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchUsageMetric() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchUsageMetric()
+	return _u
+}
+
 // SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
 func (_u *GroupUpdateOne) SetTemporaryDispatchQuotaWindow(v string) *GroupUpdateOne {
 	_u.mutation.SetTemporaryDispatchQuotaWindow(v)
@@ -4386,6 +4437,11 @@ func (_u *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "temporary_dispatch_mode", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_mode": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.TemporaryDispatchUsageMetric(); ok {
+		if err := group.TemporaryDispatchUsageMetricValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_usage_metric", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_usage_metric": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.TemporaryDispatchQuotaWindow(); ok {
 		if err := group.TemporaryDispatchQuotaWindowValidator(v); err != nil {
 			return &ValidationError{Name: "temporary_dispatch_quota_window", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_quota_window": %w`, err)}
@@ -4823,6 +4879,12 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if _u.mutation.TemporaryDispatchModeCleared() {
 		_spec.ClearField(group.FieldTemporaryDispatchMode, field.TypeString)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchUsageMetric(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchUsageMetric, field.TypeString, value)
+	}
+	if _u.mutation.TemporaryDispatchUsageMetricCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchUsageMetric, field.TypeString)
 	}
 	if value, ok := _u.mutation.TemporaryDispatchQuotaWindow(); ok {
 		_spec.SetField(group.FieldTemporaryDispatchQuotaWindow, field.TypeString, value)

@@ -2168,6 +2168,50 @@ func (s *OpenAIGatewayService) selectAccountWithScheduler(
 	previousResponseCanMove bool,
 	useUpstreamTokenCost bool,
 ) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
+	selection, decision, err := s.selectAccountWithSchedulerProxyFailOpen(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
+	targetIDs, overflow := temporaryDispatchOverflow(selection)
+	if err != nil || !overflow {
+		return selection, decision, err
+	}
+	temporaryExcluded := mergeTemporaryDispatchExclusions(excludedIDs, nil)
+	for selection != nil && selection.WaitPlan != nil {
+		temporaryExcluded[selection.WaitPlan.AccountID] = struct{}{}
+		if allTemporaryDispatchTargetsExcluded(targetIDs, temporaryExcluded) {
+			break
+		}
+		next, nextDecision, nextErr := s.selectAccountWithSchedulerProxyFailOpen(ctx, groupID, previousResponseID, sessionHash, requestedModel, temporaryExcluded, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
+		if nextErr != nil || next == nil {
+			break
+		}
+		if _, stillOverflow := temporaryDispatchOverflow(next); !stillOverflow {
+			return next, nextDecision, nil
+		}
+		selection, decision = next, nextDecision
+	}
+
+	fallbackExcluded := mergeTemporaryDispatchExclusions(excludedIDs, targetIDs)
+	fallback, fallbackDecision, fallbackErr := s.selectAccountWithSchedulerProxyFailOpen(withTemporaryDispatchBypass(ctx), groupID, previousResponseID, sessionHash, requestedModel, fallbackExcluded, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
+	if fallbackErr == nil && fallback != nil {
+		return fallback, fallbackDecision, nil
+	}
+	return selection, decision, nil
+}
+
+func (s *OpenAIGatewayService) selectAccountWithSchedulerProxyFailOpen(
+	ctx context.Context,
+	groupID *int64,
+	previousResponseID string,
+	sessionHash string,
+	requestedModel string,
+	excludedIDs map[int64]struct{},
+	requiredTransport OpenAIUpstreamTransport,
+	requiredCapability OpenAIEndpointCapability,
+	requiredImageCapability OpenAIImagesCapability,
+	requireCompact bool,
+	platform string,
+	previousResponseCanMove bool,
+	useUpstreamTokenCost bool,
+) (*AccountSelectionResult, OpenAIAccountScheduleDecision, error) {
 	selection, decision, err := s.selectAccountWithSchedulerOnce(ctx, groupID, previousResponseID, sessionHash, requestedModel, excludedIDs, requiredTransport, requiredCapability, requiredImageCapability, requireCompact, platform, previousResponseCanMove, useUpstreamTokenCost)
 	if err == nil || openAIProxyStreamQuarantineBypassed(ctx) {
 		return selection, decision, err

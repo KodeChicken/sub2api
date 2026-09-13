@@ -164,6 +164,8 @@ const (
 	FieldTemporaryDispatchExpiresAt = "temporary_dispatch_expires_at"
 	// FieldTemporaryDispatchMode holds the string denoting the temporary_dispatch_mode field in the database.
 	FieldTemporaryDispatchMode = "temporary_dispatch_mode"
+	// FieldTemporaryDispatchUsageMetric holds the string denoting the temporary_dispatch_usage_metric field in the database.
+	FieldTemporaryDispatchUsageMetric = "temporary_dispatch_usage_metric"
 	// FieldTemporaryDispatchQuotaWindow holds the string denoting the temporary_dispatch_quota_window field in the database.
 	FieldTemporaryDispatchQuotaWindow = "temporary_dispatch_quota_window"
 	// FieldTemporaryDispatchBaselinePercent holds the string denoting the temporary_dispatch_baseline_percent field in the database.
@@ -323,6 +325,7 @@ var Columns = []string{
 	FieldTemporaryDispatchStartedAt,
 	FieldTemporaryDispatchExpiresAt,
 	FieldTemporaryDispatchMode,
+	FieldTemporaryDispatchUsageMetric,
 	FieldTemporaryDispatchQuotaWindow,
 	FieldTemporaryDispatchBaselinePercent,
 	FieldTemporaryDispatchTargetPercent,
@@ -483,6 +486,8 @@ var (
 	TemporaryDispatchIDValidator func(string) error
 	// TemporaryDispatchModeValidator is a validator for the "temporary_dispatch_mode" field. It is called by the builders before save.
 	TemporaryDispatchModeValidator func(string) error
+	// TemporaryDispatchUsageMetricValidator is a validator for the "temporary_dispatch_usage_metric" field. It is called by the builders before save.
+	TemporaryDispatchUsageMetricValidator func(string) error
 	// TemporaryDispatchQuotaWindowValidator is a validator for the "temporary_dispatch_quota_window" field. It is called by the builders before save.
 	TemporaryDispatchQuotaWindowValidator func(string) error
 )
@@ -813,6 +818,11 @@ func ByTemporaryDispatchExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 // ByTemporaryDispatchMode orders the results by the temporary_dispatch_mode field.
 func ByTemporaryDispatchMode(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTemporaryDispatchMode, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchUsageMetric orders the results by the temporary_dispatch_usage_metric field.
+func ByTemporaryDispatchUsageMetric(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchUsageMetric, opts...).ToFunc()
 }
 
 // ByTemporaryDispatchQuotaWindow orders the results by the temporary_dispatch_quota_window field.

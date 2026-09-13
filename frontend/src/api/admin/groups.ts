@@ -15,6 +15,7 @@ import type {
   UpdateGroupRequest,
   TemporaryDispatchResult,
   StartTemporaryDispatchInput,
+  AdjustTemporaryDispatchInput,
   TemporaryDispatchQuotaPreview,
   PaginatedResponse
 } from '@/types'
@@ -478,6 +479,18 @@ export async function startTemporaryDispatch(input: StartTemporaryDispatchInput)
   return data
 }
 
+export async function getTemporaryDispatch(groupId: number): Promise<TemporaryDispatchResult> {
+  const { data } = await apiClient.get<TemporaryDispatchResult>('/admin/groups/temporary-dispatch', {
+    params: { group_id: groupId }
+  })
+  return data
+}
+
+export async function adjustTemporaryDispatch(input: AdjustTemporaryDispatchInput): Promise<TemporaryDispatchResult> {
+  const { data } = await apiClient.patch<TemporaryDispatchResult>('/admin/groups/temporary-dispatch', input)
+  return data
+}
+
 export async function getTemporaryDispatchQuotaPreview(
   accountId: number,
   quotaWindow: '5h' | '7d'
@@ -525,6 +538,8 @@ export const groupsAPI = {
   getUsageSummary,
   getCapacitySummary,
   startTemporaryDispatch,
+  getTemporaryDispatch,
+  adjustTemporaryDispatch,
   getTemporaryDispatchQuotaPreview,
   stopTemporaryDispatch
 }

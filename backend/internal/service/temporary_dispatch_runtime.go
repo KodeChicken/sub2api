@@ -44,6 +44,10 @@ type temporaryDispatchStore interface {
 	StopTemporaryDispatchAccount(ctx context.Context, accountID int64) ([]int64, error)
 }
 
+type temporaryDispatchCostStore interface {
+	ObserveTemporaryDispatchCosts(ctx context.Context, observedAt time.Time, limit int) ([]int64, error)
+}
+
 type temporaryDispatchQuotaObservation struct {
 	accountID int64
 	snapshot  *OpenAICodexUsageSnapshot
@@ -332,6 +336,18 @@ func (r *TemporaryDispatchRuntime) runScanner() {
 
 func (r *TemporaryDispatchRuntime) scanOnce() {
 	now := time.Now().UTC()
+	if costStore, ok := r.store.(temporaryDispatchCostStore); ok {
+		costCtx, costCancel := context.WithTimeout(r.ctx, 10*time.Second)
+		r.mutationMu.Lock()
+		costGroupIDs, costErr := costStore.ObserveTemporaryDispatchCosts(costCtx, now, 200)
+		r.mutationMu.Unlock()
+		costCancel()
+		if costErr != nil {
+			slog.Warn("temporary_dispatch_cost_poll_failed", "error", costErr)
+		} else {
+			r.invalidate(costGroupIDs)
+		}
+	}
 	ctx, cancel := context.WithTimeout(r.ctx, 10*time.Second)
 	r.mutationMu.Lock()
 	groupIDs, err := r.store.CleanupTemporaryDispatches(ctx, now, 200)

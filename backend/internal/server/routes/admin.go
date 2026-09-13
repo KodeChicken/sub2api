@@ -334,6 +334,8 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		groups.GET("/live-capability", h.Admin.Group.GetLiveCapability)
 		groups.PUT("/sort-order", h.Admin.Group.UpdateSortOrder)
 		groups.POST("/temporary-dispatch", h.Admin.Group.StartTemporaryDispatch)
+		groups.GET("/temporary-dispatch", h.Admin.Group.GetTemporaryDispatch)
+		groups.PATCH("/temporary-dispatch", h.Admin.Group.AdjustTemporaryDispatch)
 		groups.POST("/temporary-dispatch/stop", h.Admin.Group.StopTemporaryDispatch)
 		groups.GET("/temporary-dispatch/quota-preview", h.Admin.Group.GetTemporaryDispatchQuotaPreview)
 		groups.GET("/:id/model-allowlist-candidates", h.Admin.Group.GetGroupModelAllowlistCandidates)

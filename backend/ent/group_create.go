@@ -1002,6 +1002,20 @@ func (_c *GroupCreate) SetNillableTemporaryDispatchMode(v *string) *GroupCreate 
 	return _c
 }
 
+// SetTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field.
+func (_c *GroupCreate) SetTemporaryDispatchUsageMetric(v string) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchUsageMetric(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchUsageMetric(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchUsageMetric(*v)
+	}
+	return _c
+}
+
 // SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
 func (_c *GroupCreate) SetTemporaryDispatchQuotaWindow(v string) *GroupCreate {
 	_c.mutation.SetTemporaryDispatchQuotaWindow(v)
@@ -1615,6 +1629,11 @@ func (_c *GroupCreate) check() error {
 			return &ValidationError{Name: "temporary_dispatch_mode", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_mode": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.TemporaryDispatchUsageMetric(); ok {
+		if err := group.TemporaryDispatchUsageMetricValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_usage_metric", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_usage_metric": %w`, err)}
+		}
+	}
 	if v, ok := _c.mutation.TemporaryDispatchQuotaWindow(); ok {
 		if err := group.TemporaryDispatchQuotaWindowValidator(v); err != nil {
 			return &ValidationError{Name: "temporary_dispatch_quota_window", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_quota_window": %w`, err)}
@@ -1942,6 +1961,10 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.TemporaryDispatchMode(); ok {
 		_spec.SetField(group.FieldTemporaryDispatchMode, field.TypeString, value)
 		_node.TemporaryDispatchMode = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchUsageMetric(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchUsageMetric, field.TypeString, value)
+		_node.TemporaryDispatchUsageMetric = &value
 	}
 	if value, ok := _c.mutation.TemporaryDispatchQuotaWindow(); ok {
 		_spec.SetField(group.FieldTemporaryDispatchQuotaWindow, field.TypeString, value)
@@ -3304,6 +3327,24 @@ func (u *GroupUpsert) UpdateTemporaryDispatchMode() *GroupUpsert {
 // ClearTemporaryDispatchMode clears the value of the "temporary_dispatch_mode" field.
 func (u *GroupUpsert) ClearTemporaryDispatchMode() *GroupUpsert {
 	u.SetNull(group.FieldTemporaryDispatchMode)
+	return u
+}
+
+// SetTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field.
+func (u *GroupUpsert) SetTemporaryDispatchUsageMetric(v string) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchUsageMetric, v)
+	return u
+}
+
+// UpdateTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchUsageMetric() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchUsageMetric)
+	return u
+}
+
+// ClearTemporaryDispatchUsageMetric clears the value of the "temporary_dispatch_usage_metric" field.
+func (u *GroupUpsert) ClearTemporaryDispatchUsageMetric() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchUsageMetric)
 	return u
 }
 
@@ -4846,6 +4887,27 @@ func (u *GroupUpsertOne) UpdateTemporaryDispatchMode() *GroupUpsertOne {
 func (u *GroupUpsertOne) ClearTemporaryDispatchMode() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.ClearTemporaryDispatchMode()
+	})
+}
+
+// SetTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchUsageMetric(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchUsageMetric(v)
+	})
+}
+
+// UpdateTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchUsageMetric() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchUsageMetric()
+	})
+}
+
+// ClearTemporaryDispatchUsageMetric clears the value of the "temporary_dispatch_usage_metric" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchUsageMetric() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchUsageMetric()
 	})
 }
 
@@ -6572,6 +6634,27 @@ func (u *GroupUpsertBulk) UpdateTemporaryDispatchMode() *GroupUpsertBulk {
 func (u *GroupUpsertBulk) ClearTemporaryDispatchMode() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.ClearTemporaryDispatchMode()
+	})
+}
+
+// SetTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchUsageMetric(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchUsageMetric(v)
+	})
+}
+
+// UpdateTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchUsageMetric() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchUsageMetric()
+	})
+}
+
+// ClearTemporaryDispatchUsageMetric clears the value of the "temporary_dispatch_usage_metric" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchUsageMetric() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchUsageMetric()
 	})
 }
 

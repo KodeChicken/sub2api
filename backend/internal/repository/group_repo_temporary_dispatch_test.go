@@ -35,13 +35,14 @@ func TestCreateTemporaryDispatchRequiresWholeBatchBeforeInstallingOverlays(t *te
 	mock.ExpectQuery(regexp.QuoteMeta("WITH requested AS (")).
 		WithArgs(
 			"td_atomic", int64(42), service.TemporaryDispatchModeHybrid, service.TemporaryDispatchQuotaWindow5h,
-			baseline, target, current, resetAt, expiresAt, now, `{7,8}`, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			baseline, target, current, resetAt, expiresAt, now, `{7,8}`, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), service.TemporaryDispatchUsageQuotaPercent,
 		).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(7)).AddRow(int64(8)))
 
 	err := repo.CreateTemporaryDispatch(context.Background(), service.TemporaryDispatchCreateSpec{
 		DispatchID: "td_atomic", GroupIDs: []int64{7, 8}, AccountID: 42,
 		Mode: service.TemporaryDispatchModeHybrid, QuotaWindow: service.TemporaryDispatchQuotaWindow5h,
+		UsageMetric:     service.TemporaryDispatchUsageQuotaPercent,
 		BaselinePercent: &baseline, TargetPercent: &target, CurrentPercent: &current,
 		QuotaResetAt: &resetAt, StartedAt: now, ExpiresAt: expiresAt,
 	})
@@ -54,7 +55,7 @@ func TestCreateTemporaryDispatchRejectsPartialBatchResult(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 
 	mock.ExpectQuery(regexp.QuoteMeta("WITH requested AS (")).
-		WithArgs("td_conflict", int64(42), service.TemporaryDispatchModeTime, nil, nil, nil, nil, nil, now.Add(time.Hour), now, `{7,8}`, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs("td_conflict", int64(42), service.TemporaryDispatchModeTime, nil, nil, nil, nil, nil, now.Add(time.Hour), now, `{7,8}`, sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), nil).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(7)))
 
 	err := repo.CreateTemporaryDispatch(context.Background(), service.TemporaryDispatchCreateSpec{
@@ -63,6 +64,57 @@ func TestCreateTemporaryDispatchRejectsPartialBatchResult(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, service.ErrTemporaryDispatchConflict)
+}
+
+func TestObserveTemporaryDispatchCostsReturnsGroupsWhoseLastTargetCompleted(t *testing.T) {
+	repo, mock := newTemporaryDispatchRepoTest(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("WITH candidates AS MATERIALIZED (")).
+		WithArgs(now, 200).
+		WillReturnRows(sqlmock.NewRows([]string{"dispatch_id"}).AddRow("td_cost"))
+	mock.ExpectQuery(regexp.QuoteMeta("WITH matched AS MATERIALIZED (")).
+		WithArgs(now, `{"td_cost"}`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(7)).AddRow(int64(8)))
+	mock.ExpectCommit()
+
+	ids, err := repo.ObserveTemporaryDispatchCosts(context.Background(), now, 0)
+
+	require.NoError(t, err)
+	require.Equal(t, []int64{7, 8}, ids)
+}
+
+func TestAdjustTemporaryDispatchAppendsQuotaTargetForEverySharedGroup(t *testing.T) {
+	repo, mock := newTemporaryDispatchRepoTest(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	expiresAt := now.Add(time.Hour)
+	resetAt := now.Add(4 * time.Hour)
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT t.dispatch_id, t.mode")).
+		WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"dispatch_id", "mode"}).AddRow("td_shared", service.TemporaryDispatchModeHybrid))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT usage_metric, target_percent, expires_at, quota_reset_at")).
+		WithArgs("td_shared", int64(42), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"usage_metric", "target_percent", "expires_at", "quota_reset_at"}).
+			AddRow(service.TemporaryDispatchUsageQuotaPercent, 65.0, expiresAt, resetAt))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE group_temporary_dispatch_accounts")).
+		WithArgs("td_shared", int64(42), 75.0, expiresAt, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("WITH first_member AS (")).
+		WithArgs("td_shared").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery(regexp.QuoteMeta("WITH first_member AS (")).
+		WithArgs("td_shared").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(7)).AddRow(int64(8)))
+	mock.ExpectCommit()
+
+	ids, err := repo.AdjustTemporaryDispatch(context.Background(), service.AdjustTemporaryDispatchInput{
+		GroupID:  7,
+		Accounts: []service.TemporaryDispatchAdjustment{{AccountID: 42, AdditionalUsage: 10}},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []int64{7, 8}, ids)
 }
 
 func TestTemporaryDispatchSQLGuardsCleanupByDispatchIdentity(t *testing.T) {

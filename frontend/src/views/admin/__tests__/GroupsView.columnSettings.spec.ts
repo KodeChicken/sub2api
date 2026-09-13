@@ -12,6 +12,8 @@ const {
   getCapacitySummary,
   getLiveCapability,
   getTemporaryDispatchQuotaPreview,
+  getTemporaryDispatch,
+  adjustTemporaryDispatch,
   startTemporaryDispatch,
   stopTemporaryDispatch,
   listAccounts,
@@ -28,6 +30,8 @@ const {
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
   getTemporaryDispatchQuotaPreview: vi.fn(),
+  getTemporaryDispatch: vi.fn(),
+  adjustTemporaryDispatch: vi.fn(),
   startTemporaryDispatch: vi.fn(),
   stopTemporaryDispatch: vi.fn(),
   listAccounts: vi.fn(),
@@ -53,6 +57,9 @@ const messages: Record<string, string> = {
   'admin.groups.columns.status': 'Status',
   'admin.groups.columns.actions': 'Actions',
   'admin.groups.temporaryDispatch.action': 'Temporary account',
+  'admin.groups.temporaryDispatch.adjustAction': 'Adjust temporary dispatch',
+  'admin.groups.temporaryDispatch.adjustSubmit': 'Apply adjustment',
+  'admin.groups.temporaryDispatch.adjusted': 'Temporary dispatch adjusted',
   'admin.groups.temporaryDispatch.start': 'Start takeover',
   'admin.groups.temporaryDispatch.started': 'Temporary dispatch started',
   'admin.groups.temporaryDispatch.modeHybrid': 'Quota or time',
@@ -71,6 +78,8 @@ vi.mock('@/api/admin', () => ({
       getCapacitySummary,
       getLiveCapability,
       getTemporaryDispatchQuotaPreview,
+      getTemporaryDispatch,
+      adjustTemporaryDispatch,
       startTemporaryDispatch,
       stopTemporaryDispatch,
       create: vi.fn(),
@@ -259,6 +268,8 @@ describe('admin GroupsView column settings', () => {
     getCapacitySummary.mockReset()
     getLiveCapability.mockReset()
     getTemporaryDispatchQuotaPreview.mockReset()
+    getTemporaryDispatch.mockReset()
+    adjustTemporaryDispatch.mockReset()
     startTemporaryDispatch.mockReset()
     stopTemporaryDispatch.mockReset()
     listAccounts.mockReset()
@@ -413,6 +424,94 @@ describe('admin GroupsView column settings', () => {
       }],
       mode: 'hybrid',
     })
+  })
+
+  it('keeps an OpenAI API key upstream selectable and submits an account-cost target', async () => {
+    listGroups.mockResolvedValue({
+      items: [createGroup({ name: 'Core OpenAI', platform: 'openai' })],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+    listAccounts.mockResolvedValue({
+      items: [{ id: 42, name: '0.04x upstream', type: 'apikey', rate_multiplier: 0.04 }],
+      total: 1,
+      page: 1,
+      page_size: 30,
+      pages: 1,
+    })
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-test="select-first"]').trigger('click')
+    await wrapper.findAll('button').find((item) => item.text().includes('Temporary account'))!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((item) => item.text().includes('0.04x upstream'))!.trigger('click')
+    await flushPromises()
+    await wrapper.findAll('button').find((item) => item.text().includes('Start takeover'))!.trigger('click')
+    await flushPromises()
+
+    expect(startTemporaryDispatch).toHaveBeenCalledWith({
+      group_ids: [1],
+      accounts: [{
+        account_id: 42,
+        duration_minutes: 120,
+        quota_window: '5h',
+        target_delta_percent: undefined,
+        target_cost: 200,
+      }],
+      mode: 'hybrid',
+    })
+    expect(getTemporaryDispatchQuotaPreview).not.toHaveBeenCalled()
+  })
+
+  it('appends usage to an existing shared temporary dispatch', async () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString()
+    listGroups.mockResolvedValue({
+      items: [createGroup({
+        temporary_dispatch_id: 'td_shared',
+        temporary_dispatch_account_id: 42,
+        temporary_dispatch_account_ids: [42],
+        temporary_dispatch_expires_at: future,
+        temporary_dispatch_mode: 'hybrid',
+      })],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+    getTemporaryDispatch.mockResolvedValue({
+      dispatch_id: 'td_shared',
+      group_ids: [1, 2],
+      account_id: 42,
+      mode: 'hybrid',
+      started_at: new Date().toISOString(),
+      expires_at: future,
+      accounts: [{
+        account_id: 42,
+        account_name: 'Drain OAuth',
+        usage_metric: 'quota_percent',
+        current_percent: 55,
+        target_percent: 65,
+        expires_at: future,
+      }],
+    })
+    adjustTemporaryDispatch.mockResolvedValue({ dispatch_id: 'td_shared' })
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-test="select-first"]').trigger('click')
+    await wrapper.findAll('button').find((item) => item.text().includes('Adjust temporary dispatch'))!.trigger('click')
+    await flushPromises()
+    const inputs = wrapper.findAll('input[type="number"]')
+    await inputs[0].setValue(10)
+    await wrapper.findAll('button').find((item) => item.text().includes('Apply adjustment'))!.trigger('click')
+    await flushPromises()
+
+    expect(adjustTemporaryDispatch).toHaveBeenCalledWith({
+      group_id: 1,
+      accounts: [{ account_id: 42, additional_usage: 10, extend_duration_minutes: 0 }],
+    })
+    expect(showSuccess).toHaveBeenCalledWith('Temporary dispatch adjusted')
   })
 
   it('selects multiple temporary accounts with independent durations', async () => {

@@ -1243,8 +1243,12 @@ func init() {
 	groupDescTemporaryDispatchMode := groupFields[70].Descriptor()
 	// group.TemporaryDispatchModeValidator is a validator for the "temporary_dispatch_mode" field. It is called by the builders before save.
 	group.TemporaryDispatchModeValidator = groupDescTemporaryDispatchMode.Validators[0].(func(string) error)
+	// groupDescTemporaryDispatchUsageMetric is the schema descriptor for temporary_dispatch_usage_metric field.
+	groupDescTemporaryDispatchUsageMetric := groupFields[71].Descriptor()
+	// group.TemporaryDispatchUsageMetricValidator is a validator for the "temporary_dispatch_usage_metric" field. It is called by the builders before save.
+	group.TemporaryDispatchUsageMetricValidator = groupDescTemporaryDispatchUsageMetric.Validators[0].(func(string) error)
 	// groupDescTemporaryDispatchQuotaWindow is the schema descriptor for temporary_dispatch_quota_window field.
-	groupDescTemporaryDispatchQuotaWindow := groupFields[71].Descriptor()
+	groupDescTemporaryDispatchQuotaWindow := groupFields[72].Descriptor()
 	// group.TemporaryDispatchQuotaWindowValidator is a validator for the "temporary_dispatch_quota_window" field. It is called by the builders before save.
 	group.TemporaryDispatchQuotaWindowValidator = groupDescTemporaryDispatchQuotaWindow.Validators[0].(func(string) error)
 	idempotencyrecordMixin := schema.IdempotencyRecord{}.Mixin()

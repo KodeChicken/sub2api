@@ -584,6 +584,11 @@ type AccountSelectionResult struct {
 	// 局部 ctx 上，handler 必须经 ContextWithSelectionProfitGate 重放后才能在
 	// 调度栈之外做抢槽后终检与准入后粘性绑定。
 	profitGate *openAIProfitControlGate
+	// temporaryDispatch marks selections made from an active temporary target
+	// pool. These internal fields let the public scheduler perform a concurrency-
+	// only spillover pass without changing API responses or ending the rule.
+	temporaryDispatch           bool
+	temporaryDispatchAccountIDs []int64
 }
 
 // ProfitGateActive 报告本次选号是否处于利润门之下。

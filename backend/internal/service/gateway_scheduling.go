@@ -103,6 +103,41 @@ func (s *GatewayService) SelectAccountForModelWithExclusions(ctx context.Context
 // metadataUserID: 用于客户端亲和调度，从中提取客户端 ID
 // sub2apiUserID: 系统用户 ID，用于二维亲和调度
 func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, metadataUserID string, sub2apiUserID int64) (*AccountSelectionResult, error) {
+	selection, err := s.selectAccountWithLoadAwarenessOnce(ctx, groupID, sessionHash, requestedModel, excludedIDs, metadataUserID, sub2apiUserID)
+	targetIDs, overflow := temporaryDispatchOverflow(selection)
+	if err != nil || !overflow {
+		return selection, err
+	}
+	temporaryExcluded := mergeTemporaryDispatchExclusions(excludedIDs, nil)
+	for selection != nil && selection.WaitPlan != nil {
+		temporaryExcluded[selection.WaitPlan.AccountID] = struct{}{}
+		if allTemporaryDispatchTargetsExcluded(targetIDs, temporaryExcluded) {
+			break
+		}
+		next, nextErr := s.selectAccountWithLoadAwarenessOnce(ctx, groupID, sessionHash, requestedModel, temporaryExcluded, metadataUserID, sub2apiUserID)
+		if nextErr != nil || next == nil {
+			break
+		}
+		if _, stillOverflow := temporaryDispatchOverflow(next); !stillOverflow {
+			return next, nil
+		}
+		selection = next
+	}
+
+	// A wait plan from the temporary overlay means its usable candidates are
+	// concurrency-full. Exclude every temporary target from the permanent-pool
+	// pass so a target that is also permanently bound cannot be selected again.
+	fallbackExcluded := mergeTemporaryDispatchExclusions(excludedIDs, targetIDs)
+	fallback, fallbackErr := s.selectAccountWithLoadAwarenessOnce(withTemporaryDispatchBypass(ctx), groupID, sessionHash, requestedModel, fallbackExcluded, metadataUserID, sub2apiUserID)
+	if fallbackErr == nil && fallback != nil {
+		return fallback, nil
+	}
+	// If the original pool has no distinct eligible account, preserve the
+	// temporary target's bounded wait plan instead of turning a burst into a 503.
+	return selection, nil
+}
+
+func (s *GatewayService) selectAccountWithLoadAwarenessOnce(ctx context.Context, groupID *int64, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, metadataUserID string, sub2apiUserID int64) (*AccountSelectionResult, error) {
 	// 调试日志：记录调度入口参数
 	excludedIDsList := make([]int64, 0, len(excludedIDs))
 	for id := range excludedIDs {
@@ -1618,12 +1653,12 @@ func (s *GatewayService) newSelectionResult(ctx context.Context, account *Accoun
 	if err != nil {
 		return nil, err
 	}
-	return attachSelectionProfitGate(ctx, &AccountSelectionResult{
+	return markTemporaryDispatchSelection(ctx, attachSelectionProfitGate(ctx, &AccountSelectionResult{
 		Account:     hydrated,
 		Acquired:    acquired,
 		ReleaseFunc: release,
 		WaitPlan:    waitPlan,
-	}), nil
+	})), nil
 }
 
 // filterByMinPriority 过滤出优先级最小的账号集合

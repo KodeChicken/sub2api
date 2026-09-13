@@ -168,13 +168,15 @@ type Group struct {
 	TemporaryDispatchExpiresAt *time.Time `json:"temporary_dispatch_expires_at,omitempty"`
 	// 临时调度结束模式：time、usage、hybrid
 	TemporaryDispatchMode *string `json:"temporary_dispatch_mode,omitempty"`
+	// 临时调度用量口径：quota_percent 或 account_cost
+	TemporaryDispatchUsageMetric *string `json:"temporary_dispatch_usage_metric,omitempty"`
 	// 额度结束窗口：5h 或 7d
 	TemporaryDispatchQuotaWindow *string `json:"temporary_dispatch_quota_window,omitempty"`
-	// 额度模式启动时所选窗口的账号总用量
+	// 用量模式启动时的基线值；百分比或账号成本由 usage_metric 决定
 	TemporaryDispatchBaselinePercent *float64 `json:"temporary_dispatch_baseline_percent,omitempty"`
-	// 额度模式所选窗口的账号总用量结束目标
+	// 用量模式结束目标；百分比或账号成本由 usage_metric 决定
 	TemporaryDispatchTargetPercent *float64 `json:"temporary_dispatch_target_percent,omitempty"`
-	// 最近一次观测到的所选窗口账号总用量
+	// 最近一次观测值；百分比或账号成本由 usage_metric 决定
 	TemporaryDispatchCurrentPercent *float64 `json:"temporary_dispatch_current_percent,omitempty"`
 	// 额度模式启动时所选窗口的重置时间
 	TemporaryDispatchQuotaResetAt *time.Time `json:"temporary_dispatch_quota_reset_at,omitempty"`
@@ -292,7 +294,7 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullFloat64)
 		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit, group.FieldTemporaryDispatchAccountID:
 			values[i] = new(sql.NullInt64)
-		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort, group.FieldMaxReasoningEffortOverLimit, group.FieldTemporaryDispatchID, group.FieldTemporaryDispatchMode, group.FieldTemporaryDispatchQuotaWindow:
+		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort, group.FieldMaxReasoningEffortOverLimit, group.FieldTemporaryDispatchID, group.FieldTemporaryDispatchMode, group.FieldTemporaryDispatchUsageMetric, group.FieldTemporaryDispatchQuotaWindow:
 			values[i] = new(sql.NullString)
 		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt, group.FieldTemporaryDispatchStartedAt, group.FieldTemporaryDispatchExpiresAt, group.FieldTemporaryDispatchQuotaResetAt:
 			values[i] = new(sql.NullTime)
@@ -805,6 +807,13 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 				_m.TemporaryDispatchMode = new(string)
 				*_m.TemporaryDispatchMode = value.String
 			}
+		case group.FieldTemporaryDispatchUsageMetric:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_usage_metric", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchUsageMetric = new(string)
+				*_m.TemporaryDispatchUsageMetric = value.String
+			}
 		case group.FieldTemporaryDispatchQuotaWindow:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field temporary_dispatch_quota_window", values[i])
@@ -1183,6 +1192,11 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	if v := _m.TemporaryDispatchMode; v != nil {
 		builder.WriteString("temporary_dispatch_mode=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchUsageMetric; v != nil {
+		builder.WriteString("temporary_dispatch_usage_metric=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")

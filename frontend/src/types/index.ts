@@ -657,10 +657,12 @@ export interface AdminGroup extends Group {
   // Expiring scheduler overlay; original account bindings are untouched.
   temporary_dispatch_account_id?: number
   temporary_dispatch_account_ids?: number[]
+  temporary_dispatch_account_deadlines?: Record<string, string>
   temporary_dispatch_id?: string
   temporary_dispatch_started_at?: string
   temporary_dispatch_expires_at?: string
   temporary_dispatch_mode?: TemporaryDispatchMode
+  temporary_dispatch_usage_metric?: TemporaryDispatchUsageMetric
   temporary_dispatch_quota_window?: TemporaryDispatchQuotaWindow
   temporary_dispatch_baseline_percent?: number
   temporary_dispatch_target_percent?: number
@@ -677,6 +679,7 @@ export interface TemporaryDispatchResult {
   account_id: number
   accounts: TemporaryDispatchAccountResult[]
   mode: TemporaryDispatchMode
+  usage_metric?: TemporaryDispatchUsageMetric
   quota_window?: TemporaryDispatchQuotaWindow
   baseline_percent?: number
   target_percent?: number
@@ -688,7 +691,10 @@ export interface TemporaryDispatchResult {
 
 export interface TemporaryDispatchAccountResult {
   account_id: number
+  account_name?: string
+  account_type?: AccountType
   duration_minutes?: number
+  usage_metric?: TemporaryDispatchUsageMetric
   quota_window?: TemporaryDispatchQuotaWindow
   baseline_percent?: number
   target_percent?: number
@@ -699,6 +705,7 @@ export interface TemporaryDispatchAccountResult {
 
 export type TemporaryDispatchMode = 'time' | 'usage' | 'hybrid'
 export type TemporaryDispatchQuotaWindow = '5h' | '7d'
+export type TemporaryDispatchUsageMetric = 'quota_percent' | 'account_cost'
 
 export interface StartTemporaryDispatchInput {
   group_ids: number[]
@@ -711,6 +718,18 @@ export interface TemporaryDispatchAccountInput {
   duration_minutes?: number
   quota_window?: TemporaryDispatchQuotaWindow
   target_delta_percent?: number
+  target_cost?: number
+}
+
+export interface AdjustTemporaryDispatchInput {
+  group_id: number
+  accounts: TemporaryDispatchAdjustment[]
+}
+
+export interface TemporaryDispatchAdjustment {
+  account_id: number
+  additional_usage?: number
+  extend_duration_minutes?: number
 }
 
 export interface TemporaryDispatchQuotaPreview {

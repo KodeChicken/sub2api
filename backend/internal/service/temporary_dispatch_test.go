@@ -139,6 +139,143 @@ func TestOpenAITemporaryDispatchSelectsTargetOutsideOriginalGroup(t *testing.T) 
 	require.Equal(t, target.ID, selected.ID)
 }
 
+func TestGatewayTemporaryDispatchConcurrencyOverflowUsesOriginalGroup(t *testing.T) {
+	expires := time.Now().Add(time.Hour)
+	target := Account{ID: 99, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Concurrency: 1}
+	normal := Account{ID: 1, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Concurrency: 1, GroupIDs: []int64{7}}
+	repo := &mockAccountRepoForPlatform{
+		accounts: []Account{normal, target},
+		accountsByID: map[int64]*Account{
+			normal.ID: &normal, target.ID: &target,
+		},
+	}
+	group := temporaryDispatchTestGroup(target.ID, expires)
+	ctx := context.WithValue(context.Background(), ctxkey.Group, group)
+	cache := &mockConcurrencyCache{acquireResults: map[int64]bool{target.ID: false, normal.ID: true}}
+	cfg := testConfig()
+	cfg.Gateway.Scheduling.LoadBatchEnabled = true
+	svc := &GatewayService{
+		accountRepo: repo, groupRepo: &mockGroupRepoForGateway{groups: map[int64]*Group{7: group}},
+		cfg: cfg, concurrencyService: NewConcurrencyService(cache),
+	}
+
+	selection, err := svc.SelectAccountWithLoadAwareness(ctx, temporaryDispatchInt64Ptr(7), "", "", nil, "", 0)
+
+	require.NoError(t, err)
+	require.True(t, selection.Acquired)
+	require.Equal(t, normal.ID, selection.Account.ID)
+	require.Nil(t, selection.WaitPlan)
+	require.True(t, group.HasActiveTemporaryDispatch(time.Now()), "overflow must not end the dispatch")
+}
+
+func TestGatewayTemporaryDispatchPoolUsesFreeTargetBeforeOverflow(t *testing.T) {
+	expires := time.Now().Add(time.Hour)
+	full := Account{ID: 98, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Concurrency: 1}
+	free := Account{ID: 99, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Concurrency: 1}
+	normal := Account{ID: 1, Platform: PlatformAnthropic, Status: StatusActive, Schedulable: true, Concurrency: 1, GroupIDs: []int64{7}}
+	repo := &mockAccountRepoForPlatform{
+		accounts: []Account{normal, full, free},
+		accountsByID: map[int64]*Account{
+			normal.ID: &normal, full.ID: &full, free.ID: &free,
+		},
+	}
+	group := temporaryDispatchTestGroup(full.ID, expires)
+	group.TemporaryDispatchAccountIDs = []int64{full.ID, free.ID}
+	ctx := context.WithValue(context.Background(), ctxkey.Group, group)
+	cache := &mockConcurrencyCache{
+		acquireResults: map[int64]bool{full.ID: false, free.ID: true, normal.ID: true},
+		loadMap: map[int64]*AccountLoadInfo{
+			full.ID: {AccountID: full.ID, CurrentConcurrency: 1, LoadRate: 100},
+			free.ID: {AccountID: free.ID, CurrentConcurrency: 0, LoadRate: 0},
+		},
+	}
+	stickyCache := &mockGatewayCacheForPlatform{sessionBindings: map[string]int64{"temporary-sticky": full.ID}}
+	cfg := testConfig()
+	cfg.Gateway.Scheduling.LoadBatchEnabled = true
+	svc := &GatewayService{
+		accountRepo: repo, groupRepo: &mockGroupRepoForGateway{groups: map[int64]*Group{7: group}},
+		cache: stickyCache, cfg: cfg, concurrencyService: NewConcurrencyService(cache),
+	}
+
+	selection, err := svc.SelectAccountWithLoadAwareness(ctx, temporaryDispatchInt64Ptr(7), "temporary-sticky", "", nil, "", 0)
+
+	require.NoError(t, err)
+	require.True(t, selection.Acquired)
+	require.Equal(t, free.ID, selection.Account.ID)
+}
+
+func TestOpenAITemporaryDispatchConcurrencyOverflowUsesOriginalGroup(t *testing.T) {
+	expires := time.Now().Add(time.Hour)
+	target := Account{ID: 99, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1}
+	normal := Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, GroupIDs: []int64{7}}
+	repo := &mockAccountRepoForPlatform{
+		accounts: []Account{normal, target},
+		accountsByID: map[int64]*Account{
+			normal.ID: &normal, target.ID: &target,
+		},
+	}
+	group := temporaryDispatchTestGroup(target.ID, expires)
+	group.Platform = PlatformOpenAI
+	ctx := context.WithValue(context.Background(), ctxkey.Group, group)
+	svc := &OpenAIGatewayService{
+		accountRepo: repo, cfg: testConfig(),
+		concurrencyService: NewConcurrencyService(stubConcurrencyCache{acquireResults: map[int64]bool{target.ID: false, normal.ID: true}}),
+	}
+
+	selection, err := svc.SelectAccountWithLoadAwareness(ctx, temporaryDispatchInt64Ptr(7), "", "", nil)
+
+	require.NoError(t, err)
+	require.True(t, selection.Acquired)
+	require.Equal(t, normal.ID, selection.Account.ID)
+}
+
+func TestOpenAIAdvancedTemporaryDispatchConcurrencyOverflowUsesOriginalGroup(t *testing.T) {
+	expires := time.Now().Add(time.Hour)
+	target := Account{ID: 99, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1}
+	normal := Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, GroupIDs: []int64{7}}
+	repo := &mockAccountRepoForPlatform{
+		accounts: []Account{normal, target},
+		accountsByID: map[int64]*Account{
+			normal.ID: &normal, target.ID: &target,
+		},
+	}
+	group := temporaryDispatchTestGroup(target.ID, expires)
+	group.Platform = PlatformOpenAI
+	ctx := context.WithValue(context.Background(), ctxkey.Group, group)
+	svc := &OpenAIGatewayService{
+		accountRepo: repo, cfg: testConfig(),
+		concurrencyService: NewConcurrencyService(stubConcurrencyCache{acquireResults: map[int64]bool{target.ID: false, normal.ID: true}}),
+	}
+
+	selection, _, err := svc.SelectAccountWithScheduler(ctx, temporaryDispatchInt64Ptr(7), "", "", "", nil, OpenAIUpstreamTransportAny, false)
+
+	require.NoError(t, err)
+	require.True(t, selection.Acquired)
+	require.Equal(t, normal.ID, selection.Account.ID)
+}
+
+func TestTemporaryDispatchConcurrencyOverflowKeepsWaitWhenOriginalPoolHasNoDistinctAccount(t *testing.T) {
+	expires := time.Now().Add(time.Hour)
+	target := Account{ID: 99, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, GroupIDs: []int64{7}}
+	repo := &mockAccountRepoForPlatform{
+		accounts: []Account{target}, accountsByID: map[int64]*Account{target.ID: &target},
+	}
+	group := temporaryDispatchTestGroup(target.ID, expires)
+	group.Platform = PlatformOpenAI
+	ctx := context.WithValue(context.Background(), ctxkey.Group, group)
+	svc := &OpenAIGatewayService{
+		accountRepo: repo, cfg: testConfig(),
+		concurrencyService: NewConcurrencyService(stubConcurrencyCache{acquireResults: map[int64]bool{target.ID: false}}),
+	}
+
+	selection, err := svc.SelectAccountWithLoadAwareness(ctx, temporaryDispatchInt64Ptr(7), "", "", nil)
+
+	require.NoError(t, err)
+	require.False(t, selection.Acquired)
+	require.NotNil(t, selection.WaitPlan)
+	require.Equal(t, target.ID, selection.WaitPlan.AccountID)
+}
+
 func temporaryDispatchInt64Ptr(value int64) *int64 { return &value }
 
 type temporaryDispatchGroupRepoStub struct {
@@ -280,6 +417,38 @@ func TestAdminTemporaryDispatchCreatesIndependentQuotaTargets(t *testing.T) {
 	require.Equal(t, TemporaryDispatchQuotaWindow7d, result.Accounts[1].QuotaWindow)
 	require.InDelta(t, 40, *result.Accounts[1].BaselinePercent, 0.001)
 	require.InDelta(t, 65, *result.Accounts[1].TargetPercent, 0.001)
+}
+
+func TestAdminTemporaryDispatchCreatesAccountCostTargetForAPIKeyUpstream(t *testing.T) {
+	rateMultiplier := 0.04
+	groupRepo := &temporaryDispatchGroupRepoStub{groups: map[int64]*Group{
+		7: {ID: 7, Platform: PlatformOpenAI, Status: StatusActive},
+	}}
+	account := &Account{
+		ID: 42, Name: "0.04x upstream", Platform: PlatformOpenAI, Type: AccountTypeAPIKey,
+		Status: StatusActive, Schedulable: true, RateMultiplier: &rateMultiplier,
+	}
+	accountRepo := &temporaryDispatchAccountRepoStub{accounts: map[int64]*Account{account.ID: account}}
+	store := &temporaryDispatchStoreStub{}
+	runtime := NewTemporaryDispatchRuntime(store, nil, nil)
+	svc := &adminServiceImpl{cfg: testConfig(), groupRepo: groupRepo, accountRepo: accountRepo, temporaryDispatchRuntime: runtime}
+
+	result, err := svc.StartTemporaryDispatch(context.Background(), StartTemporaryDispatchInput{
+		GroupIDs: []int64{7}, Mode: TemporaryDispatchModeUsage,
+		Accounts: []TemporaryDispatchAccountInput{{AccountID: account.ID, TargetCost: 200}},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, store.created)
+	require.Len(t, store.created.Accounts, 1)
+	member := store.created.Accounts[0]
+	require.Equal(t, TemporaryDispatchUsageAccountCost, member.UsageMetric)
+	require.Equal(t, TemporaryDispatchQuotaWindow5h, member.QuotaWindow)
+	require.InDelta(t, 0, *member.BaselinePercent, 0.000001)
+	require.InDelta(t, 200, *member.TargetPercent, 0.000001)
+	require.InDelta(t, 0, *member.CurrentPercent, 0.000001)
+	require.WithinDuration(t, store.created.StartedAt.Add(5*time.Hour), member.ExpiresAt, time.Second)
+	require.Equal(t, TemporaryDispatchUsageAccountCost, result.Accounts[0].UsageMetric)
 }
 
 func TestAdminTemporaryDispatchRejectsDuplicatePoolAccounts(t *testing.T) {

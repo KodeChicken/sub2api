@@ -22187,6 +22187,7 @@ type GroupMutation struct {
 	temporary_dispatch_started_at           *time.Time
 	temporary_dispatch_expires_at           *time.Time
 	temporary_dispatch_mode                 *string
+	temporary_dispatch_usage_metric         *string
 	temporary_dispatch_quota_window         *string
 	temporary_dispatch_baseline_percent     *float64
 	addtemporary_dispatch_baseline_percent  *float64
@@ -25970,6 +25971,55 @@ func (m *GroupMutation) ResetTemporaryDispatchMode() {
 	delete(m.clearedFields, group.FieldTemporaryDispatchMode)
 }
 
+// SetTemporaryDispatchUsageMetric sets the "temporary_dispatch_usage_metric" field.
+func (m *GroupMutation) SetTemporaryDispatchUsageMetric(s string) {
+	m.temporary_dispatch_usage_metric = &s
+}
+
+// TemporaryDispatchUsageMetric returns the value of the "temporary_dispatch_usage_metric" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchUsageMetric() (r string, exists bool) {
+	v := m.temporary_dispatch_usage_metric
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchUsageMetric returns the old "temporary_dispatch_usage_metric" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchUsageMetric(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchUsageMetric is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchUsageMetric requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchUsageMetric: %w", err)
+	}
+	return oldValue.TemporaryDispatchUsageMetric, nil
+}
+
+// ClearTemporaryDispatchUsageMetric clears the value of the "temporary_dispatch_usage_metric" field.
+func (m *GroupMutation) ClearTemporaryDispatchUsageMetric() {
+	m.temporary_dispatch_usage_metric = nil
+	m.clearedFields[group.FieldTemporaryDispatchUsageMetric] = struct{}{}
+}
+
+// TemporaryDispatchUsageMetricCleared returns if the "temporary_dispatch_usage_metric" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchUsageMetricCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchUsageMetric]
+	return ok
+}
+
+// ResetTemporaryDispatchUsageMetric resets all changes to the "temporary_dispatch_usage_metric" field.
+func (m *GroupMutation) ResetTemporaryDispatchUsageMetric() {
+	m.temporary_dispatch_usage_metric = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchUsageMetric)
+}
+
 // SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
 func (m *GroupMutation) SetTemporaryDispatchQuotaWindow(s string) {
 	m.temporary_dispatch_quota_window = &s
@@ -26636,7 +26686,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 79)
+	fields := make([]string, 0, 80)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -26859,6 +26909,9 @@ func (m *GroupMutation) Fields() []string {
 	if m.temporary_dispatch_mode != nil {
 		fields = append(fields, group.FieldTemporaryDispatchMode)
 	}
+	if m.temporary_dispatch_usage_metric != nil {
+		fields = append(fields, group.FieldTemporaryDispatchUsageMetric)
+	}
 	if m.temporary_dispatch_quota_window != nil {
 		fields = append(fields, group.FieldTemporaryDispatchQuotaWindow)
 	}
@@ -27030,6 +27083,8 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.TemporaryDispatchExpiresAt()
 	case group.FieldTemporaryDispatchMode:
 		return m.TemporaryDispatchMode()
+	case group.FieldTemporaryDispatchUsageMetric:
+		return m.TemporaryDispatchUsageMetric()
 	case group.FieldTemporaryDispatchQuotaWindow:
 		return m.TemporaryDispatchQuotaWindow()
 	case group.FieldTemporaryDispatchBaselinePercent:
@@ -27197,6 +27252,8 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldTemporaryDispatchExpiresAt(ctx)
 	case group.FieldTemporaryDispatchMode:
 		return m.OldTemporaryDispatchMode(ctx)
+	case group.FieldTemporaryDispatchUsageMetric:
+		return m.OldTemporaryDispatchUsageMetric(ctx)
 	case group.FieldTemporaryDispatchQuotaWindow:
 		return m.OldTemporaryDispatchQuotaWindow(ctx)
 	case group.FieldTemporaryDispatchBaselinePercent:
@@ -27734,6 +27791,13 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetTemporaryDispatchMode(v)
 		return nil
+	case group.FieldTemporaryDispatchUsageMetric:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchUsageMetric(v)
+		return nil
 	case group.FieldTemporaryDispatchQuotaWindow:
 		v, ok := value.(string)
 		if !ok {
@@ -28255,6 +28319,9 @@ func (m *GroupMutation) ClearedFields() []string {
 	if m.FieldCleared(group.FieldTemporaryDispatchMode) {
 		fields = append(fields, group.FieldTemporaryDispatchMode)
 	}
+	if m.FieldCleared(group.FieldTemporaryDispatchUsageMetric) {
+		fields = append(fields, group.FieldTemporaryDispatchUsageMetric)
+	}
 	if m.FieldCleared(group.FieldTemporaryDispatchQuotaWindow) {
 		fields = append(fields, group.FieldTemporaryDispatchQuotaWindow)
 	}
@@ -28364,6 +28431,9 @@ func (m *GroupMutation) ClearField(name string) error {
 		return nil
 	case group.FieldTemporaryDispatchMode:
 		m.ClearTemporaryDispatchMode()
+		return nil
+	case group.FieldTemporaryDispatchUsageMetric:
+		m.ClearTemporaryDispatchUsageMetric()
 		return nil
 	case group.FieldTemporaryDispatchQuotaWindow:
 		m.ClearTemporaryDispatchQuotaWindow()
@@ -28609,6 +28679,9 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldTemporaryDispatchMode:
 		m.ResetTemporaryDispatchMode()
+		return nil
+	case group.FieldTemporaryDispatchUsageMetric:
+		m.ResetTemporaryDispatchUsageMetric()
 		return nil
 	case group.FieldTemporaryDispatchQuotaWindow:
 		m.ResetTemporaryDispatchQuotaWindow()

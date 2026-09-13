@@ -1,17 +1,26 @@
 <template>
-  <div v-if="groups && groups.length > 0" class="relative max-w-56">
+  <div v-if="totalCount > 0" class="relative max-w-56">
     <!-- 分组容器：固定最大宽度，最多显示2行 -->
     <div class="flex flex-wrap gap-1 max-h-14 overflow-hidden">
-      <GroupBadge
-        v-for="group in displayGroups"
-        :key="group.id"
-        :name="group.name"
-        :platform="group.platform"
-        :subscription-type="group.subscription_type"
-        :rate-multiplier="group.rate_multiplier"
-        :show-rate="false"
-        class="max-w-24"
-      />
+      <template v-for="entry in displayGroups" :key="`${entry.temporary ? 'temporary' : 'bound'}-${entry.group.id}`">
+        <span
+          v-if="entry.temporary"
+          class="inline-flex max-w-32 items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-700/70 dark:bg-amber-900/25 dark:text-amber-300"
+          :title="t('admin.accounts.temporaryGroupHint')"
+        >
+          <span aria-hidden="true">◷</span>
+          <span class="truncate">{{ t('admin.accounts.temporaryGroupPrefix') }} · {{ entry.group.name }}</span>
+        </span>
+        <GroupBadge
+          v-else
+          :name="entry.group.name"
+          :platform="entry.group.platform"
+          :subscription-type="entry.group.subscription_type"
+          :rate-multiplier="entry.group.rate_multiplier"
+          :show-rate="false"
+          class="max-w-24"
+        />
+      </template>
       <!-- 更多数量徽章 -->
       <button
         v-if="hiddenCount > 0"
@@ -41,7 +50,7 @@
         >
           <div class="mb-2 flex items-center justify-between">
             <span class="text-xs font-medium text-gray-500 dark:text-gray-400">
-              {{ t('admin.accounts.groupCountTotal', { count: groups.length }) }}
+              {{ t('admin.accounts.groupCountTotal', { count: totalCount }) }}
             </span>
             <button
               @click="showPopover = false"
@@ -52,7 +61,21 @@
               </svg>
             </button>
           </div>
-          <div class="flex flex-wrap gap-1.5 max-h-64 overflow-y-auto">
+          <div v-if="normalizedTemporaryGroups.length > 0" class="mb-3">
+            <p class="mb-1.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">{{ t('admin.accounts.temporaryGroups') }}</p>
+            <div class="flex flex-wrap gap-1.5">
+              <span
+                v-for="group in normalizedTemporaryGroups"
+                :key="`temporary-${group.id}`"
+                class="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-700/70 dark:bg-amber-900/25 dark:text-amber-300"
+              >
+                <span aria-hidden="true">◷</span>
+                <span>{{ t('admin.accounts.temporaryGroupPrefix') }} · {{ group.name }}</span>
+              </span>
+            </div>
+          </div>
+          <p v-if="groups && groups.length > 0" class="mb-1.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">{{ t('admin.accounts.boundGroups') }}</p>
+          <div v-if="groups && groups.length > 0" class="flex flex-wrap gap-1.5 max-h-64 overflow-y-auto">
             <GroupBadge
               v-for="group in groups"
               :key="group.id"
@@ -85,10 +108,12 @@ import type { Group } from '@/types'
 
 interface Props {
   groups: Group[] | null | undefined
+  temporaryGroups?: Group[] | null
   maxDisplay?: number
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  temporaryGroups: () => [],
   maxDisplay: 4
 })
 
@@ -98,21 +123,25 @@ const moreButtonRef = ref<HTMLElement | null>(null)
 const popoverRef = ref<HTMLElement | null>(null)
 const showPopover = ref(false)
 
-// 显示的分组（最多显示 maxDisplay 个）
+const normalizedTemporaryGroups = computed(() => props.temporaryGroups ?? [])
+const totalCount = computed(() => (props.groups?.length ?? 0) + normalizedTemporaryGroups.value.length)
+const allGroups = computed(() => [
+  ...normalizedTemporaryGroups.value.map(group => ({ group, temporary: true })),
+  ...(props.groups ?? []).map(group => ({ group, temporary: false }))
+])
+
+// 临时关系优先显示，避免被大量正式分组折叠。
 const displayGroups = computed(() => {
-  if (!props.groups) return []
-  if (props.groups.length <= props.maxDisplay) {
-    return props.groups
+  if (allGroups.value.length <= props.maxDisplay) {
+    return allGroups.value
   }
-  // 留一个位置给 +N 按钮
-  return props.groups.slice(0, props.maxDisplay - 1)
+  return allGroups.value.slice(0, props.maxDisplay - 1)
 })
 
 // 隐藏的数量
 const hiddenCount = computed(() => {
-  if (!props.groups) return 0
-  if (props.groups.length <= props.maxDisplay) return 0
-  return props.groups.length - (props.maxDisplay - 1)
+  if (allGroups.value.length <= props.maxDisplay) return 0
+  return allGroups.value.length - (props.maxDisplay - 1)
 })
 
 // Popover 位置样式

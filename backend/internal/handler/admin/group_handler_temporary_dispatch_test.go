@@ -24,6 +24,25 @@ type temporaryDispatchAdminServiceStub struct {
 	previewAccountID int64
 	previewWindow    string
 	previewCalls     int
+	getGroupID       int64
+	getCalls         int
+	adjustInput      service.AdjustTemporaryDispatchInput
+	adjustCalls      int
+}
+
+func (s *temporaryDispatchAdminServiceStub) GetTemporaryDispatch(_ context.Context, groupID int64) (*service.TemporaryDispatchResult, error) {
+	s.getCalls++
+	s.getGroupID = groupID
+	return &service.TemporaryDispatchResult{
+		DispatchID: "td_handler_test", GroupIDs: []int64{11, 12}, Mode: service.TemporaryDispatchModeHybrid,
+		Accounts: []service.TemporaryDispatchAccountResult{{AccountID: 88, UsageMetric: service.TemporaryDispatchUsageQuotaPercent}},
+	}, nil
+}
+
+func (s *temporaryDispatchAdminServiceStub) AdjustTemporaryDispatch(_ context.Context, input service.AdjustTemporaryDispatchInput) (*service.TemporaryDispatchResult, error) {
+	s.adjustCalls++
+	s.adjustInput = input
+	return &service.TemporaryDispatchResult{DispatchID: "td_handler_test", GroupIDs: []int64{11, 12}}, nil
 }
 
 func (s *temporaryDispatchAdminServiceStub) StartTemporaryDispatch(_ context.Context, input service.StartTemporaryDispatchInput) (*service.TemporaryDispatchResult, error) {
@@ -57,6 +76,8 @@ func setupTemporaryDispatchGroupRouter(svc service.AdminService) *gin.Engine {
 	router := gin.New()
 	handler := NewGroupHandler(svc, nil, nil)
 	router.POST("/api/v1/admin/groups/temporary-dispatch", handler.StartTemporaryDispatch)
+	router.GET("/api/v1/admin/groups/temporary-dispatch", handler.GetTemporaryDispatch)
+	router.PATCH("/api/v1/admin/groups/temporary-dispatch", handler.AdjustTemporaryDispatch)
 	router.POST("/api/v1/admin/groups/temporary-dispatch/stop", handler.StopTemporaryDispatch)
 	router.GET("/api/v1/admin/groups/temporary-dispatch/quota-preview", handler.GetTemporaryDispatchQuotaPreview)
 	return router
@@ -80,6 +101,40 @@ func TestGroupHandlerStartsTemporaryDispatch(t *testing.T) {
 	require.Equal(t, service.TemporaryDispatchQuotaWindow5h, svc.startInput.QuotaWindow)
 	require.InDelta(t, 30, svc.startInput.TargetDeltaPercent, 0.001)
 	require.Contains(t, recorder.Body.String(), `"dispatch_id":"td_handler_test"`)
+}
+
+func TestGroupHandlerStartsTemporaryDispatchWithAccountCost(t *testing.T) {
+	svc := &temporaryDispatchAdminServiceStub{}
+	router := setupTemporaryDispatchGroupRouter(svc)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups/temporary-dispatch", strings.NewReader(`{"group_ids":[11],"account_id":88,"mode":"usage","quota_window":"5h","target_cost":200}`))
+	request.Header.Set("Content-Type", "application/json")
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.InDelta(t, 200, svc.startInput.TargetCost, 0.001)
+}
+
+func TestGroupHandlerGetsAndAdjustsSharedTemporaryDispatch(t *testing.T) {
+	svc := &temporaryDispatchAdminServiceStub{}
+	router := setupTemporaryDispatchGroupRouter(svc)
+
+	getRecorder := httptest.NewRecorder()
+	router.ServeHTTP(getRecorder, httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/temporary-dispatch?group_id=11", nil))
+	require.Equal(t, http.StatusOK, getRecorder.Code)
+	require.Equal(t, int64(11), svc.getGroupID)
+	require.Contains(t, getRecorder.Body.String(), `"dispatch_id":"td_handler_test"`)
+
+	patchRecorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/groups/temporary-dispatch", strings.NewReader(`{"group_id":11,"accounts":[{"account_id":88,"additional_usage":10,"extend_duration_minutes":30}]}`))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(patchRecorder, request)
+
+	require.Equal(t, http.StatusOK, patchRecorder.Code)
+	require.Equal(t, 1, svc.adjustCalls)
+	require.Equal(t, int64(11), svc.adjustInput.GroupID)
+	require.Equal(t, service.TemporaryDispatchAdjustment{AccountID: 88, AdditionalUsage: 10, ExtendDurationMins: 30}, svc.adjustInput.Accounts[0])
 }
 
 func TestGroupHandlerStartsTemporaryDispatchAccountPool(t *testing.T) {

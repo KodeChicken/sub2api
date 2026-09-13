@@ -304,7 +304,11 @@
             />
           </template>
           <template #cell-groups="{ row }">
-            <AccountGroupsCell :groups="accountGroupsForRow(row)" :max-display="4" />
+            <AccountGroupsCell
+              :groups="accountGroupsForRow(row)"
+              :temporary-groups="temporaryGroupsForRow(row)"
+              :max-display="4"
+            />
           </template>
           <template #header-usage="{ column }">
             <div class="flex items-center">
@@ -545,6 +549,20 @@ const accountGroupsForRow = (account: Pick<AccountListItem, 'group_ids'>): Admin
   const groupIDs = account.group_ids ?? []
   if (groupIDs.length === 0) return []
   return groupIDs.map(id => groupsByID.value.get(id)).filter((group): group is AdminGroup => Boolean(group))
+}
+const temporaryGroupsForRow = (account: Pick<AccountListItem, 'id'>): AdminGroup[] => {
+  const now = Date.now()
+  return groups.value.filter(group => {
+    if (!group.temporary_dispatch_expires_at || new Date(group.temporary_dispatch_expires_at).getTime() <= now) return false
+    const ids = group.temporary_dispatch_account_ids?.length
+      ? group.temporary_dispatch_account_ids
+      : group.temporary_dispatch_account_id
+        ? [group.temporary_dispatch_account_id]
+        : []
+    if (!ids.includes(account.id)) return false
+    const accountDeadline = group.temporary_dispatch_account_deadlines?.[String(account.id)]
+    return !accountDeadline || new Date(accountDeadline).getTime() > now
+  })
 }
 const accountTableRef = ref<HTMLElement | null>(null)
 const dataTableRef = ref<InstanceType<typeof DataTable> | null>(null)

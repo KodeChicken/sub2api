@@ -97,6 +97,10 @@ export default {
       schedulableDisabled: 'Scheduling disabled',
       failedToToggleSchedulable: 'Failed to toggle scheduling status',
       groupCountTotal: '{count} groups total',
+      temporaryGroups: 'Temporary dispatch groups',
+      boundGroups: 'Bound groups',
+      temporaryGroupPrefix: 'Temporary',
+      temporaryGroupHint: 'Temporary dispatch relationship; the original account bindings are unchanged',
       platforms: {
         anthropic: 'Anthropic',
         claude: 'Claude',

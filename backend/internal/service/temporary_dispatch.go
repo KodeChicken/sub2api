@@ -9,8 +9,23 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 )
 
+type temporaryDispatchBypassContextKey struct{}
+
+// withTemporaryDispatchBypass disables the temporary overlay for one
+// scheduling pass. It is used only after every temporary target has failed to
+// acquire a concurrency slot, allowing the request to spill back to the
+// group's permanent pool without ending the dispatch.
+func withTemporaryDispatchBypass(ctx context.Context) context.Context {
+	return context.WithValue(ctx, temporaryDispatchBypassContextKey{}, true)
+}
+
+func temporaryDispatchBypassed(ctx context.Context) bool {
+	bypassed, _ := ctx.Value(temporaryDispatchBypassContextKey{}).(bool)
+	return bypassed
+}
+
 func activeTemporaryDispatchGroup(ctx context.Context, groupID *int64) (*Group, bool) {
-	if ctx == nil || groupID == nil || *groupID <= 0 {
+	if ctx == nil || temporaryDispatchBypassed(ctx) || groupID == nil || *groupID <= 0 {
 		return nil, false
 	}
 	group, ok := ctx.Value(ctxkey.Group).(*Group)
@@ -18,6 +33,50 @@ func activeTemporaryDispatchGroup(ctx context.Context, groupID *int64) (*Group, 
 		return nil, false
 	}
 	return group, true
+}
+
+func markTemporaryDispatchSelection(ctx context.Context, result *AccountSelectionResult) *AccountSelectionResult {
+	if result == nil || result.Account == nil || temporaryDispatchBypassed(ctx) {
+		return result
+	}
+	group, ok := ctx.Value(ctxkey.Group).(*Group)
+	if !ok || !IsGroupContextValid(group) || !group.HasActiveTemporaryDispatch(time.Now()) ||
+		!group.IsTemporaryDispatchAccount(result.Account.ID) {
+		return result
+	}
+	result.temporaryDispatch = true
+	result.temporaryDispatchAccountIDs = group.TemporaryDispatchAccountPool()
+	return result
+}
+
+func temporaryDispatchOverflow(selection *AccountSelectionResult) ([]int64, bool) {
+	if selection == nil || !selection.temporaryDispatch || selection.WaitPlan == nil ||
+		selection.WaitPlan.AccountID <= 0 || len(selection.temporaryDispatchAccountIDs) == 0 {
+		return nil, false
+	}
+	return selection.temporaryDispatchAccountIDs, true
+}
+
+func mergeTemporaryDispatchExclusions(excludedIDs map[int64]struct{}, accountIDs []int64) map[int64]struct{} {
+	merged := make(map[int64]struct{}, len(excludedIDs)+len(accountIDs))
+	for accountID := range excludedIDs {
+		merged[accountID] = struct{}{}
+	}
+	for _, accountID := range accountIDs {
+		if accountID > 0 {
+			merged[accountID] = struct{}{}
+		}
+	}
+	return merged
+}
+
+func allTemporaryDispatchTargetsExcluded(accountIDs []int64, excludedIDs map[int64]struct{}) bool {
+	for _, accountID := range accountIDs {
+		if _, excluded := excludedIDs[accountID]; !excluded {
+			return false
+		}
+	}
+	return true
 }
 
 func temporaryDispatchSelectionError(model, reason string) error {

@@ -1114,7 +1114,32 @@ func (s *OpenAIGatewayService) SelectAccountWithLoadAwareness(ctx context.Contex
 	// 分组利润控制：legacy 公共入口同样装门，保证不经
 	// selectAccountWithScheduler 的调用方也无法绕过利润准入。
 	ctx = s.withOpenAIProfitControlGate(ctx, groupID)
-	return s.selectAccountWithLoadAwareness(ctx, groupID, PlatformOpenAI, sessionHash, requestedModel, excludedIDs, false, "", true)
+	selection, err := s.selectAccountWithLoadAwareness(ctx, groupID, PlatformOpenAI, sessionHash, requestedModel, excludedIDs, false, "", true)
+	targetIDs, overflow := temporaryDispatchOverflow(selection)
+	if err != nil || !overflow {
+		return selection, err
+	}
+	temporaryExcluded := mergeTemporaryDispatchExclusions(excludedIDs, nil)
+	for selection != nil && selection.WaitPlan != nil {
+		temporaryExcluded[selection.WaitPlan.AccountID] = struct{}{}
+		if allTemporaryDispatchTargetsExcluded(targetIDs, temporaryExcluded) {
+			break
+		}
+		next, nextErr := s.selectAccountWithLoadAwareness(ctx, groupID, PlatformOpenAI, sessionHash, requestedModel, temporaryExcluded, false, "", true)
+		if nextErr != nil || next == nil {
+			break
+		}
+		if _, stillOverflow := temporaryDispatchOverflow(next); !stillOverflow {
+			return next, nil
+		}
+		selection = next
+	}
+	fallbackExcluded := mergeTemporaryDispatchExclusions(excludedIDs, targetIDs)
+	fallback, fallbackErr := s.selectAccountWithLoadAwareness(withTemporaryDispatchBypass(ctx), groupID, PlatformOpenAI, sessionHash, requestedModel, fallbackExcluded, false, "", true)
+	if fallbackErr == nil && fallback != nil {
+		return fallback, nil
+	}
+	return selection, nil
 }
 
 func (s *OpenAIGatewayService) selectAccountWithLoadAwareness(ctx context.Context, groupID *int64, platform string, sessionHash string, requestedModel string, excludedIDs map[int64]struct{}, requireCompact bool, requiredCapability OpenAIEndpointCapability, useUpstreamTokenCost bool) (*AccountSelectionResult, error) {
@@ -1732,12 +1757,12 @@ func (s *OpenAIGatewayService) newSelectionResult(ctx context.Context, account *
 	if err != nil {
 		return nil, err
 	}
-	return attachSelectionProfitGate(ctx, &AccountSelectionResult{
+	return markTemporaryDispatchSelection(ctx, attachSelectionProfitGate(ctx, &AccountSelectionResult{
 		Account:     hydrated,
 		Acquired:    acquired,
 		ReleaseFunc: release,
 		WaitPlan:    waitPlan,
-	}), nil
+	})), nil
 }
 
 func (s *OpenAIGatewayService) newAcquiredSelectionResult(ctx context.Context, account *Account, release func()) (*AccountSelectionResult, error) {

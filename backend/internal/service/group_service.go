@@ -9,10 +9,14 @@ import (
 )
 
 var (
-	ErrGroupNotFound             = infraerrors.NotFound("GROUP_NOT_FOUND", "group not found")
-	ErrGroupExists               = infraerrors.Conflict("GROUP_EXISTS", "group name already exists")
-	ErrGroupNotEmpty             = infraerrors.Conflict("GROUP_NOT_EMPTY", "group contains accounts")
-	ErrTemporaryDispatchConflict = infraerrors.Conflict("TEMPORARY_DISPATCH_CONFLICT", "one or more groups already have an active temporary dispatch")
+	ErrGroupNotFound                                  = infraerrors.NotFound("GROUP_NOT_FOUND", "group not found")
+	ErrGroupExists                                    = infraerrors.Conflict("GROUP_EXISTS", "group name already exists")
+	ErrGroupNotEmpty                                  = infraerrors.Conflict("GROUP_NOT_EMPTY", "group contains accounts")
+	ErrTemporaryDispatchConflict                      = infraerrors.Conflict("TEMPORARY_DISPATCH_CONFLICT", "one or more groups already have an active temporary dispatch")
+	ErrTemporaryDispatchNotFound                      = infraerrors.NotFound("TEMPORARY_DISPATCH_NOT_FOUND", "active temporary dispatch not found")
+	ErrTemporaryDispatchUsageAdjustmentUnsupported    = infraerrors.BadRequest("TEMPORARY_DISPATCH_USAGE_ADJUSTMENT_UNSUPPORTED", "the selected account does not have an editable usage target")
+	ErrTemporaryDispatchQuotaTargetOverflow           = infraerrors.BadRequest("TEMPORARY_DISPATCH_QUOTA_TARGET_OVERFLOW", "quota percentage target cannot exceed 100%")
+	ErrTemporaryDispatchDurationAdjustmentUnsupported = infraerrors.BadRequest("TEMPORARY_DISPATCH_DURATION_ADJUSTMENT_UNSUPPORTED", "usage-only dispatch does not have an editable duration")
 )
 
 type GroupRepository interface {

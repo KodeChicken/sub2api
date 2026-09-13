@@ -195,22 +195,24 @@ type AdminGroup struct {
 	CodexModelsManifestConfig domain.GroupCodexModelsManifestConfig `json:"codex_models_manifest_config"`
 
 	// 支持的模型系列（仅 antigravity 平台使用）
-	SupportedModelScopes             []string       `json:"supported_model_scopes"`
-	AccountGroups                    []AccountGroup `json:"account_groups,omitempty"`
-	AccountCount                     int64          `json:"account_count,omitempty"`
-	ActiveAccountCount               int64          `json:"active_account_count,omitempty"`
-	RateLimitedAccountCount          int64          `json:"rate_limited_account_count,omitempty"`
-	TemporaryDispatchAccountID       *int64         `json:"temporary_dispatch_account_id,omitempty"`
-	TemporaryDispatchAccountIDs      []int64        `json:"temporary_dispatch_account_ids,omitempty"`
-	TemporaryDispatchID              string         `json:"temporary_dispatch_id,omitempty"`
-	TemporaryDispatchStartedAt       *time.Time     `json:"temporary_dispatch_started_at,omitempty"`
-	TemporaryDispatchExpiresAt       *time.Time     `json:"temporary_dispatch_expires_at,omitempty"`
-	TemporaryDispatchMode            string         `json:"temporary_dispatch_mode,omitempty"`
-	TemporaryDispatchQuotaWindow     string         `json:"temporary_dispatch_quota_window,omitempty"`
-	TemporaryDispatchBaselinePercent *float64       `json:"temporary_dispatch_baseline_percent,omitempty"`
-	TemporaryDispatchTargetPercent   *float64       `json:"temporary_dispatch_target_percent,omitempty"`
-	TemporaryDispatchCurrentPercent  *float64       `json:"temporary_dispatch_current_percent,omitempty"`
-	TemporaryDispatchQuotaResetAt    *time.Time     `json:"temporary_dispatch_quota_reset_at,omitempty"`
+	SupportedModelScopes              []string             `json:"supported_model_scopes"`
+	AccountGroups                     []AccountGroup       `json:"account_groups,omitempty"`
+	AccountCount                      int64                `json:"account_count,omitempty"`
+	ActiveAccountCount                int64                `json:"active_account_count,omitempty"`
+	RateLimitedAccountCount           int64                `json:"rate_limited_account_count,omitempty"`
+	TemporaryDispatchAccountID        *int64               `json:"temporary_dispatch_account_id,omitempty"`
+	TemporaryDispatchAccountIDs       []int64              `json:"temporary_dispatch_account_ids,omitempty"`
+	TemporaryDispatchAccountDeadlines map[string]time.Time `json:"temporary_dispatch_account_deadlines,omitempty"`
+	TemporaryDispatchID               string               `json:"temporary_dispatch_id,omitempty"`
+	TemporaryDispatchStartedAt        *time.Time           `json:"temporary_dispatch_started_at,omitempty"`
+	TemporaryDispatchExpiresAt        *time.Time           `json:"temporary_dispatch_expires_at,omitempty"`
+	TemporaryDispatchMode             string               `json:"temporary_dispatch_mode,omitempty"`
+	TemporaryDispatchUsageMetric      string               `json:"temporary_dispatch_usage_metric,omitempty"`
+	TemporaryDispatchQuotaWindow      string               `json:"temporary_dispatch_quota_window,omitempty"`
+	TemporaryDispatchBaselinePercent  *float64             `json:"temporary_dispatch_baseline_percent,omitempty"`
+	TemporaryDispatchTargetPercent    *float64             `json:"temporary_dispatch_target_percent,omitempty"`
+	TemporaryDispatchCurrentPercent   *float64             `json:"temporary_dispatch_current_percent,omitempty"`
+	TemporaryDispatchQuotaResetAt     *time.Time           `json:"temporary_dispatch_quota_reset_at,omitempty"`
 
 	// 分组排序
 	SortOrder int `json:"sort_order"`

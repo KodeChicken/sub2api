@@ -67,6 +67,17 @@ type temporaryDispatchStoreStub struct {
 	unavailableCalled    chan int64
 }
 
+type temporaryDispatchCostStoreStub struct {
+	*temporaryDispatchStoreStub
+	costGroupIDs []int64
+	costCalls    int
+}
+
+func (s *temporaryDispatchCostStoreStub) ObserveTemporaryDispatchCosts(_ context.Context, _ time.Time, _ int) ([]int64, error) {
+	s.costCalls++
+	return append([]int64(nil), s.costGroupIDs...), nil
+}
+
 func (s *temporaryDispatchStoreStub) CreateTemporaryDispatch(_ context.Context, spec TemporaryDispatchCreateSpec) error {
 	copy := spec
 	s.created = &copy
@@ -140,6 +151,20 @@ func TestTemporaryDispatchQuotaPlanDefaultsTo5h(t *testing.T) {
 	require.InDelta(t, 35, plan.BaselinePercent, 0.001)
 	require.InDelta(t, 65, plan.TargetPercent, 0.001)
 	require.Equal(t, 1, quota.calls)
+}
+
+func TestTemporaryDispatchScannerObservesAccountCostAndInvalidatesGroups(t *testing.T) {
+	store := &temporaryDispatchCostStoreStub{
+		temporaryDispatchStoreStub: &temporaryDispatchStoreStub{},
+		costGroupIDs:               []int64{7, 8},
+	}
+	invalidator := &temporaryDispatchInvalidatorStub{}
+	runtime := NewTemporaryDispatchRuntime(store, nil, invalidator)
+
+	runtime.scanOnce()
+
+	require.Equal(t, 1, store.costCalls)
+	require.ElementsMatch(t, []int64{7, 8}, invalidator.ids)
 }
 
 func TestTemporaryDispatchQuotaPlanSupports7dAndRejectsOverflow(t *testing.T) {

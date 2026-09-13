@@ -142,6 +142,7 @@ type Group struct {
 	TemporaryDispatchStartedAt        *time.Time
 	TemporaryDispatchExpiresAt        *time.Time
 	TemporaryDispatchMode             string
+	TemporaryDispatchUsageMetric      string
 	TemporaryDispatchQuotaWindow      string
 	TemporaryDispatchBaselinePercent  *float64
 	TemporaryDispatchTargetPercent    *float64
