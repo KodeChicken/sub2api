@@ -355,6 +355,7 @@ type StartTemporaryDispatchRequest struct {
 	Mode               string  `json:"mode" binding:"omitempty,oneof=time usage hybrid"`
 	DurationMinutes    int     `json:"duration_minutes"`
 	QuotaWindow        string  `json:"quota_window" binding:"omitempty,oneof=5h 7d"`
+	TargetPercent      float64 `json:"target_percent"`
 	TargetDeltaPercent float64 `json:"target_delta_percent"`
 	TargetCost         float64 `json:"target_cost"`
 }
@@ -458,6 +459,7 @@ func (h *GroupHandler) StartTemporaryDispatch(c *gin.Context) {
 		Mode:               req.Mode,
 		DurationMinutes:    req.DurationMinutes,
 		QuotaWindow:        req.QuotaWindow,
+		TargetPercent:      req.TargetPercent,
 		TargetDeltaPercent: req.TargetDeltaPercent,
 		TargetCost:         req.TargetCost,
 	})

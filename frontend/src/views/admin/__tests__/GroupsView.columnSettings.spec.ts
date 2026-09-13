@@ -376,7 +376,7 @@ describe('admin GroupsView column settings', () => {
         account_id: 42,
         duration_minutes: 120,
         quota_window: undefined,
-        target_delta_percent: undefined,
+        target_percent: undefined,
       }],
       mode: 'time',
     })
@@ -420,7 +420,7 @@ describe('admin GroupsView column settings', () => {
         account_id: 42,
         duration_minutes: 120,
         quota_window: '5h',
-        target_delta_percent: 30,
+        target_percent: 100,
       }],
       mode: 'hybrid',
     })
@@ -457,7 +457,7 @@ describe('admin GroupsView column settings', () => {
         account_id: 42,
         duration_minutes: 120,
         quota_window: '5h',
-        target_delta_percent: undefined,
+        target_percent: undefined,
         target_cost: 200,
       }],
       mode: 'hybrid',
@@ -465,7 +465,7 @@ describe('admin GroupsView column settings', () => {
     expect(getTemporaryDispatchQuotaPreview).not.toHaveBeenCalled()
   })
 
-  it('appends usage to an existing shared temporary dispatch', async () => {
+  it('sets the final usage target for an existing shared temporary dispatch', async () => {
     const future = new Date(Date.now() + 60 * 60 * 1000).toISOString()
     listGroups.mockResolvedValue({
       items: [createGroup({
@@ -503,13 +503,13 @@ describe('admin GroupsView column settings', () => {
     await wrapper.findAll('button').find((item) => item.text().includes('Adjust temporary dispatch'))!.trigger('click')
     await flushPromises()
     const inputs = wrapper.findAll('input[type="number"]')
-    await inputs[0].setValue(10)
+    await inputs[0].setValue(80)
     await wrapper.findAll('button').find((item) => item.text().includes('Apply adjustment'))!.trigger('click')
     await flushPromises()
 
     expect(adjustTemporaryDispatch).toHaveBeenCalledWith({
       group_id: 1,
-      accounts: [{ account_id: 42, additional_usage: 10, extend_duration_minutes: 0 }],
+      accounts: [{ account_id: 42, target_value: 80, extend_duration_minutes: 0 }],
     })
     expect(showSuccess).toHaveBeenCalledWith('Temporary dispatch adjusted')
   })
@@ -547,8 +547,8 @@ describe('admin GroupsView column settings', () => {
     expect(startTemporaryDispatch).toHaveBeenCalledWith({
       group_ids: [1],
       accounts: [
-        { account_id: 42, duration_minutes: 15, quota_window: undefined, target_delta_percent: undefined },
-        { account_id: 43, duration_minutes: 90, quota_window: undefined, target_delta_percent: undefined },
+        { account_id: 42, duration_minutes: 15, quota_window: undefined, target_percent: undefined },
+        { account_id: 43, duration_minutes: 90, quota_window: undefined, target_percent: undefined },
       ],
       mode: 'time',
     })

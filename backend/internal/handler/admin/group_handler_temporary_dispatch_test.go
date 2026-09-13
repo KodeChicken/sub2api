@@ -87,7 +87,7 @@ func TestGroupHandlerStartsTemporaryDispatch(t *testing.T) {
 	svc := &temporaryDispatchAdminServiceStub{}
 	router := setupTemporaryDispatchGroupRouter(svc)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups/temporary-dispatch", strings.NewReader(`{"group_ids":[11,12],"account_id":88,"mode":"hybrid","duration_minutes":90,"quota_window":"5h","target_delta_percent":30}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups/temporary-dispatch", strings.NewReader(`{"group_ids":[11,12],"account_id":88,"mode":"hybrid","duration_minutes":90,"quota_window":"5h","target_percent":80}`))
 	request.Header.Set("Content-Type", "application/json")
 
 	router.ServeHTTP(recorder, request)
@@ -99,7 +99,7 @@ func TestGroupHandlerStartsTemporaryDispatch(t *testing.T) {
 	require.Equal(t, service.TemporaryDispatchModeHybrid, svc.startInput.Mode)
 	require.Equal(t, 90, svc.startInput.DurationMinutes)
 	require.Equal(t, service.TemporaryDispatchQuotaWindow5h, svc.startInput.QuotaWindow)
-	require.InDelta(t, 30, svc.startInput.TargetDeltaPercent, 0.001)
+	require.InDelta(t, 80, svc.startInput.TargetPercent, 0.001)
 	require.Contains(t, recorder.Body.String(), `"dispatch_id":"td_handler_test"`)
 }
 
@@ -127,14 +127,17 @@ func TestGroupHandlerGetsAndAdjustsSharedTemporaryDispatch(t *testing.T) {
 	require.Contains(t, getRecorder.Body.String(), `"dispatch_id":"td_handler_test"`)
 
 	patchRecorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/groups/temporary-dispatch", strings.NewReader(`{"group_id":11,"accounts":[{"account_id":88,"additional_usage":10,"extend_duration_minutes":30}]}`))
+	request := httptest.NewRequest(http.MethodPatch, "/api/v1/admin/groups/temporary-dispatch", strings.NewReader(`{"group_id":11,"accounts":[{"account_id":88,"target_value":80,"extend_duration_minutes":30}]}`))
 	request.Header.Set("Content-Type", "application/json")
 	router.ServeHTTP(patchRecorder, request)
 
 	require.Equal(t, http.StatusOK, patchRecorder.Code)
 	require.Equal(t, 1, svc.adjustCalls)
 	require.Equal(t, int64(11), svc.adjustInput.GroupID)
-	require.Equal(t, service.TemporaryDispatchAdjustment{AccountID: 88, AdditionalUsage: 10, ExtendDurationMins: 30}, svc.adjustInput.Accounts[0])
+	require.Equal(t, int64(88), svc.adjustInput.Accounts[0].AccountID)
+	require.NotNil(t, svc.adjustInput.Accounts[0].TargetValue)
+	require.InDelta(t, 80, *svc.adjustInput.Accounts[0].TargetValue, 0.001)
+	require.Equal(t, 30, svc.adjustInput.Accounts[0].ExtendDurationMins)
 }
 
 func TestGroupHandlerStartsTemporaryDispatchAccountPool(t *testing.T) {
@@ -145,8 +148,8 @@ func TestGroupHandlerStartsTemporaryDispatchAccountPool(t *testing.T) {
 		"group_ids":[11,12],
 		"mode":"hybrid",
 		"accounts":[
-			{"account_id":88,"duration_minutes":30,"quota_window":"5h","target_delta_percent":10},
-			{"account_id":89,"duration_minutes":90,"quota_window":"7d","target_delta_percent":25}
+			{"account_id":88,"duration_minutes":30,"quota_window":"5h","target_percent":60},
+			{"account_id":89,"duration_minutes":90,"quota_window":"7d","target_percent":85}
 		]
 	}`))
 	request.Header.Set("Content-Type", "application/json")
@@ -159,11 +162,11 @@ func TestGroupHandlerStartsTemporaryDispatchAccountPool(t *testing.T) {
 	require.Equal(t, int64(88), svc.startInput.Accounts[0].AccountID)
 	require.Equal(t, 30, svc.startInput.Accounts[0].DurationMinutes)
 	require.Equal(t, service.TemporaryDispatchQuotaWindow5h, svc.startInput.Accounts[0].QuotaWindow)
-	require.InDelta(t, 10, svc.startInput.Accounts[0].TargetDeltaPercent, 0.001)
+	require.InDelta(t, 60, svc.startInput.Accounts[0].TargetPercent, 0.001)
 	require.Equal(t, int64(89), svc.startInput.Accounts[1].AccountID)
 	require.Equal(t, 90, svc.startInput.Accounts[1].DurationMinutes)
 	require.Equal(t, service.TemporaryDispatchQuotaWindow7d, svc.startInput.Accounts[1].QuotaWindow)
-	require.InDelta(t, 25, svc.startInput.Accounts[1].TargetDeltaPercent, 0.001)
+	require.InDelta(t, 85, svc.startInput.Accounts[1].TargetPercent, 0.001)
 }
 
 func TestGroupHandlerStopsTemporaryDispatch(t *testing.T) {

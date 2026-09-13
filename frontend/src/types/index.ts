@@ -717,6 +717,8 @@ export interface TemporaryDispatchAccountInput {
   account_id: number
   duration_minutes?: number
   quota_window?: TemporaryDispatchQuotaWindow
+  target_percent?: number
+  /** Legacy delta-based field accepted by older servers/clients. */
   target_delta_percent?: number
   target_cost?: number
 }
@@ -728,6 +730,8 @@ export interface AdjustTemporaryDispatchInput {
 
 export interface TemporaryDispatchAdjustment {
   account_id: number
+  target_value?: number
+  /** Legacy delta-based field accepted by older servers/clients. */
   additional_usage?: number
   extend_duration_minutes?: number
 }

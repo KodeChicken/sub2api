@@ -2204,24 +2204,27 @@
               <span class="text-xs text-gray-500 dark:text-gray-400">
                 {{ t("admin.groups.temporaryDispatch.currentProgress", {
                   current: formatTemporaryAdjustmentValue(account.currentValue, account.usageMetric),
-                  target: formatTemporaryAdjustmentValue(account.targetValue, account.usageMetric),
+                  target: formatTemporaryAdjustmentValue(account.originalTargetValue, account.usageMetric),
                 }) }}
               </span>
             </div>
             <div v-if="adjustTemporaryDispatchMode !== 'time'">
               <label class="input-label">
                 {{ account.usageMetric === 'account_cost'
-                  ? t("admin.groups.temporaryDispatch.additionalCost")
-                  : t("admin.groups.temporaryDispatch.additionalPercent") }}
+                  ? t("admin.groups.temporaryDispatch.targetSpend")
+                  : t("admin.groups.temporaryDispatch.targetPercent") }}
               </label>
               <input
-                v-model.number="account.additionalUsage"
+                v-model.number="account.targetValue"
                 type="number"
-                min="0"
-                :max="account.usageMetric === 'quota_percent' ? Math.max(0, 100 - account.targetValue) : undefined"
+                min="0.001"
+                :max="account.usageMetric === 'quota_percent' ? 100 : undefined"
                 :step="account.usageMetric === 'quota_percent' ? 0.1 : 1"
                 class="input"
               />
+              <p v-if="account.targetValue <= account.currentValue" class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                {{ t("admin.groups.temporaryDispatch.targetReachedHint") }}
+              </p>
             </div>
             <div v-if="adjustTemporaryDispatchMode !== 'usage'">
               <label class="input-label">{{ t("admin.groups.temporaryDispatch.extendDuration") }}</label>
@@ -4034,13 +4037,13 @@
                 </div>
               </div>
               <div>
-                <label class="input-label">{{ t("admin.groups.temporaryDispatch.quotaDelta") }}</label>
-                <input v-model.number="account.quotaDelta" type="number" min="0.001" max="100" step="0.1" class="input" />
+                <label class="input-label">{{ t("admin.groups.temporaryDispatch.quotaTargetInput") }}</label>
+                <input v-model.number="account.quotaTarget" type="number" min="0.001" max="100" step="0.1" class="input" />
               </div>
               <p v-if="account.quotaLoading" class="text-xs text-gray-500">{{ t("admin.groups.temporaryDispatch.quotaLoading") }}</p>
               <p v-else-if="account.quotaError" class="text-xs text-red-500">{{ account.quotaError }}</p>
-              <p v-else-if="temporaryAccountQuotaTarget(account) > 100" class="text-xs text-red-500">
-                {{ t("admin.groups.temporaryDispatch.quotaTargetExceeded", { max: Math.max(0, 100 - (account.quotaPreview?.used ?? 0)).toFixed(1) }) }}
+              <p v-else-if="account.quotaPreview && (temporaryAccountQuotaTarget(account) <= account.quotaPreview.used || temporaryAccountQuotaTarget(account) > 100)" class="text-xs text-red-500">
+                {{ t("admin.groups.temporaryDispatch.quotaTargetInvalid", { current: account.quotaPreview.used.toFixed(1) }) }}
               </p>
               <div v-else-if="account.quotaPreview" class="grid grid-cols-3 gap-2 text-xs text-gray-600 dark:text-gray-300">
                 <div>{{ t("admin.groups.temporaryDispatch.quotaCurrent") }}<strong class="ml-1">{{ account.quotaPreview.used.toFixed(1) }}%</strong></div>
@@ -5192,7 +5195,7 @@ type TemporaryAccountOption = {
 type TemporarySelectedAccount = TemporaryAccountOption & {
   durationMinutes: number;
   quotaWindow: TemporaryDispatchQuotaWindow;
-  quotaDelta: number;
+  quotaTarget: number;
   targetCost: number;
   quotaLoading: boolean;
   quotaError: string;
@@ -5211,7 +5214,7 @@ type TemporaryDispatchAdjustmentRow = {
   usageMetric: TemporaryDispatchUsageMetric;
   currentValue: number;
   targetValue: number;
-  additionalUsage: number;
+  originalTargetValue: number;
   extendDurationMinutes: number;
 };
 const showAdjustTemporaryDispatchModal = ref(false);
@@ -5229,13 +5232,22 @@ const canAdjustTemporaryDispatch = computed(() =>
   selectedGroups.value.every((group) => isTemporaryDispatchActive(group)) &&
   selectedTemporaryDispatchIDs.value.size === 1,
 );
-const canSubmitTemporaryDispatchAdjustment = computed(() => adjustTemporaryDispatchAccounts.value.some((account) => {
-  const usage = Number(account.additionalUsage || 0);
-  const duration = Number(account.extendDurationMinutes || 0);
-  if (usage < 0 || duration < 0) return false;
-  if (account.usageMetric === "quota_percent" && account.targetValue + usage > 100) return false;
-  return usage > 0 || duration > 0;
-}));
+const temporaryAdjustmentTargetChanged = (account: TemporaryDispatchAdjustmentRow): boolean =>
+  Math.abs(Number(account.targetValue) - Number(account.originalTargetValue)) > 1e-9;
+const canSubmitTemporaryDispatchAdjustment = computed(() => {
+  const hasChange = adjustTemporaryDispatchAccounts.value.some((account) =>
+    (adjustTemporaryDispatchMode.value !== "time" && temporaryAdjustmentTargetChanged(account)) || Number(account.extendDurationMinutes || 0) > 0,
+  );
+  if (!hasChange) return false;
+  return adjustTemporaryDispatchAccounts.value.every((account) => {
+    const duration = Number(account.extendDurationMinutes || 0);
+    if (!Number.isFinite(duration) || duration < 0 || duration > 1440) return false;
+    if (adjustTemporaryDispatchMode.value === "time" || !temporaryAdjustmentTargetChanged(account)) return true;
+    const target = Number(account.targetValue);
+    if (!Number.isFinite(target) || target <= 0) return false;
+    return account.usageMetric !== "quota_percent" || target <= 100;
+  });
+});
 const maxTemporaryDispatchAccounts = 20;
 const temporaryDispatchModeOptions = computed(() => [
   { value: "time" as const, label: t("admin.groups.temporaryDispatch.modeTime"), requiresQuota: false },
@@ -5247,7 +5259,7 @@ const temporaryDispatchSupportsQuota = computed(() => selectedGroups.value.lengt
 const temporaryDispatchUsesQuota = computed(() => temporaryDispatchMode.value !== "time");
 const temporaryDispatchUsesTime = computed(() => temporaryDispatchMode.value !== "usage");
 const temporaryAccountQuotaTarget = (account: TemporarySelectedAccount): number =>
-  (account.quotaPreview?.used ?? 0) + Number(account.quotaDelta || 0);
+  Number(account.quotaTarget || 0);
 const temporaryAccountUsesQuotaPercent = (account: TemporaryAccountOption): boolean =>
   account.type === "oauth" && !account.parentAccountId;
 const temporaryDispatchCanSubmit = computed(() => {
@@ -5258,8 +5270,8 @@ const temporaryDispatchCanSubmit = computed(() => {
     if (!temporaryAccountUsesQuotaPercent(account)) {
       return Number.isFinite(Number(account.targetCost)) && Number(account.targetCost) > 0;
     }
-    const delta = Number(account.quotaDelta);
-    return !account.quotaLoading && !account.quotaError && !!account.quotaPreview && delta > 0 && delta <= 100 && temporaryAccountQuotaTarget(account) <= 100;
+    const target = temporaryAccountQuotaTarget(account);
+    return !account.quotaLoading && !account.quotaError && !!account.quotaPreview && target > account.quotaPreview.used && target <= 100;
   });
 });
 let temporaryAccountSearchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -6154,7 +6166,7 @@ const selectTemporaryAccount = (account: TemporaryAccountOption) => {
     ...account,
     durationMinutes: 120,
     quotaWindow: "5h",
-    quotaDelta: 30,
+    quotaTarget: 100,
     targetCost: 200,
     quotaLoading: false,
     quotaError: "",
@@ -6257,7 +6269,7 @@ const openAdjustTemporaryDispatchModal = async () => {
       usageMetric: account.usage_metric || "quota_percent",
       currentValue: account.current_percent ?? 0,
       targetValue: account.target_percent ?? 0,
-      additionalUsage: 0,
+      originalTargetValue: account.target_percent ?? 0,
       extendDurationMinutes: 0,
     }));
   } catch (error) {
@@ -6271,10 +6283,10 @@ const openAdjustTemporaryDispatchModal = async () => {
 const submitTemporaryDispatchAdjustment = async () => {
   if (!adjustTemporaryDispatchGroupId.value || !canSubmitTemporaryDispatchAdjustment.value) return;
   const accounts = adjustTemporaryDispatchAccounts.value
-    .filter((account) => Number(account.additionalUsage || 0) > 0 || Number(account.extendDurationMinutes || 0) > 0)
+    .filter((account) => temporaryAdjustmentTargetChanged(account) || Number(account.extendDurationMinutes || 0) > 0)
     .map((account) => ({
       account_id: account.accountId,
-      additional_usage: Number(account.additionalUsage || 0),
+      target_value: temporaryAdjustmentTargetChanged(account) ? Number(account.targetValue) : undefined,
       extend_duration_minutes: Number(account.extendDurationMinutes || 0),
     }));
   temporaryDispatchSubmitting.value = true;
@@ -6304,7 +6316,7 @@ const startTemporaryDispatch = async () => {
         account_id: account.id,
         duration_minutes: temporaryDispatchUsesTime.value ? account.durationMinutes : undefined,
         quota_window: temporaryDispatchUsesQuota.value ? account.quotaWindow : undefined,
-        target_delta_percent: temporaryDispatchUsesQuota.value && temporaryAccountUsesQuotaPercent(account) ? account.quotaDelta : undefined,
+        target_percent: temporaryDispatchUsesQuota.value && temporaryAccountUsesQuotaPercent(account) ? account.quotaTarget : undefined,
         target_cost: temporaryDispatchUsesQuota.value && !temporaryAccountUsesQuotaPercent(account) ? account.targetCost : undefined,
       })),
       mode: temporaryDispatchMode.value,

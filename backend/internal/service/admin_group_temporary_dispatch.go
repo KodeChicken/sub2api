@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -33,14 +34,17 @@ type StartTemporaryDispatchInput struct {
 	Mode               string
 	DurationMinutes    int
 	QuotaWindow        string
+	TargetPercent      float64
 	TargetDeltaPercent float64
 	TargetCost         float64
 }
 
 type TemporaryDispatchAccountInput struct {
-	AccountID          int64   `json:"account_id"`
-	DurationMinutes    int     `json:"duration_minutes,omitempty"`
-	QuotaWindow        string  `json:"quota_window,omitempty"`
+	AccountID       int64   `json:"account_id"`
+	DurationMinutes int     `json:"duration_minutes,omitempty"`
+	QuotaWindow     string  `json:"quota_window,omitempty"`
+	TargetPercent   float64 `json:"target_percent,omitempty"`
+	// TargetDeltaPercent is retained for older admin clients.
 	TargetDeltaPercent float64 `json:"target_delta_percent,omitempty"`
 	TargetCost         float64 `json:"target_cost,omitempty"`
 }
@@ -65,7 +69,9 @@ type AdjustTemporaryDispatchInput struct {
 }
 
 type TemporaryDispatchAdjustment struct {
-	AccountID          int64   `json:"account_id"`
+	AccountID   int64    `json:"account_id"`
+	TargetValue *float64 `json:"target_value,omitempty"`
+	// AdditionalUsage is retained for older admin clients.
 	AdditionalUsage    float64 `json:"additional_usage,omitempty"`
 	ExtendDurationMins int     `json:"extend_duration_minutes,omitempty"`
 }
@@ -158,6 +164,7 @@ func normalizeTemporaryDispatchAccounts(input StartTemporaryDispatchInput) ([]Te
 			AccountID:          input.AccountID,
 			DurationMinutes:    input.DurationMinutes,
 			QuotaWindow:        input.QuotaWindow,
+			TargetPercent:      input.TargetPercent,
 			TargetDeltaPercent: input.TargetDeltaPercent,
 			TargetCost:         input.TargetCost,
 		}}
@@ -293,7 +300,13 @@ func (s *adminServiceImpl) StartTemporaryDispatch(ctx context.Context, input Sta
 				return nil, infraerrors.BadRequest("TEMPORARY_DISPATCH_USAGE_UNSUPPORTED", fmt.Sprintf("account %d must be an OpenAI account for usage-based dispatch", account.ID))
 			}
 			if account.Type == AccountTypeOAuth && !account.IsShadow() {
-				quotaPlan, prepareErr := s.temporaryDispatchRuntime.PrepareQuotaPlan(ctx, account.ID, accountInput.QuotaWindow, accountInput.TargetDeltaPercent)
+				var quotaPlan *TemporaryDispatchQuotaPlan
+				var prepareErr error
+				if accountInput.TargetPercent > 0 {
+					quotaPlan, prepareErr = s.temporaryDispatchRuntime.PrepareQuotaTargetPlan(ctx, account.ID, accountInput.QuotaWindow, accountInput.TargetPercent)
+				} else {
+					quotaPlan, prepareErr = s.temporaryDispatchRuntime.PrepareQuotaPlan(ctx, account.ID, accountInput.QuotaWindow, accountInput.TargetDeltaPercent)
+				}
 				if prepareErr != nil {
 					return nil, prepareErr
 				}
@@ -452,10 +465,14 @@ func (s *adminServiceImpl) AdjustTemporaryDispatch(ctx context.Context, input Ad
 	}
 	seen := make(map[int64]struct{}, len(input.Accounts))
 	for _, adjustment := range input.Accounts {
-		if adjustment.AccountID <= 0 || math.IsNaN(adjustment.AdditionalUsage) || math.IsInf(adjustment.AdditionalUsage, 0) || adjustment.AdditionalUsage < 0 || adjustment.ExtendDurationMins < 0 {
+		invalidTarget := adjustment.TargetValue != nil && (math.IsNaN(*adjustment.TargetValue) || math.IsInf(*adjustment.TargetValue, 0) || *adjustment.TargetValue <= 0)
+		if adjustment.AccountID <= 0 || invalidTarget || math.IsNaN(adjustment.AdditionalUsage) || math.IsInf(adjustment.AdditionalUsage, 0) || adjustment.AdditionalUsage < 0 || adjustment.ExtendDurationMins < 0 {
 			return nil, infraerrors.BadRequest("INVALID_TEMPORARY_DISPATCH_ADJUSTMENT", "adjustments must contain valid non-negative values")
 		}
-		if adjustment.AdditionalUsage == 0 && adjustment.ExtendDurationMins == 0 {
+		if adjustment.TargetValue != nil && adjustment.AdditionalUsage > 0 {
+			return nil, infraerrors.BadRequest("INVALID_TEMPORARY_DISPATCH_ADJUSTMENT", "target_value and additional_usage cannot be used together")
+		}
+		if adjustment.TargetValue == nil && adjustment.AdditionalUsage == 0 && adjustment.ExtendDurationMins == 0 {
 			return nil, infraerrors.BadRequest("EMPTY_TEMPORARY_DISPATCH_ADJUSTMENT", fmt.Sprintf("account %d has no adjustment", adjustment.AccountID))
 		}
 		if adjustment.ExtendDurationMins > MaxTemporaryDispatchDurationMin {
@@ -479,7 +496,11 @@ func (s *adminServiceImpl) AdjustTemporaryDispatch(ctx context.Context, input Ad
 			s.authCacheInvalidator.InvalidateAuthCacheByGroupID(ctx, groupID)
 		}
 	}
-	return s.GetTemporaryDispatch(ctx, input.GroupID)
+	result, err := s.GetTemporaryDispatch(ctx, input.GroupID)
+	if errors.Is(err, ErrTemporaryDispatchNotFound) {
+		return &TemporaryDispatchResult{GroupIDs: groupIDs}, nil
+	}
+	return result, err
 }
 
 func (s *adminServiceImpl) GetTemporaryDispatchQuotaPreview(ctx context.Context, accountID int64, window string) (*TemporaryDispatchQuotaPreview, error) {

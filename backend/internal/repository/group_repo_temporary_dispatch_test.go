@@ -84,21 +84,22 @@ func TestObserveTemporaryDispatchCostsReturnsGroupsWhoseLastTargetCompleted(t *t
 	require.Equal(t, []int64{7, 8}, ids)
 }
 
-func TestAdjustTemporaryDispatchAppendsQuotaTargetForEverySharedGroup(t *testing.T) {
+func TestAdjustTemporaryDispatchSetsQuotaTargetForEverySharedGroup(t *testing.T) {
 	repo, mock := newTemporaryDispatchRepoTest(t)
 	now := time.Now().UTC().Truncate(time.Second)
 	expiresAt := now.Add(time.Hour)
 	resetAt := now.Add(4 * time.Hour)
+	target := 80.0
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT t.dispatch_id, t.mode")).
 		WithArgs(int64(7)).
 		WillReturnRows(sqlmock.NewRows([]string{"dispatch_id", "mode"}).AddRow("td_shared", service.TemporaryDispatchModeHybrid))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT usage_metric, target_percent, expires_at, quota_reset_at")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT usage_metric, target_percent, current_percent, expires_at, quota_reset_at")).
 		WithArgs("td_shared", int64(42), sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"usage_metric", "target_percent", "expires_at", "quota_reset_at"}).
-			AddRow(service.TemporaryDispatchUsageQuotaPercent, 65.0, expiresAt, resetAt))
+		WillReturnRows(sqlmock.NewRows([]string{"usage_metric", "target_percent", "current_percent", "expires_at", "quota_reset_at"}).
+			AddRow(service.TemporaryDispatchUsageQuotaPercent, 65.0, 55.0, expiresAt, resetAt))
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE group_temporary_dispatch_accounts")).
-		WithArgs("td_shared", int64(42), 75.0, expiresAt, sqlmock.AnyArg()).
+		WithArgs("td_shared", int64(42), target, expiresAt, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("WITH first_member AS (")).
 		WithArgs("td_shared").
@@ -110,7 +111,41 @@ func TestAdjustTemporaryDispatchAppendsQuotaTargetForEverySharedGroup(t *testing
 
 	ids, err := repo.AdjustTemporaryDispatch(context.Background(), service.AdjustTemporaryDispatchInput{
 		GroupID:  7,
-		Accounts: []service.TemporaryDispatchAdjustment{{AccountID: 42, AdditionalUsage: 10}},
+		Accounts: []service.TemporaryDispatchAdjustment{{AccountID: 42, TargetValue: &target}},
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, []int64{7, 8}, ids)
+}
+
+func TestAdjustTemporaryDispatchRemovesAccountWhenTargetAlreadyReached(t *testing.T) {
+	repo, mock := newTemporaryDispatchRepoTest(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	expiresAt := now.Add(time.Hour)
+	resetAt := now.Add(4 * time.Hour)
+	target := 80.0
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT t.dispatch_id, t.mode")).
+		WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"dispatch_id", "mode"}).AddRow("td_shared", service.TemporaryDispatchModeHybrid))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT usage_metric, target_percent, current_percent, expires_at, quota_reset_at")).
+		WithArgs("td_shared", int64(42), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"usage_metric", "target_percent", "current_percent", "expires_at", "quota_reset_at"}).
+			AddRow(service.TemporaryDispatchUsageQuotaPercent, 92.5, 86.0, expiresAt, resetAt))
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM group_temporary_dispatch_accounts")).
+		WithArgs("td_shared", int64(42)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("WITH first_member AS (")).
+		WithArgs("td_shared").
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta("WITH first_member AS (")).
+		WithArgs("td_shared").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(7)).AddRow(int64(8)))
+	mock.ExpectCommit()
+
+	ids, err := repo.AdjustTemporaryDispatch(context.Background(), service.AdjustTemporaryDispatchInput{
+		GroupID:  7,
+		Accounts: []service.TemporaryDispatchAdjustment{{AccountID: 42, TargetValue: &target}},
 	})
 
 	require.NoError(t, err)

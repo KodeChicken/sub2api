@@ -145,6 +145,37 @@ func (r *TemporaryDispatchRuntime) PrepareQuotaPlan(ctx context.Context, account
 	return &TemporaryDispatchQuotaPlan{Window: window, BaselinePercent: used, TargetPercent: math.Min(target, 100), ResetAt: resetAt}, nil
 }
 
+// PrepareQuotaTargetPlan creates a quota plan from an absolute target. Unlike
+// the legacy delta-based API, a target of 80 means the account exits when the
+// selected quota window reaches 80% usage.
+func (r *TemporaryDispatchRuntime) PrepareQuotaTargetPlan(ctx context.Context, accountID int64, window string, target float64) (*TemporaryDispatchQuotaPlan, error) {
+	if r == nil || r.quota == nil {
+		return nil, infraerrors.BadRequest("TEMPORARY_DISPATCH_QUOTA_UNAVAILABLE", "temporary dispatch quota service is unavailable")
+	}
+	if window == "" {
+		window = TemporaryDispatchQuotaWindow5h
+	}
+	if window != TemporaryDispatchQuotaWindow5h && window != TemporaryDispatchQuotaWindow7d {
+		return nil, infraerrors.BadRequest("INVALID_TEMPORARY_DISPATCH_QUOTA_WINDOW", "quota_window must be 5h or 7d")
+	}
+	if math.IsNaN(target) || math.IsInf(target, 0) || target <= 0 || target > 100 {
+		return nil, infraerrors.BadRequest("INVALID_TEMPORARY_DISPATCH_QUOTA_TARGET", "target_percent must be greater than 0 and at most 100")
+	}
+	preview, err := r.GetQuotaPreview(ctx, accountID, window)
+	if err != nil {
+		return nil, err
+	}
+	if target <= preview.UsedPercent+1e-9 {
+		return nil, infraerrors.BadRequest("TEMPORARY_DISPATCH_QUOTA_TARGET_REACHED", fmt.Sprintf("current %s usage is %.3f%%; target_percent must be greater than current usage", window, preview.UsedPercent))
+	}
+	return &TemporaryDispatchQuotaPlan{
+		Window:          window,
+		BaselinePercent: preview.UsedPercent,
+		TargetPercent:   target,
+		ResetAt:         preview.ResetAt,
+	}, nil
+}
+
 func (r *TemporaryDispatchRuntime) GetQuotaPreview(ctx context.Context, accountID int64, window string) (*TemporaryDispatchQuotaPreview, error) {
 	if r == nil || r.quota == nil {
 		return nil, infraerrors.BadRequest("TEMPORARY_DISPATCH_QUOTA_UNAVAILABLE", "temporary dispatch quota service is unavailable")

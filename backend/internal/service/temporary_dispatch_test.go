@@ -404,8 +404,8 @@ func TestAdminTemporaryDispatchCreatesIndependentQuotaTargets(t *testing.T) {
 	result, err := svc.StartTemporaryDispatch(context.Background(), StartTemporaryDispatchInput{
 		GroupIDs: []int64{7}, Mode: TemporaryDispatchModeHybrid,
 		Accounts: []TemporaryDispatchAccountInput{
-			{AccountID: 41, DurationMinutes: 60, QuotaWindow: TemporaryDispatchQuotaWindow5h, TargetDeltaPercent: 15},
-			{AccountID: 42, DurationMinutes: 120, QuotaWindow: TemporaryDispatchQuotaWindow7d, TargetDeltaPercent: 25},
+			{AccountID: 41, DurationMinutes: 60, QuotaWindow: TemporaryDispatchQuotaWindow5h, TargetPercent: 25},
+			{AccountID: 42, DurationMinutes: 120, QuotaWindow: TemporaryDispatchQuotaWindow7d, TargetPercent: 65},
 		},
 	})
 

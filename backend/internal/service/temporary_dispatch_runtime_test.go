@@ -153,6 +153,30 @@ func TestTemporaryDispatchQuotaPlanDefaultsTo5h(t *testing.T) {
 	require.Equal(t, 1, quota.calls)
 }
 
+func TestTemporaryDispatchQuotaTargetPlanUsesAbsoluteTarget(t *testing.T) {
+	now := time.Now().UTC()
+	quota := &temporaryDispatchQuotaStub{usage: temporaryDispatchQuotaUsage(now, 35, 48)}
+	runtime := NewTemporaryDispatchRuntime(&temporaryDispatchStoreStub{}, quota, nil)
+
+	plan, err := runtime.PrepareQuotaTargetPlan(context.Background(), 42, "", 80)
+
+	require.NoError(t, err)
+	require.Equal(t, TemporaryDispatchQuotaWindow5h, plan.Window)
+	require.InDelta(t, 35, plan.BaselinePercent, 0.001)
+	require.InDelta(t, 80, plan.TargetPercent, 0.001)
+	require.Equal(t, 1, quota.calls)
+}
+
+func TestTemporaryDispatchQuotaTargetPlanRejectsReachedTarget(t *testing.T) {
+	now := time.Now().UTC()
+	quota := &temporaryDispatchQuotaStub{usage: temporaryDispatchQuotaUsage(now, 86, 48)}
+	runtime := NewTemporaryDispatchRuntime(&temporaryDispatchStoreStub{}, quota, nil)
+
+	_, err := runtime.PrepareQuotaTargetPlan(context.Background(), 42, "", 80)
+
+	require.Error(t, err)
+}
+
 func TestTemporaryDispatchScannerObservesAccountCostAndInvalidatesGroups(t *testing.T) {
 	store := &temporaryDispatchCostStoreStub{
 		temporaryDispatchStoreStub: &temporaryDispatchStoreStub{},
@@ -196,7 +220,7 @@ func TestAdminTemporaryDispatchHybridUsesEarlierQuotaReset(t *testing.T) {
 
 	result, err := svc.StartTemporaryDispatch(context.Background(), StartTemporaryDispatchInput{
 		GroupIDs: []int64{7}, AccountID: 42, Mode: TemporaryDispatchModeHybrid,
-		DurationMinutes: 300, QuotaWindow: TemporaryDispatchQuotaWindow5h, TargetDeltaPercent: 30,
+		DurationMinutes: 300, QuotaWindow: TemporaryDispatchQuotaWindow5h, TargetPercent: 50,
 	})
 
 	require.NoError(t, err)

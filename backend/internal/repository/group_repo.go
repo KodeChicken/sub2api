@@ -403,25 +403,29 @@ func (r *groupRepository) AdjustTemporaryDispatch(ctx context.Context, input ser
 	for _, adjustment := range input.Accounts {
 		var metric sql.NullString
 		var target sql.NullFloat64
+		var current sql.NullFloat64
 		var expires time.Time
 		var reset sql.NullTime
 		err = tx.QueryRowContext(ctx, `
-			SELECT usage_metric, target_percent, expires_at, quota_reset_at
+			SELECT usage_metric, target_percent, current_percent, expires_at, quota_reset_at
 			FROM group_temporary_dispatch_accounts
 			WHERE dispatch_id = $1 AND account_id = $2 AND expires_at > $3
 			FOR UPDATE
-		`, dispatchID, adjustment.AccountID, now).Scan(&metric, &target, &expires, &reset)
+		`, dispatchID, adjustment.AccountID, now).Scan(&metric, &target, &current, &expires, &reset)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, service.ErrTemporaryDispatchNotFound
 		}
 		if err != nil {
 			return nil, err
 		}
-		if adjustment.AdditionalUsage > 0 {
+		if adjustment.TargetValue != nil || adjustment.AdditionalUsage > 0 {
 			if mode == service.TemporaryDispatchModeTime || !target.Valid || !metric.Valid {
 				return nil, service.ErrTemporaryDispatchUsageAdjustmentUnsupported
 			}
 			newTarget := target.Float64 + adjustment.AdditionalUsage
+			if adjustment.TargetValue != nil {
+				newTarget = *adjustment.TargetValue
+			}
 			if metric.String == service.TemporaryDispatchUsageQuotaPercent && newTarget > 100+1e-9 {
 				return nil, service.ErrTemporaryDispatchQuotaTargetOverflow
 			}
@@ -435,6 +439,15 @@ func (r *groupRepository) AdjustTemporaryDispatch(ctx context.Context, input ser
 			if reset.Valid && reset.Time.Before(expires) {
 				expires = reset.Time
 			}
+		}
+		if adjustment.TargetValue != nil && current.Valid && target.Float64 <= current.Float64+1e-9 {
+			if _, err = tx.ExecContext(ctx, `
+				DELETE FROM group_temporary_dispatch_accounts
+				WHERE dispatch_id = $1 AND account_id = $2
+			`, dispatchID, adjustment.AccountID); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		_, err = tx.ExecContext(ctx, `
 			UPDATE group_temporary_dispatch_accounts
@@ -492,8 +505,21 @@ func (r *groupRepository) AdjustTemporaryDispatch(ctx context.Context, input ser
 			FROM first_member f, aggregate a
 			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = $1
 			RETURNING g.id
+		), cleared AS (
+			UPDATE groups g SET `+clearTemporaryDispatchSQL+`
+			WHERE g.deleted_at IS NULL AND g.temporary_dispatch_id = $1
+			  AND NOT EXISTS (SELECT 1 FROM first_member)
+			RETURNING g.id
+		), removed_task AS (
+			DELETE FROM group_temporary_dispatches t
+			WHERE t.dispatch_id = $1
+			  AND NOT EXISTS (SELECT 1 FROM first_member)
+			RETURNING t.dispatch_id
 		)
-		SELECT id FROM updated ORDER BY id
+		SELECT id FROM updated
+		UNION ALL
+		SELECT id FROM cleared
+		ORDER BY id
 	`, dispatchID)
 	if err != nil {
 		return nil, err
