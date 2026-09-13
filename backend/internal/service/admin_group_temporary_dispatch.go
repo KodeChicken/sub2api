@@ -14,20 +14,48 @@ const (
 	MaxTemporaryDispatchGroups          = 100
 	DefaultTemporaryDispatchDurationMin = 120
 	MaxTemporaryDispatchDurationMin     = 24 * 60
+	TemporaryDispatchModeTime           = "time"
+	TemporaryDispatchModeUsage          = "usage"
+	TemporaryDispatchModeHybrid         = "hybrid"
+	TemporaryDispatchQuotaWindow5h      = "5h"
+	TemporaryDispatchQuotaWindow7d      = "7d"
 )
 
 type StartTemporaryDispatchInput struct {
-	GroupIDs        []int64
-	AccountID       int64
-	DurationMinutes int
+	GroupIDs           []int64
+	AccountID          int64
+	Mode               string
+	DurationMinutes    int
+	QuotaWindow        string
+	TargetDeltaPercent float64
 }
 
 type TemporaryDispatchResult struct {
-	DispatchID string    `json:"dispatch_id"`
-	GroupIDs   []int64   `json:"group_ids"`
-	AccountID  int64     `json:"account_id"`
-	StartedAt  time.Time `json:"started_at"`
-	ExpiresAt  time.Time `json:"expires_at"`
+	DispatchID      string     `json:"dispatch_id"`
+	GroupIDs        []int64    `json:"group_ids"`
+	AccountID       int64      `json:"account_id"`
+	Mode            string     `json:"mode"`
+	QuotaWindow     string     `json:"quota_window,omitempty"`
+	BaselinePercent *float64   `json:"baseline_percent,omitempty"`
+	TargetPercent   *float64   `json:"target_percent,omitempty"`
+	CurrentPercent  *float64   `json:"current_percent,omitempty"`
+	QuotaResetAt    *time.Time `json:"quota_reset_at,omitempty"`
+	StartedAt       time.Time  `json:"started_at"`
+	ExpiresAt       time.Time  `json:"expires_at"`
+}
+
+type TemporaryDispatchCreateSpec struct {
+	DispatchID      string
+	GroupIDs        []int64
+	AccountID       int64
+	Mode            string
+	QuotaWindow     string
+	BaselinePercent *float64
+	TargetPercent   *float64
+	CurrentPercent  *float64
+	QuotaResetAt    *time.Time
+	StartedAt       time.Time
+	ExpiresAt       time.Time
 }
 
 type temporaryDispatchRepository interface {
@@ -73,12 +101,21 @@ func (s *adminServiceImpl) StartTemporaryDispatch(ctx context.Context, input Sta
 	if input.AccountID <= 0 {
 		return nil, infraerrors.BadRequest("INVALID_TEMPORARY_DISPATCH_ACCOUNT", "account_id must be positive")
 	}
-	duration := input.DurationMinutes
-	if duration == 0 {
-		duration = DefaultTemporaryDispatchDurationMin
+	mode := input.Mode
+	if mode == "" {
+		mode = TemporaryDispatchModeTime
 	}
-	if duration < 1 || duration > MaxTemporaryDispatchDurationMin {
-		return nil, infraerrors.BadRequest("INVALID_TEMPORARY_DISPATCH_DURATION", fmt.Sprintf("duration_minutes must be between 1 and %d", MaxTemporaryDispatchDurationMin))
+	if mode != TemporaryDispatchModeTime && mode != TemporaryDispatchModeUsage && mode != TemporaryDispatchModeHybrid {
+		return nil, infraerrors.BadRequest("INVALID_TEMPORARY_DISPATCH_MODE", "mode must be time, usage, or hybrid")
+	}
+	duration := input.DurationMinutes
+	if mode == TemporaryDispatchModeTime || mode == TemporaryDispatchModeHybrid {
+		if duration == 0 {
+			duration = DefaultTemporaryDispatchDurationMin
+		}
+		if duration < 1 || duration > MaxTemporaryDispatchDurationMin {
+			return nil, infraerrors.BadRequest("INVALID_TEMPORARY_DISPATCH_DURATION", fmt.Sprintf("duration_minutes must be between 1 and %d", MaxTemporaryDispatchDurationMin))
+		}
 	}
 
 	account, err := s.accountRepo.GetByID(ctx, input.AccountID)
@@ -123,8 +160,42 @@ func (s *adminServiceImpl) StartTemporaryDispatch(ctx context.Context, input Sta
 	if err != nil {
 		return nil, fmt.Errorf("generate temporary dispatch id: %w", err)
 	}
+	var quotaPlan *TemporaryDispatchQuotaPlan
+	if mode == TemporaryDispatchModeUsage || mode == TemporaryDispatchModeHybrid {
+		if account.Platform != PlatformOpenAI || account.Type != AccountTypeOAuth || account.IsShadow() {
+			return nil, infraerrors.BadRequest("TEMPORARY_DISPATCH_QUOTA_UNSUPPORTED", "usage-based temporary dispatch requires a non-shadow OpenAI OAuth account")
+		}
+		if s.temporaryDispatchRuntime == nil {
+			return nil, infraerrors.BadRequest("TEMPORARY_DISPATCH_QUOTA_UNAVAILABLE", "temporary dispatch quota service is unavailable")
+		}
+		quotaPlan, err = s.temporaryDispatchRuntime.PrepareQuotaPlan(ctx, account.ID, input.QuotaWindow, input.TargetDeltaPercent)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	expiresAt := now.Add(time.Duration(duration) * time.Minute)
-	if err := repo.SetTemporaryDispatch(ctx, groupIDs, account.ID, dispatchID, now, expiresAt); err != nil {
+	if mode == TemporaryDispatchModeUsage {
+		expiresAt = quotaPlan.ResetAt
+	} else if mode == TemporaryDispatchModeHybrid && quotaPlan.ResetAt.Before(expiresAt) {
+		expiresAt = quotaPlan.ResetAt
+	}
+	spec := TemporaryDispatchCreateSpec{
+		DispatchID: dispatchID, GroupIDs: groupIDs, AccountID: account.ID, Mode: mode,
+		StartedAt: now, ExpiresAt: expiresAt,
+	}
+	if quotaPlan != nil {
+		spec.QuotaWindow = quotaPlan.Window
+		spec.BaselinePercent = &quotaPlan.BaselinePercent
+		spec.TargetPercent = &quotaPlan.TargetPercent
+		spec.CurrentPercent = &quotaPlan.BaselinePercent
+		spec.QuotaResetAt = &quotaPlan.ResetAt
+	}
+	if s.temporaryDispatchRuntime != nil {
+		if err := s.temporaryDispatchRuntime.Create(ctx, spec); err != nil {
+			return nil, err
+		}
+	} else if err := repo.SetTemporaryDispatch(ctx, groupIDs, account.ID, dispatchID, now, expiresAt); err != nil {
 		return nil, err
 	}
 	for _, groupID := range groupIDs {
@@ -132,13 +203,28 @@ func (s *adminServiceImpl) StartTemporaryDispatch(ctx context.Context, input Sta
 			s.authCacheInvalidator.InvalidateAuthCacheByGroupID(ctx, groupID)
 		}
 	}
-	return &TemporaryDispatchResult{
-		DispatchID: dispatchID,
-		GroupIDs:   groupIDs,
-		AccountID:  account.ID,
-		StartedAt:  now,
-		ExpiresAt:  expiresAt,
-	}, nil
+	result := &TemporaryDispatchResult{
+		DispatchID: dispatchID, GroupIDs: groupIDs, AccountID: account.ID, Mode: mode,
+		StartedAt: now, ExpiresAt: expiresAt,
+	}
+	if quotaPlan != nil {
+		result.QuotaWindow = quotaPlan.Window
+		result.BaselinePercent = &quotaPlan.BaselinePercent
+		result.TargetPercent = &quotaPlan.TargetPercent
+		result.CurrentPercent = &quotaPlan.BaselinePercent
+		result.QuotaResetAt = &quotaPlan.ResetAt
+	}
+	return result, nil
+}
+
+func (s *adminServiceImpl) GetTemporaryDispatchQuotaPreview(ctx context.Context, accountID int64, window string) (*TemporaryDispatchQuotaPreview, error) {
+	if accountID <= 0 {
+		return nil, infraerrors.BadRequest("INVALID_TEMPORARY_DISPATCH_ACCOUNT", "account_id must be positive")
+	}
+	if s.temporaryDispatchRuntime == nil {
+		return nil, infraerrors.BadRequest("TEMPORARY_DISPATCH_QUOTA_UNAVAILABLE", "temporary dispatch quota service is unavailable")
+	}
+	return s.temporaryDispatchRuntime.GetQuotaPreview(ctx, accountID, window)
 }
 
 func (s *adminServiceImpl) StopTemporaryDispatch(ctx context.Context, ids []int64) error {
@@ -158,7 +244,11 @@ func (s *adminServiceImpl) StopTemporaryDispatch(ctx context.Context, ids []int6
 	if !ok {
 		return fmt.Errorf("temporary dispatch repository is unavailable")
 	}
-	if err := repo.ClearTemporaryDispatch(ctx, groupIDs); err != nil {
+	if s.temporaryDispatchRuntime != nil {
+		if err := s.temporaryDispatchRuntime.StopGroups(ctx, groupIDs); err != nil {
+			return err
+		}
+	} else if err := repo.ClearTemporaryDispatch(ctx, groupIDs); err != nil {
 		return err
 	}
 	for _, groupID := range groupIDs {

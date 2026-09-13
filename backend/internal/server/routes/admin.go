@@ -335,6 +335,7 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		groups.PUT("/sort-order", h.Admin.Group.UpdateSortOrder)
 		groups.POST("/temporary-dispatch", h.Admin.Group.StartTemporaryDispatch)
 		groups.POST("/temporary-dispatch/stop", h.Admin.Group.StopTemporaryDispatch)
+		groups.GET("/temporary-dispatch/quota-preview", h.Admin.Group.GetTemporaryDispatchQuotaPreview)
 		groups.GET("/:id/model-allowlist-candidates", h.Admin.Group.GetGroupModelAllowlistCandidates)
 		groups.GET("/:id/composite-routes", h.Admin.Group.ListCompositeRoutes)
 		groups.POST("/:id/composite-routes", h.Admin.Group.CreateCompositeRoute)

@@ -22183,6 +22183,15 @@ type GroupMutation struct {
 	temporary_dispatch_id                   *string
 	temporary_dispatch_started_at           *time.Time
 	temporary_dispatch_expires_at           *time.Time
+	temporary_dispatch_mode                 *string
+	temporary_dispatch_quota_window         *string
+	temporary_dispatch_baseline_percent     *float64
+	addtemporary_dispatch_baseline_percent  *float64
+	temporary_dispatch_target_percent       *float64
+	addtemporary_dispatch_target_percent    *float64
+	temporary_dispatch_current_percent      *float64
+	addtemporary_dispatch_current_percent   *float64
+	temporary_dispatch_quota_reset_at       *time.Time
 	clearedFields                           map[string]struct{}
 	api_keys                                map[int64]struct{}
 	removedapi_keys                         map[int64]struct{}
@@ -25822,6 +25831,363 @@ func (m *GroupMutation) ResetTemporaryDispatchExpiresAt() {
 	delete(m.clearedFields, group.FieldTemporaryDispatchExpiresAt)
 }
 
+// SetTemporaryDispatchMode sets the "temporary_dispatch_mode" field.
+func (m *GroupMutation) SetTemporaryDispatchMode(s string) {
+	m.temporary_dispatch_mode = &s
+}
+
+// TemporaryDispatchMode returns the value of the "temporary_dispatch_mode" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchMode() (r string, exists bool) {
+	v := m.temporary_dispatch_mode
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchMode returns the old "temporary_dispatch_mode" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchMode(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchMode is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchMode requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchMode: %w", err)
+	}
+	return oldValue.TemporaryDispatchMode, nil
+}
+
+// ClearTemporaryDispatchMode clears the value of the "temporary_dispatch_mode" field.
+func (m *GroupMutation) ClearTemporaryDispatchMode() {
+	m.temporary_dispatch_mode = nil
+	m.clearedFields[group.FieldTemporaryDispatchMode] = struct{}{}
+}
+
+// TemporaryDispatchModeCleared returns if the "temporary_dispatch_mode" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchModeCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchMode]
+	return ok
+}
+
+// ResetTemporaryDispatchMode resets all changes to the "temporary_dispatch_mode" field.
+func (m *GroupMutation) ResetTemporaryDispatchMode() {
+	m.temporary_dispatch_mode = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchMode)
+}
+
+// SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
+func (m *GroupMutation) SetTemporaryDispatchQuotaWindow(s string) {
+	m.temporary_dispatch_quota_window = &s
+}
+
+// TemporaryDispatchQuotaWindow returns the value of the "temporary_dispatch_quota_window" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchQuotaWindow() (r string, exists bool) {
+	v := m.temporary_dispatch_quota_window
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchQuotaWindow returns the old "temporary_dispatch_quota_window" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchQuotaWindow(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchQuotaWindow is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchQuotaWindow requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchQuotaWindow: %w", err)
+	}
+	return oldValue.TemporaryDispatchQuotaWindow, nil
+}
+
+// ClearTemporaryDispatchQuotaWindow clears the value of the "temporary_dispatch_quota_window" field.
+func (m *GroupMutation) ClearTemporaryDispatchQuotaWindow() {
+	m.temporary_dispatch_quota_window = nil
+	m.clearedFields[group.FieldTemporaryDispatchQuotaWindow] = struct{}{}
+}
+
+// TemporaryDispatchQuotaWindowCleared returns if the "temporary_dispatch_quota_window" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchQuotaWindowCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchQuotaWindow]
+	return ok
+}
+
+// ResetTemporaryDispatchQuotaWindow resets all changes to the "temporary_dispatch_quota_window" field.
+func (m *GroupMutation) ResetTemporaryDispatchQuotaWindow() {
+	m.temporary_dispatch_quota_window = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchQuotaWindow)
+}
+
+// SetTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field.
+func (m *GroupMutation) SetTemporaryDispatchBaselinePercent(f float64) {
+	m.temporary_dispatch_baseline_percent = &f
+	m.addtemporary_dispatch_baseline_percent = nil
+}
+
+// TemporaryDispatchBaselinePercent returns the value of the "temporary_dispatch_baseline_percent" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchBaselinePercent() (r float64, exists bool) {
+	v := m.temporary_dispatch_baseline_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchBaselinePercent returns the old "temporary_dispatch_baseline_percent" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchBaselinePercent(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchBaselinePercent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchBaselinePercent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchBaselinePercent: %w", err)
+	}
+	return oldValue.TemporaryDispatchBaselinePercent, nil
+}
+
+// AddTemporaryDispatchBaselinePercent adds f to the "temporary_dispatch_baseline_percent" field.
+func (m *GroupMutation) AddTemporaryDispatchBaselinePercent(f float64) {
+	if m.addtemporary_dispatch_baseline_percent != nil {
+		*m.addtemporary_dispatch_baseline_percent += f
+	} else {
+		m.addtemporary_dispatch_baseline_percent = &f
+	}
+}
+
+// AddedTemporaryDispatchBaselinePercent returns the value that was added to the "temporary_dispatch_baseline_percent" field in this mutation.
+func (m *GroupMutation) AddedTemporaryDispatchBaselinePercent() (r float64, exists bool) {
+	v := m.addtemporary_dispatch_baseline_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTemporaryDispatchBaselinePercent clears the value of the "temporary_dispatch_baseline_percent" field.
+func (m *GroupMutation) ClearTemporaryDispatchBaselinePercent() {
+	m.temporary_dispatch_baseline_percent = nil
+	m.addtemporary_dispatch_baseline_percent = nil
+	m.clearedFields[group.FieldTemporaryDispatchBaselinePercent] = struct{}{}
+}
+
+// TemporaryDispatchBaselinePercentCleared returns if the "temporary_dispatch_baseline_percent" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchBaselinePercentCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchBaselinePercent]
+	return ok
+}
+
+// ResetTemporaryDispatchBaselinePercent resets all changes to the "temporary_dispatch_baseline_percent" field.
+func (m *GroupMutation) ResetTemporaryDispatchBaselinePercent() {
+	m.temporary_dispatch_baseline_percent = nil
+	m.addtemporary_dispatch_baseline_percent = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchBaselinePercent)
+}
+
+// SetTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field.
+func (m *GroupMutation) SetTemporaryDispatchTargetPercent(f float64) {
+	m.temporary_dispatch_target_percent = &f
+	m.addtemporary_dispatch_target_percent = nil
+}
+
+// TemporaryDispatchTargetPercent returns the value of the "temporary_dispatch_target_percent" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchTargetPercent() (r float64, exists bool) {
+	v := m.temporary_dispatch_target_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchTargetPercent returns the old "temporary_dispatch_target_percent" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchTargetPercent(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchTargetPercent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchTargetPercent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchTargetPercent: %w", err)
+	}
+	return oldValue.TemporaryDispatchTargetPercent, nil
+}
+
+// AddTemporaryDispatchTargetPercent adds f to the "temporary_dispatch_target_percent" field.
+func (m *GroupMutation) AddTemporaryDispatchTargetPercent(f float64) {
+	if m.addtemporary_dispatch_target_percent != nil {
+		*m.addtemporary_dispatch_target_percent += f
+	} else {
+		m.addtemporary_dispatch_target_percent = &f
+	}
+}
+
+// AddedTemporaryDispatchTargetPercent returns the value that was added to the "temporary_dispatch_target_percent" field in this mutation.
+func (m *GroupMutation) AddedTemporaryDispatchTargetPercent() (r float64, exists bool) {
+	v := m.addtemporary_dispatch_target_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTemporaryDispatchTargetPercent clears the value of the "temporary_dispatch_target_percent" field.
+func (m *GroupMutation) ClearTemporaryDispatchTargetPercent() {
+	m.temporary_dispatch_target_percent = nil
+	m.addtemporary_dispatch_target_percent = nil
+	m.clearedFields[group.FieldTemporaryDispatchTargetPercent] = struct{}{}
+}
+
+// TemporaryDispatchTargetPercentCleared returns if the "temporary_dispatch_target_percent" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchTargetPercentCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchTargetPercent]
+	return ok
+}
+
+// ResetTemporaryDispatchTargetPercent resets all changes to the "temporary_dispatch_target_percent" field.
+func (m *GroupMutation) ResetTemporaryDispatchTargetPercent() {
+	m.temporary_dispatch_target_percent = nil
+	m.addtemporary_dispatch_target_percent = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchTargetPercent)
+}
+
+// SetTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field.
+func (m *GroupMutation) SetTemporaryDispatchCurrentPercent(f float64) {
+	m.temporary_dispatch_current_percent = &f
+	m.addtemporary_dispatch_current_percent = nil
+}
+
+// TemporaryDispatchCurrentPercent returns the value of the "temporary_dispatch_current_percent" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchCurrentPercent() (r float64, exists bool) {
+	v := m.temporary_dispatch_current_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchCurrentPercent returns the old "temporary_dispatch_current_percent" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchCurrentPercent(ctx context.Context) (v *float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchCurrentPercent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchCurrentPercent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchCurrentPercent: %w", err)
+	}
+	return oldValue.TemporaryDispatchCurrentPercent, nil
+}
+
+// AddTemporaryDispatchCurrentPercent adds f to the "temporary_dispatch_current_percent" field.
+func (m *GroupMutation) AddTemporaryDispatchCurrentPercent(f float64) {
+	if m.addtemporary_dispatch_current_percent != nil {
+		*m.addtemporary_dispatch_current_percent += f
+	} else {
+		m.addtemporary_dispatch_current_percent = &f
+	}
+}
+
+// AddedTemporaryDispatchCurrentPercent returns the value that was added to the "temporary_dispatch_current_percent" field in this mutation.
+func (m *GroupMutation) AddedTemporaryDispatchCurrentPercent() (r float64, exists bool) {
+	v := m.addtemporary_dispatch_current_percent
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearTemporaryDispatchCurrentPercent clears the value of the "temporary_dispatch_current_percent" field.
+func (m *GroupMutation) ClearTemporaryDispatchCurrentPercent() {
+	m.temporary_dispatch_current_percent = nil
+	m.addtemporary_dispatch_current_percent = nil
+	m.clearedFields[group.FieldTemporaryDispatchCurrentPercent] = struct{}{}
+}
+
+// TemporaryDispatchCurrentPercentCleared returns if the "temporary_dispatch_current_percent" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchCurrentPercentCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchCurrentPercent]
+	return ok
+}
+
+// ResetTemporaryDispatchCurrentPercent resets all changes to the "temporary_dispatch_current_percent" field.
+func (m *GroupMutation) ResetTemporaryDispatchCurrentPercent() {
+	m.temporary_dispatch_current_percent = nil
+	m.addtemporary_dispatch_current_percent = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchCurrentPercent)
+}
+
+// SetTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field.
+func (m *GroupMutation) SetTemporaryDispatchQuotaResetAt(t time.Time) {
+	m.temporary_dispatch_quota_reset_at = &t
+}
+
+// TemporaryDispatchQuotaResetAt returns the value of the "temporary_dispatch_quota_reset_at" field in the mutation.
+func (m *GroupMutation) TemporaryDispatchQuotaResetAt() (r time.Time, exists bool) {
+	v := m.temporary_dispatch_quota_reset_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTemporaryDispatchQuotaResetAt returns the old "temporary_dispatch_quota_reset_at" field's value of the Group entity.
+// If the Group object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupMutation) OldTemporaryDispatchQuotaResetAt(ctx context.Context) (v *time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTemporaryDispatchQuotaResetAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTemporaryDispatchQuotaResetAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTemporaryDispatchQuotaResetAt: %w", err)
+	}
+	return oldValue.TemporaryDispatchQuotaResetAt, nil
+}
+
+// ClearTemporaryDispatchQuotaResetAt clears the value of the "temporary_dispatch_quota_reset_at" field.
+func (m *GroupMutation) ClearTemporaryDispatchQuotaResetAt() {
+	m.temporary_dispatch_quota_reset_at = nil
+	m.clearedFields[group.FieldTemporaryDispatchQuotaResetAt] = struct{}{}
+}
+
+// TemporaryDispatchQuotaResetAtCleared returns if the "temporary_dispatch_quota_reset_at" field was cleared in this mutation.
+func (m *GroupMutation) TemporaryDispatchQuotaResetAtCleared() bool {
+	_, ok := m.clearedFields[group.FieldTemporaryDispatchQuotaResetAt]
+	return ok
+}
+
+// ResetTemporaryDispatchQuotaResetAt resets all changes to the "temporary_dispatch_quota_reset_at" field.
+func (m *GroupMutation) ResetTemporaryDispatchQuotaResetAt() {
+	m.temporary_dispatch_quota_reset_at = nil
+	delete(m.clearedFields, group.FieldTemporaryDispatchQuotaResetAt)
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by ids.
 func (m *GroupMutation) AddAPIKeyIDs(ids ...int64) {
 	if m.api_keys == nil {
@@ -26180,7 +26546,7 @@ func (m *GroupMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GroupMutation) Fields() []string {
-	fields := make([]string, 0, 71)
+	fields := make([]string, 0, 77)
 	if m.created_at != nil {
 		fields = append(fields, group.FieldCreatedAt)
 	}
@@ -26394,6 +26760,24 @@ func (m *GroupMutation) Fields() []string {
 	if m.temporary_dispatch_expires_at != nil {
 		fields = append(fields, group.FieldTemporaryDispatchExpiresAt)
 	}
+	if m.temporary_dispatch_mode != nil {
+		fields = append(fields, group.FieldTemporaryDispatchMode)
+	}
+	if m.temporary_dispatch_quota_window != nil {
+		fields = append(fields, group.FieldTemporaryDispatchQuotaWindow)
+	}
+	if m.temporary_dispatch_baseline_percent != nil {
+		fields = append(fields, group.FieldTemporaryDispatchBaselinePercent)
+	}
+	if m.temporary_dispatch_target_percent != nil {
+		fields = append(fields, group.FieldTemporaryDispatchTargetPercent)
+	}
+	if m.temporary_dispatch_current_percent != nil {
+		fields = append(fields, group.FieldTemporaryDispatchCurrentPercent)
+	}
+	if m.temporary_dispatch_quota_reset_at != nil {
+		fields = append(fields, group.FieldTemporaryDispatchQuotaResetAt)
+	}
 	return fields
 }
 
@@ -26544,6 +26928,18 @@ func (m *GroupMutation) Field(name string) (ent.Value, bool) {
 		return m.TemporaryDispatchStartedAt()
 	case group.FieldTemporaryDispatchExpiresAt:
 		return m.TemporaryDispatchExpiresAt()
+	case group.FieldTemporaryDispatchMode:
+		return m.TemporaryDispatchMode()
+	case group.FieldTemporaryDispatchQuotaWindow:
+		return m.TemporaryDispatchQuotaWindow()
+	case group.FieldTemporaryDispatchBaselinePercent:
+		return m.TemporaryDispatchBaselinePercent()
+	case group.FieldTemporaryDispatchTargetPercent:
+		return m.TemporaryDispatchTargetPercent()
+	case group.FieldTemporaryDispatchCurrentPercent:
+		return m.TemporaryDispatchCurrentPercent()
+	case group.FieldTemporaryDispatchQuotaResetAt:
+		return m.TemporaryDispatchQuotaResetAt()
 	}
 	return nil, false
 }
@@ -26695,6 +27091,18 @@ func (m *GroupMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldTemporaryDispatchStartedAt(ctx)
 	case group.FieldTemporaryDispatchExpiresAt:
 		return m.OldTemporaryDispatchExpiresAt(ctx)
+	case group.FieldTemporaryDispatchMode:
+		return m.OldTemporaryDispatchMode(ctx)
+	case group.FieldTemporaryDispatchQuotaWindow:
+		return m.OldTemporaryDispatchQuotaWindow(ctx)
+	case group.FieldTemporaryDispatchBaselinePercent:
+		return m.OldTemporaryDispatchBaselinePercent(ctx)
+	case group.FieldTemporaryDispatchTargetPercent:
+		return m.OldTemporaryDispatchTargetPercent(ctx)
+	case group.FieldTemporaryDispatchCurrentPercent:
+		return m.OldTemporaryDispatchCurrentPercent(ctx)
+	case group.FieldTemporaryDispatchQuotaResetAt:
+		return m.OldTemporaryDispatchQuotaResetAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown Group field %s", name)
 }
@@ -27201,6 +27609,48 @@ func (m *GroupMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetTemporaryDispatchExpiresAt(v)
 		return nil
+	case group.FieldTemporaryDispatchMode:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchMode(v)
+		return nil
+	case group.FieldTemporaryDispatchQuotaWindow:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchQuotaWindow(v)
+		return nil
+	case group.FieldTemporaryDispatchBaselinePercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchBaselinePercent(v)
+		return nil
+	case group.FieldTemporaryDispatchTargetPercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchTargetPercent(v)
+		return nil
+	case group.FieldTemporaryDispatchCurrentPercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchCurrentPercent(v)
+		return nil
+	case group.FieldTemporaryDispatchQuotaResetAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTemporaryDispatchQuotaResetAt(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)
 }
@@ -27293,6 +27743,15 @@ func (m *GroupMutation) AddedFields() []string {
 	if m.addtemporary_dispatch_account_id != nil {
 		fields = append(fields, group.FieldTemporaryDispatchAccountID)
 	}
+	if m.addtemporary_dispatch_baseline_percent != nil {
+		fields = append(fields, group.FieldTemporaryDispatchBaselinePercent)
+	}
+	if m.addtemporary_dispatch_target_percent != nil {
+		fields = append(fields, group.FieldTemporaryDispatchTargetPercent)
+	}
+	if m.addtemporary_dispatch_current_percent != nil {
+		fields = append(fields, group.FieldTemporaryDispatchCurrentPercent)
+	}
 	return fields
 }
 
@@ -27357,6 +27816,12 @@ func (m *GroupMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedProfitSafetyBuffer()
 	case group.FieldTemporaryDispatchAccountID:
 		return m.AddedTemporaryDispatchAccountID()
+	case group.FieldTemporaryDispatchBaselinePercent:
+		return m.AddedTemporaryDispatchBaselinePercent()
+	case group.FieldTemporaryDispatchTargetPercent:
+		return m.AddedTemporaryDispatchTargetPercent()
+	case group.FieldTemporaryDispatchCurrentPercent:
+		return m.AddedTemporaryDispatchCurrentPercent()
 	}
 	return nil, false
 }
@@ -27562,6 +28027,27 @@ func (m *GroupMutation) AddField(name string, value ent.Value) error {
 		}
 		m.AddTemporaryDispatchAccountID(v)
 		return nil
+	case group.FieldTemporaryDispatchBaselinePercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTemporaryDispatchBaselinePercent(v)
+		return nil
+	case group.FieldTemporaryDispatchTargetPercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTemporaryDispatchTargetPercent(v)
+		return nil
+	case group.FieldTemporaryDispatchCurrentPercent:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTemporaryDispatchCurrentPercent(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Group numeric field %s", name)
 }
@@ -27647,6 +28133,24 @@ func (m *GroupMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(group.FieldTemporaryDispatchExpiresAt) {
 		fields = append(fields, group.FieldTemporaryDispatchExpiresAt)
+	}
+	if m.FieldCleared(group.FieldTemporaryDispatchMode) {
+		fields = append(fields, group.FieldTemporaryDispatchMode)
+	}
+	if m.FieldCleared(group.FieldTemporaryDispatchQuotaWindow) {
+		fields = append(fields, group.FieldTemporaryDispatchQuotaWindow)
+	}
+	if m.FieldCleared(group.FieldTemporaryDispatchBaselinePercent) {
+		fields = append(fields, group.FieldTemporaryDispatchBaselinePercent)
+	}
+	if m.FieldCleared(group.FieldTemporaryDispatchTargetPercent) {
+		fields = append(fields, group.FieldTemporaryDispatchTargetPercent)
+	}
+	if m.FieldCleared(group.FieldTemporaryDispatchCurrentPercent) {
+		fields = append(fields, group.FieldTemporaryDispatchCurrentPercent)
+	}
+	if m.FieldCleared(group.FieldTemporaryDispatchQuotaResetAt) {
+		fields = append(fields, group.FieldTemporaryDispatchQuotaResetAt)
 	}
 	return fields
 }
@@ -27739,6 +28243,24 @@ func (m *GroupMutation) ClearField(name string) error {
 		return nil
 	case group.FieldTemporaryDispatchExpiresAt:
 		m.ClearTemporaryDispatchExpiresAt()
+		return nil
+	case group.FieldTemporaryDispatchMode:
+		m.ClearTemporaryDispatchMode()
+		return nil
+	case group.FieldTemporaryDispatchQuotaWindow:
+		m.ClearTemporaryDispatchQuotaWindow()
+		return nil
+	case group.FieldTemporaryDispatchBaselinePercent:
+		m.ClearTemporaryDispatchBaselinePercent()
+		return nil
+	case group.FieldTemporaryDispatchTargetPercent:
+		m.ClearTemporaryDispatchTargetPercent()
+		return nil
+	case group.FieldTemporaryDispatchCurrentPercent:
+		m.ClearTemporaryDispatchCurrentPercent()
+		return nil
+	case group.FieldTemporaryDispatchQuotaResetAt:
+		m.ClearTemporaryDispatchQuotaResetAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Group nullable field %s", name)
@@ -27960,6 +28482,24 @@ func (m *GroupMutation) ResetField(name string) error {
 		return nil
 	case group.FieldTemporaryDispatchExpiresAt:
 		m.ResetTemporaryDispatchExpiresAt()
+		return nil
+	case group.FieldTemporaryDispatchMode:
+		m.ResetTemporaryDispatchMode()
+		return nil
+	case group.FieldTemporaryDispatchQuotaWindow:
+		m.ResetTemporaryDispatchQuotaWindow()
+		return nil
+	case group.FieldTemporaryDispatchBaselinePercent:
+		m.ResetTemporaryDispatchBaselinePercent()
+		return nil
+	case group.FieldTemporaryDispatchTargetPercent:
+		m.ResetTemporaryDispatchTargetPercent()
+		return nil
+	case group.FieldTemporaryDispatchCurrentPercent:
+		m.ResetTemporaryDispatchCurrentPercent()
+		return nil
+	case group.FieldTemporaryDispatchQuotaResetAt:
+		m.ResetTemporaryDispatchQuotaResetAt()
 		return nil
 	}
 	return fmt.Errorf("unknown Group field %s", name)

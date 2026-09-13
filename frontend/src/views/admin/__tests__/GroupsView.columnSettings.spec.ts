@@ -11,6 +11,7 @@ const {
   getUsageSummary,
   getCapacitySummary,
   getLiveCapability,
+  getTemporaryDispatchQuotaPreview,
   startTemporaryDispatch,
   stopTemporaryDispatch,
   listAccounts,
@@ -26,6 +27,7 @@ const {
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
+  getTemporaryDispatchQuotaPreview: vi.fn(),
   startTemporaryDispatch: vi.fn(),
   stopTemporaryDispatch: vi.fn(),
   listAccounts: vi.fn(),
@@ -53,6 +55,7 @@ const messages: Record<string, string> = {
   'admin.groups.temporaryDispatch.action': 'Temporary account',
   'admin.groups.temporaryDispatch.start': 'Start takeover',
   'admin.groups.temporaryDispatch.started': 'Temporary dispatch started',
+  'admin.groups.temporaryDispatch.modeHybrid': 'Quota or time',
   'admin.groups.usageToday': 'Today',
   'admin.groups.usageYesterday': 'Yesterday',
   'admin.groups.usageTotal': 'Total',
@@ -67,6 +70,7 @@ vi.mock('@/api/admin', () => ({
       getUsageSummary,
       getCapacitySummary,
       getLiveCapability,
+      getTemporaryDispatchQuotaPreview,
       startTemporaryDispatch,
       stopTemporaryDispatch,
       create: vi.fn(),
@@ -254,6 +258,7 @@ describe('admin GroupsView column settings', () => {
     getUsageSummary.mockReset()
     getCapacitySummary.mockReset()
     getLiveCapability.mockReset()
+    getTemporaryDispatchQuotaPreview.mockReset()
     startTemporaryDispatch.mockReset()
     stopTemporaryDispatch.mockReset()
     listAccounts.mockReset()
@@ -275,6 +280,11 @@ describe('admin GroupsView column settings', () => {
     getUsageSummary.mockResolvedValue([])
     getCapacitySummary.mockResolvedValue([])
     getLiveCapability.mockResolvedValue({ supported: false })
+    getTemporaryDispatchQuotaPreview.mockResolvedValue({
+      window: '5h',
+      used_percent: 35,
+      reset_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    })
     startTemporaryDispatch.mockResolvedValue({
       dispatch_id: 'td_test', group_ids: [1], account_id: 42,
       started_at: '2026-07-01T00:00:00Z', expires_at: '2026-07-01T02:00:00Z',
@@ -327,7 +337,7 @@ describe('admin GroupsView column settings', () => {
 
   it('starts a temporary dispatch for selected groups', async () => {
     listAccounts.mockResolvedValue({
-      items: [{ id: 42, name: 'Drain account' }],
+      items: [{ id: 42, name: 'Drain account', type: 'apikey' }],
       total: 1,
       page: 1,
       page_size: 30,
@@ -349,8 +359,56 @@ describe('admin GroupsView column settings', () => {
     await startButton!.trigger('click')
     await flushPromises()
 
-    expect(startTemporaryDispatch).toHaveBeenCalledWith([1], 42, 120)
+    expect(startTemporaryDispatch).toHaveBeenCalledWith({
+      group_ids: [1],
+      account_id: 42,
+      mode: 'time',
+      duration_minutes: 120,
+      quota_window: undefined,
+      target_delta_percent: undefined,
+    })
     expect(showSuccess).toHaveBeenCalledWith('Temporary dispatch started')
+  })
+
+  it('defaults OpenAI OAuth dispatch to hybrid mode with the 5h window', async () => {
+    listGroups.mockResolvedValue({
+      items: [createGroup({ name: 'Core OpenAI', platform: 'openai' })],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1,
+    })
+    listAccounts.mockResolvedValue({
+      items: [{ id: 42, name: 'Drain OAuth', type: 'oauth', parent_account_id: null }],
+      total: 1,
+      page: 1,
+      page_size: 30,
+      pages: 1,
+    })
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-test="select-first"]').trigger('click')
+    const openButton = wrapper.findAll('button').find((item) => item.text().includes('Temporary account'))
+    await openButton!.trigger('click')
+    await flushPromises()
+
+    const accountButton = wrapper.findAll('button').find((item) => item.text().includes('Drain OAuth'))
+    await accountButton!.trigger('click')
+    await flushPromises()
+
+    expect(getTemporaryDispatchQuotaPreview).toHaveBeenCalledWith(42, '5h')
+    const startButton = wrapper.findAll('button').find((item) => item.text().includes('Start takeover'))
+    await startButton!.trigger('click')
+    await flushPromises()
+
+    expect(startTemporaryDispatch).toHaveBeenCalledWith({
+      group_ids: [1],
+      account_id: 42,
+      mode: 'hybrid',
+      duration_minutes: 120,
+      quota_window: '5h',
+      target_delta_percent: 30,
+    })
   })
 
   it('applies saved hidden columns on mount and ignores unknown keys', async () => {

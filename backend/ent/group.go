@@ -162,6 +162,18 @@ type Group struct {
 	TemporaryDispatchStartedAt *time.Time `json:"temporary_dispatch_started_at,omitempty"`
 	// 临时调度硬过期时间；到期后运行时忽略覆盖
 	TemporaryDispatchExpiresAt *time.Time `json:"temporary_dispatch_expires_at,omitempty"`
+	// 临时调度结束模式：time、usage、hybrid
+	TemporaryDispatchMode *string `json:"temporary_dispatch_mode,omitempty"`
+	// 额度结束窗口：5h 或 7d
+	TemporaryDispatchQuotaWindow *string `json:"temporary_dispatch_quota_window,omitempty"`
+	// 额度模式启动时所选窗口的账号总用量
+	TemporaryDispatchBaselinePercent *float64 `json:"temporary_dispatch_baseline_percent,omitempty"`
+	// 额度模式所选窗口的账号总用量结束目标
+	TemporaryDispatchTargetPercent *float64 `json:"temporary_dispatch_target_percent,omitempty"`
+	// 最近一次观测到的所选窗口账号总用量
+	TemporaryDispatchCurrentPercent *float64 `json:"temporary_dispatch_current_percent,omitempty"`
+	// 额度模式启动时所选窗口的重置时间
+	TemporaryDispatchQuotaResetAt *time.Time `json:"temporary_dispatch_quota_reset_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the GroupQuery when eager-loading is set.
 	Edges        GroupEdges `json:"edges"`
@@ -272,13 +284,13 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case group.FieldPeakRateEnabled, group.FieldIsExclusive, group.FieldIsCarpool, group.FieldAllowImageGeneration, group.FieldAllowBatchImageGeneration, group.FieldImageRateIndependent, group.FieldVideoRateIndependent, group.FieldLongContextPricingEnabled, group.FieldClaudeCodeOnly, group.FieldModelRoutingEnabled, group.FieldMcpXMLInject, group.FieldAllowMessagesDispatch, group.FieldAllowLive, group.FieldForceOpenaiFast, group.FieldFreeOpenaiFast, group.FieldRequireOauthOnly, group.FieldRequirePrivacySet, group.FieldProfitControlEnabled:
 			values[i] = new(sql.NullBool)
-		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldSearchPricePer1k, group.FieldAudioRealtimePricePerMin, group.FieldAudioTtsPricePerMillionChars, group.FieldAudioSttPricePerHour, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer:
+		case group.FieldRateMultiplier, group.FieldPeakRateMultiplier, group.FieldDailyLimitUsd, group.FieldWeeklyLimitUsd, group.FieldMonthlyLimitUsd, group.FieldImageRateMultiplier, group.FieldImagePrice1k, group.FieldImagePrice2k, group.FieldImagePrice4k, group.FieldBatchImageDiscountMultiplier, group.FieldBatchImageHoldMultiplier, group.FieldVideoRateMultiplier, group.FieldVideoPrice480p, group.FieldVideoPrice720p, group.FieldVideoPrice1080p, group.FieldWebSearchPricePerCall, group.FieldSearchPricePer1k, group.FieldAudioRealtimePricePerMin, group.FieldAudioTtsPricePerMillionChars, group.FieldAudioSttPricePerHour, group.FieldProfitMinMargin, group.FieldProfitSafetyBuffer, group.FieldTemporaryDispatchBaselinePercent, group.FieldTemporaryDispatchTargetPercent, group.FieldTemporaryDispatchCurrentPercent:
 			values[i] = new(sql.NullFloat64)
 		case group.FieldID, group.FieldDefaultValidityDays, group.FieldFallbackGroupID, group.FieldFallbackGroupIDOnInvalidRequest, group.FieldSortOrder, group.FieldRpmLimit, group.FieldTemporaryDispatchAccountID:
 			values[i] = new(sql.NullInt64)
-		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort, group.FieldMaxReasoningEffortOverLimit, group.FieldTemporaryDispatchID:
+		case group.FieldName, group.FieldDescription, group.FieldPeakStart, group.FieldPeakEnd, group.FieldStatus, group.FieldDuplicateOperationID, group.FieldPlatform, group.FieldSubscriptionType, group.FieldDefaultMappedModel, group.FieldMaxReasoningEffort, group.FieldMaxReasoningEffortOverLimit, group.FieldTemporaryDispatchID, group.FieldTemporaryDispatchMode, group.FieldTemporaryDispatchQuotaWindow:
 			values[i] = new(sql.NullString)
-		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt, group.FieldTemporaryDispatchStartedAt, group.FieldTemporaryDispatchExpiresAt:
+		case group.FieldCreatedAt, group.FieldUpdatedAt, group.FieldDeletedAt, group.FieldTemporaryDispatchStartedAt, group.FieldTemporaryDispatchExpiresAt, group.FieldTemporaryDispatchQuotaResetAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -766,6 +778,48 @@ func (_m *Group) assignValues(columns []string, values []any) error {
 				_m.TemporaryDispatchExpiresAt = new(time.Time)
 				*_m.TemporaryDispatchExpiresAt = value.Time
 			}
+		case group.FieldTemporaryDispatchMode:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_mode", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchMode = new(string)
+				*_m.TemporaryDispatchMode = value.String
+			}
+		case group.FieldTemporaryDispatchQuotaWindow:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_quota_window", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchQuotaWindow = new(string)
+				*_m.TemporaryDispatchQuotaWindow = value.String
+			}
+		case group.FieldTemporaryDispatchBaselinePercent:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_baseline_percent", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchBaselinePercent = new(float64)
+				*_m.TemporaryDispatchBaselinePercent = value.Float64
+			}
+		case group.FieldTemporaryDispatchTargetPercent:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_target_percent", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchTargetPercent = new(float64)
+				*_m.TemporaryDispatchTargetPercent = value.Float64
+			}
+		case group.FieldTemporaryDispatchCurrentPercent:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_current_percent", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchCurrentPercent = new(float64)
+				*_m.TemporaryDispatchCurrentPercent = value.Float64
+			}
+		case group.FieldTemporaryDispatchQuotaResetAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field temporary_dispatch_quota_reset_at", values[i])
+			} else if value.Valid {
+				_m.TemporaryDispatchQuotaResetAt = new(time.Time)
+				*_m.TemporaryDispatchQuotaResetAt = value.Time
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -1098,6 +1152,36 @@ func (_m *Group) String() string {
 	builder.WriteString(", ")
 	if v := _m.TemporaryDispatchExpiresAt; v != nil {
 		builder.WriteString("temporary_dispatch_expires_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchMode; v != nil {
+		builder.WriteString("temporary_dispatch_mode=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchQuotaWindow; v != nil {
+		builder.WriteString("temporary_dispatch_quota_window=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchBaselinePercent; v != nil {
+		builder.WriteString("temporary_dispatch_baseline_percent=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchTargetPercent; v != nil {
+		builder.WriteString("temporary_dispatch_target_percent=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchCurrentPercent; v != nil {
+		builder.WriteString("temporary_dispatch_current_percent=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.TemporaryDispatchQuotaResetAt; v != nil {
+		builder.WriteString("temporary_dispatch_quota_reset_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteByte(')')

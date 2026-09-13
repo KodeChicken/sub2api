@@ -58,7 +58,7 @@
               {{ t("admin.groups.temporaryDispatch.action") }}
             </button>
             <button
-              v-if="!authStore.isSimpleMode && selectedGroups.some((group) => group.temporary_dispatch_account_id)"
+              v-if="!authStore.isSimpleMode && selectedGroups.some((group) => isTemporaryDispatchActive(group))"
               @click="stopTemporaryDispatch"
               :disabled="temporaryDispatchSubmitting"
               class="btn btn-secondary"
@@ -403,6 +403,13 @@
               <span class="badge badge-warning">
                 {{ t("admin.groups.temporaryDispatch.active", { account: row.temporary_dispatch_account_id }) }}
               </span>
+              <div v-if="row.temporary_dispatch_mode" class="whitespace-nowrap text-gray-500 dark:text-gray-400">
+                {{ temporaryDispatchModeLabel(row.temporary_dispatch_mode) }}
+                <template v-if="row.temporary_dispatch_quota_window">
+                  · {{ row.temporary_dispatch_quota_window }}
+                  {{ formatTemporaryDispatchPercent(row.temporary_dispatch_current_percent) }} / {{ formatTemporaryDispatchPercent(row.temporary_dispatch_target_percent) }}
+                </template>
+              </div>
               <div class="whitespace-nowrap text-gray-500 dark:text-gray-400">
                 {{ t("admin.groups.temporaryDispatch.expiresAt", { time: formatTemporaryDispatchTime(row.temporary_dispatch_expires_at) }) }}
               </div>
@@ -3830,6 +3837,26 @@
           {{ t("admin.groups.temporaryDispatch.selectedGroups", { count: selectedGroups.length }) }}
         </p>
         <div>
+          <label class="input-label">{{ t("admin.groups.temporaryDispatch.mode") }}</label>
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              v-for="option in temporaryDispatchModeOptions"
+              :key="option.value"
+              type="button"
+              :disabled="option.requiresQuota && !temporaryDispatchSupportsQuota"
+              :class="[
+                'rounded-lg border px-3 py-2 text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                temporaryDispatchMode === option.value
+                  ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
+                  : 'border-gray-200 text-gray-600 hover:border-primary-300 dark:border-dark-600 dark:text-gray-300',
+              ]"
+              @click="setTemporaryDispatchMode(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+        <div>
           <label class="input-label">{{ t("admin.groups.temporaryDispatch.targetAccount") }}</label>
           <input
             v-model="temporaryAccountSearch"
@@ -3843,7 +3870,7 @@
               v-for="account in temporaryAccountResults"
               :key="account.id"
               type="button"
-              @click="temporarySelectedAccount = account"
+              @click="selectTemporaryAccount(account)"
               :class="[
                 'flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-dark-700',
                 temporarySelectedAccount?.id === account.id ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300' : '',
@@ -3857,7 +3884,45 @@
             </p>
           </div>
         </div>
-        <div>
+        <div v-if="temporaryDispatchUsesQuota" class="space-y-3 rounded-lg border border-gray-200 p-3 dark:border-dark-600">
+          <div>
+            <label class="input-label">{{ t("admin.groups.temporaryDispatch.quotaWindow") }}</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                v-for="window in temporaryDispatchQuotaWindows"
+                :key="window"
+                type="button"
+                :class="[
+                  'rounded-lg border px-3 py-2 text-sm transition-colors',
+                  temporaryDispatchQuotaWindow === window
+                    ? 'border-primary-500 bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-300'
+                    : 'border-gray-200 text-gray-600 dark:border-dark-600 dark:text-gray-300',
+                ]"
+                @click="setTemporaryDispatchQuotaWindow(window)"
+              >
+                {{ window }}
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="input-label">{{ t("admin.groups.temporaryDispatch.quotaDelta") }}</label>
+            <input v-model.number="temporaryDispatchQuotaDelta" type="number" min="0.001" max="100" step="0.1" class="input" />
+          </div>
+          <p v-if="temporaryQuotaLoading" class="text-xs text-gray-500">{{ t("admin.groups.temporaryDispatch.quotaLoading") }}</p>
+          <p v-else-if="temporaryQuotaError" class="text-xs text-red-500">{{ temporaryQuotaError }}</p>
+          <p v-else-if="(temporaryDispatchQuotaTarget ?? 0) > 100" class="text-xs text-red-500">
+            {{ t("admin.groups.temporaryDispatch.quotaTargetExceeded", { max: Math.max(0, 100 - (temporaryQuotaPreview?.used ?? 0)).toFixed(1) }) }}
+          </p>
+          <div v-else-if="temporaryQuotaPreview" class="grid grid-cols-3 gap-2 text-xs text-gray-600 dark:text-gray-300">
+            <div>{{ t("admin.groups.temporaryDispatch.quotaCurrent") }}<strong class="ml-1">{{ temporaryQuotaPreview.used.toFixed(1) }}%</strong></div>
+            <div>{{ t("admin.groups.temporaryDispatch.quotaTarget") }}<strong class="ml-1">{{ temporaryDispatchQuotaTarget?.toFixed(1) }}%</strong></div>
+            <div>{{ t("admin.groups.temporaryDispatch.quotaReset") }}<strong class="ml-1">{{ formatTemporaryDispatchTime(temporaryQuotaPreview.resetAt) }}</strong></div>
+          </div>
+          <p class="text-xs text-amber-600 dark:text-amber-400">
+            {{ t("admin.groups.temporaryDispatch.sharedQuotaHint") }}
+          </p>
+        </div>
+        <div v-if="temporaryDispatchUsesTime">
           <label class="input-label">{{ t("admin.groups.temporaryDispatch.duration") }}</label>
           <input v-model.number="temporaryDispatchDuration" type="number" min="1" max="1440" class="input" />
           <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
@@ -3873,7 +3938,7 @@
           <button
             type="button"
             class="btn btn-primary"
-            :disabled="temporaryDispatchSubmitting || !temporarySelectedAccount"
+            :disabled="temporaryDispatchSubmitting || !temporaryDispatchCanSubmit"
             @click="startTemporaryDispatch"
           >
             {{ t("admin.groups.temporaryDispatch.start") }}
@@ -4401,6 +4466,8 @@ import type {
   CompositeRouteMatchType,
   GroupPlatform,
   SubscriptionType,
+  TemporaryDispatchMode,
+  TemporaryDispatchQuotaWindow,
 } from "@/types";
 import {
   CONCRETE_PLATFORM_OPTIONS,
@@ -4955,10 +5022,34 @@ const selectedGroups = computed(() => {
 const showTemporaryDispatchModal = ref(false);
 const temporaryDispatchSubmitting = ref(false);
 const temporaryDispatchDuration = ref(120);
+const temporaryDispatchMode = ref<TemporaryDispatchMode>("hybrid");
+const temporaryDispatchQuotaWindow = ref<TemporaryDispatchQuotaWindow>("5h");
+const temporaryDispatchQuotaDelta = ref(30);
+const temporaryQuotaLoading = ref(false);
+const temporaryQuotaError = ref("");
+const temporaryQuotaPreview = ref<{ used: number; resetAt: string } | null>(null);
 const temporaryAccountSearch = ref("");
-const temporaryAccountResults = ref<Array<{ id: number; name: string }>>([]);
-const temporarySelectedAccount = ref<{ id: number; name: string } | null>(null);
+const temporaryAccountResults = ref<Array<{ id: number; name: string; type: string; parentAccountId?: number | null }>>([]);
+const temporarySelectedAccount = ref<{ id: number; name: string; type: string; parentAccountId?: number | null } | null>(null);
+const temporaryDispatchModeOptions = computed(() => [
+  { value: "time" as const, label: t("admin.groups.temporaryDispatch.modeTime"), requiresQuota: false },
+  { value: "usage" as const, label: t("admin.groups.temporaryDispatch.modeUsage"), requiresQuota: true },
+  { value: "hybrid" as const, label: t("admin.groups.temporaryDispatch.modeHybrid"), requiresQuota: true },
+]);
+const temporaryDispatchQuotaWindows: TemporaryDispatchQuotaWindow[] = ["5h", "7d"];
+const temporaryDispatchSupportsQuota = computed(() => selectedGroups.value.length > 0 && selectedGroups.value.every((group) => group.platform === "openai"));
+const temporaryDispatchUsesQuota = computed(() => temporaryDispatchMode.value !== "time");
+const temporaryDispatchUsesTime = computed(() => temporaryDispatchMode.value !== "usage");
+const temporaryDispatchQuotaTarget = computed(() => temporaryQuotaPreview.value ? temporaryQuotaPreview.value.used + Number(temporaryDispatchQuotaDelta.value || 0) : null);
+const temporaryDispatchCanSubmit = computed(() => {
+  if (!temporarySelectedAccount.value) return false;
+  if (temporaryDispatchUsesTime.value && (temporaryDispatchDuration.value < 1 || temporaryDispatchDuration.value > 1440)) return false;
+  if (!temporaryDispatchUsesQuota.value) return true;
+  const delta = Number(temporaryDispatchQuotaDelta.value);
+  return !temporaryQuotaLoading.value && !temporaryQuotaError.value && !!temporaryQuotaPreview.value && delta > 0 && delta <= 100 && (temporaryDispatchQuotaTarget.value ?? 101) <= 100;
+});
 let temporaryAccountSearchTimer: ReturnType<typeof setTimeout> | null = null;
+let temporaryQuotaRequestVersion = 0;
 const editingGroup = ref<AdminGroup | null>(null);
 const deletingGroup = ref<AdminGroup | null>(null);
 const duplicatingGroupIds = reactive(new Set<number>());
@@ -5795,14 +5886,62 @@ const loadTemporaryAccounts = async () => {
       status: "active",
       search: temporaryAccountSearch.value.trim() || undefined,
     });
-    temporaryAccountResults.value = response.items.map((account) => ({
-      id: account.id,
-      name: account.name,
-    }));
+    temporaryAccountResults.value = response.items
+      .filter((account) => !temporaryDispatchUsesQuota.value || (account.type === "oauth" && !account.parent_account_id))
+      .map((account) => ({
+        id: account.id,
+        name: account.name,
+        type: account.type,
+        parentAccountId: account.parent_account_id,
+      }));
   } catch (error) {
     temporaryAccountResults.value = [];
     console.error("Failed to load temporary dispatch accounts:", error);
   }
+};
+
+const loadTemporaryQuotaPreview = async () => {
+  const account = temporarySelectedAccount.value;
+  temporaryQuotaPreview.value = null;
+  temporaryQuotaError.value = "";
+  if (!temporaryDispatchUsesQuota.value || !account) return;
+  const requestVersion = ++temporaryQuotaRequestVersion;
+  temporaryQuotaLoading.value = true;
+  try {
+    const preview = await adminAPI.groups.getTemporaryDispatchQuotaPreview(account.id, temporaryDispatchQuotaWindow.value);
+    if (requestVersion !== temporaryQuotaRequestVersion) return;
+    if (new Date(preview.reset_at).getTime() <= Date.now()) {
+      temporaryQuotaError.value = t("admin.groups.temporaryDispatch.quotaUnavailable", { window: temporaryDispatchQuotaWindow.value });
+      return;
+    }
+    temporaryQuotaPreview.value = {
+      used: preview.used_percent,
+      resetAt: preview.reset_at,
+    };
+  } catch (error) {
+    temporaryQuotaError.value = extractApiErrorMessage(error) || t("admin.groups.temporaryDispatch.quotaLoadFailed");
+  } finally {
+    if (requestVersion === temporaryQuotaRequestVersion) temporaryQuotaLoading.value = false;
+  }
+};
+
+const selectTemporaryAccount = (account: { id: number; name: string; type: string; parentAccountId?: number | null }) => {
+  temporarySelectedAccount.value = account;
+  void loadTemporaryQuotaPreview();
+};
+
+const setTemporaryDispatchMode = (mode: TemporaryDispatchMode) => {
+  if (mode !== "time" && !temporaryDispatchSupportsQuota.value) return;
+  temporaryDispatchMode.value = mode;
+  temporarySelectedAccount.value = null;
+  temporaryQuotaPreview.value = null;
+  temporaryQuotaError.value = "";
+  void loadTemporaryAccounts();
+};
+
+const setTemporaryDispatchQuotaWindow = (window: TemporaryDispatchQuotaWindow) => {
+  temporaryDispatchQuotaWindow.value = window;
+  void loadTemporaryQuotaPreview();
 };
 
 const searchTemporaryAccounts = () => {
@@ -5824,6 +5963,12 @@ const openTemporaryDispatchModal = () => {
     appStore.showError(t("admin.groups.temporaryDispatch.compositeUnsupported"));
     return;
   }
+  temporaryDispatchMode.value = selectedGroups.value[0]?.platform === "openai" ? "hybrid" : "time";
+  temporaryDispatchQuotaWindow.value = "5h";
+  temporaryDispatchQuotaDelta.value = 30;
+  temporaryDispatchDuration.value = 120;
+  temporaryQuotaPreview.value = null;
+  temporaryQuotaError.value = "";
   showTemporaryDispatchModal.value = true;
   temporarySelectedAccount.value = null;
   temporaryAccountSearch.value = "";
@@ -5834,6 +5979,10 @@ const closeTemporaryDispatchModal = () => {
   showTemporaryDispatchModal.value = false;
   temporarySelectedAccount.value = null;
   temporaryAccountResults.value = [];
+  temporaryQuotaRequestVersion++;
+  temporaryQuotaLoading.value = false;
+  temporaryQuotaPreview.value = null;
+  temporaryQuotaError.value = "";
   if (temporaryAccountSearchTimer) {
     clearTimeout(temporaryAccountSearchTimer);
     temporaryAccountSearchTimer = null;
@@ -5847,11 +5996,14 @@ const startTemporaryDispatch = async () => {
   }
   temporaryDispatchSubmitting.value = true;
   try {
-    await adminAPI.groups.startTemporaryDispatch(
-      selectedGroups.value.map((group) => group.id),
-      temporarySelectedAccount.value.id,
-      temporaryDispatchDuration.value,
-    );
+    await adminAPI.groups.startTemporaryDispatch({
+      group_ids: selectedGroups.value.map((group) => group.id),
+      account_id: temporarySelectedAccount.value.id,
+      mode: temporaryDispatchMode.value,
+      duration_minutes: temporaryDispatchUsesTime.value ? temporaryDispatchDuration.value : undefined,
+      quota_window: temporaryDispatchUsesQuota.value ? temporaryDispatchQuotaWindow.value : undefined,
+      target_delta_percent: temporaryDispatchUsesQuota.value ? temporaryDispatchQuotaDelta.value : undefined,
+    });
     appStore.showSuccess(t("admin.groups.temporaryDispatch.started"));
     closeTemporaryDispatchModal();
     selectedGroupIds.value = [];
@@ -5865,7 +6017,7 @@ const startTemporaryDispatch = async () => {
 
 const stopTemporaryDispatch = async () => {
   const ids = selectedGroups.value
-    .filter((group) => group.temporary_dispatch_account_id)
+    .filter((group) => isTemporaryDispatchActive(group))
     .map((group) => group.id);
   if (ids.length === 0) return;
   temporaryDispatchSubmitting.value = true;
@@ -5880,6 +6032,15 @@ const stopTemporaryDispatch = async () => {
     temporaryDispatchSubmitting.value = false;
   }
 };
+
+const temporaryDispatchModeLabel = (mode?: TemporaryDispatchMode): string => {
+  if (mode === "usage") return t("admin.groups.temporaryDispatch.modeUsage");
+  if (mode === "hybrid") return t("admin.groups.temporaryDispatch.modeHybrid");
+  return t("admin.groups.temporaryDispatch.modeTime");
+};
+
+const formatTemporaryDispatchPercent = (value?: number): string =>
+  typeof value === "number" ? `${value.toFixed(1)}%` : "—";
 
 const formatCost = (cost: number): string => {
   if (cost >= 1000) return cost.toFixed(0);

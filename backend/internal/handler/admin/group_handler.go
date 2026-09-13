@@ -348,9 +348,12 @@ type CompositeRoutePreviewRequest struct {
 }
 
 type StartTemporaryDispatchRequest struct {
-	GroupIDs        []int64 `json:"group_ids" binding:"required"`
-	AccountID       int64   `json:"account_id" binding:"required"`
-	DurationMinutes int     `json:"duration_minutes"`
+	GroupIDs           []int64 `json:"group_ids" binding:"required"`
+	AccountID          int64   `json:"account_id" binding:"required"`
+	Mode               string  `json:"mode" binding:"omitempty,oneof=time usage hybrid"`
+	DurationMinutes    int     `json:"duration_minutes"`
+	QuotaWindow        string  `json:"quota_window" binding:"omitempty,oneof=5h 7d"`
+	TargetDeltaPercent float64 `json:"target_delta_percent"`
 }
 
 type StopTemporaryDispatchRequest struct {
@@ -360,6 +363,26 @@ type StopTemporaryDispatchRequest struct {
 type temporaryDispatchAdminService interface {
 	StartTemporaryDispatch(ctx context.Context, input service.StartTemporaryDispatchInput) (*service.TemporaryDispatchResult, error)
 	StopTemporaryDispatch(ctx context.Context, groupIDs []int64) error
+	GetTemporaryDispatchQuotaPreview(ctx context.Context, accountID int64, window string) (*service.TemporaryDispatchQuotaPreview, error)
+}
+
+func (h *GroupHandler) GetTemporaryDispatchQuotaPreview(c *gin.Context) {
+	accountID, err := strconv.ParseInt(c.Query("account_id"), 10, 64)
+	if err != nil || accountID <= 0 {
+		response.BadRequest(c, "Invalid account ID")
+		return
+	}
+	svc, ok := h.adminService.(temporaryDispatchAdminService)
+	if !ok {
+		response.InternalError(c, "Temporary dispatch service is unavailable")
+		return
+	}
+	preview, err := svc.GetTemporaryDispatchQuotaPreview(c.Request.Context(), accountID, c.DefaultQuery("quota_window", service.TemporaryDispatchQuotaWindow5h))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, preview)
 }
 
 // StartTemporaryDispatch installs one expiring account override across groups.
@@ -378,9 +401,12 @@ func (h *GroupHandler) StartTemporaryDispatch(c *gin.Context) {
 		return
 	}
 	result, err := svc.StartTemporaryDispatch(c.Request.Context(), service.StartTemporaryDispatchInput{
-		GroupIDs:        req.GroupIDs,
-		AccountID:       req.AccountID,
-		DurationMinutes: req.DurationMinutes,
+		GroupIDs:           req.GroupIDs,
+		AccountID:          req.AccountID,
+		Mode:               req.Mode,
+		DurationMinutes:    req.DurationMinutes,
+		QuotaWindow:        req.QuotaWindow,
+		TargetDeltaPercent: req.TargetDeltaPercent,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

@@ -974,6 +974,12 @@ var (
 		{Name: "temporary_dispatch_id", Type: field.TypeString, Nullable: true, Size: 64},
 		{Name: "temporary_dispatch_started_at", Type: field.TypeTime, Nullable: true},
 		{Name: "temporary_dispatch_expires_at", Type: field.TypeTime, Nullable: true},
+		{Name: "temporary_dispatch_mode", Type: field.TypeString, Nullable: true, Size: 16},
+		{Name: "temporary_dispatch_quota_window", Type: field.TypeString, Nullable: true, Size: 2},
+		{Name: "temporary_dispatch_baseline_percent", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(7,3)"}},
+		{Name: "temporary_dispatch_target_percent", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(7,3)"}},
+		{Name: "temporary_dispatch_current_percent", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"postgres": "decimal(7,3)"}},
+		{Name: "temporary_dispatch_quota_reset_at", Type: field.TypeTime, Nullable: true},
 	}
 	// GroupsTable holds the schema information for the "groups" table.
 	GroupsTable = &schema.Table{

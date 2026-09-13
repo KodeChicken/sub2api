@@ -39,12 +39,14 @@ func temporaryDispatchAccount(ctx context.Context, repo AccountRepository, group
 	account, err := repo.GetByID(ctx, accountID)
 	if err != nil {
 		if errors.Is(err, ErrAccountNotFound) {
+			notifyTemporaryDispatchAccountUnavailable(accountID, "account_deleted")
 			return nil, false, nil
 		}
 		return nil, true, err
 	}
 	if !account.IsActive() || !account.Schedulable || account.Platform != platform ||
 		(account.AutoPauseOnExpired && account.ExpiresAt != nil && !account.ExpiresAt.After(time.Now())) {
+		notifyTemporaryDispatchAccountUnavailable(accountID, "account_unavailable")
 		return nil, false, nil
 	}
 	if _, excluded := excludedIDs[account.ID]; excluded {
@@ -63,9 +65,9 @@ func (s *GatewayService) selectTemporaryDispatchAccount(ctx context.Context, gro
 		return nil, true, temporaryDispatchSelectionError(requestedModel, "target account is temporarily unavailable")
 	}
 	if !s.isAccountSchedulableForQuota(account) {
-		// Quota exhaustion is a terminal condition for this use case: restore
-		// the original pool immediately, while the persisted rule remains as an
-		// audit marker until stopped or expired.
+		// Quota exhaustion is terminal for temporary dispatch. Routing resumes
+		// immediately and persisted metadata is removed asynchronously.
+		notifyTemporaryDispatchAccountUnavailable(account.ID, "quota_paused")
 		return nil, false, nil
 	}
 	if group != nil && group.RequireOAuthOnly && account.Type == AccountTypeAPIKey {
@@ -95,11 +97,13 @@ func (s *OpenAIGatewayService) selectTemporaryDispatchAccount(ctx context.Contex
 	}
 	if account.IsOpenAI() {
 		if paused, _ := shouldAutoPauseOpenAIAccountByQuota(ctx, account); paused {
+			notifyTemporaryDispatchAccountUnavailable(account.ID, "quota_paused")
 			return nil, false, nil
 		}
 	}
 	if account.IsGrok() {
 		if paused, _ := shouldAutoPauseGrokAccountByQuota(account); paused {
+			notifyTemporaryDispatchAccountUnavailable(account.ID, "quota_paused")
 			return nil, false, nil
 		}
 	}

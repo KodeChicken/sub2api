@@ -370,6 +370,36 @@ func TemporaryDispatchExpiresAt(v time.Time) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchExpiresAt, v))
 }
 
+// TemporaryDispatchMode applies equality check predicate on the "temporary_dispatch_mode" field. It's identical to TemporaryDispatchModeEQ.
+func TemporaryDispatchMode(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchQuotaWindow applies equality check predicate on the "temporary_dispatch_quota_window" field. It's identical to TemporaryDispatchQuotaWindowEQ.
+func TemporaryDispatchQuotaWindow(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchBaselinePercent applies equality check predicate on the "temporary_dispatch_baseline_percent" field. It's identical to TemporaryDispatchBaselinePercentEQ.
+func TemporaryDispatchBaselinePercent(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchBaselinePercent, v))
+}
+
+// TemporaryDispatchTargetPercent applies equality check predicate on the "temporary_dispatch_target_percent" field. It's identical to TemporaryDispatchTargetPercentEQ.
+func TemporaryDispatchTargetPercent(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchTargetPercent, v))
+}
+
+// TemporaryDispatchCurrentPercent applies equality check predicate on the "temporary_dispatch_current_percent" field. It's identical to TemporaryDispatchCurrentPercentEQ.
+func TemporaryDispatchCurrentPercent(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchCurrentPercent, v))
+}
+
+// TemporaryDispatchQuotaResetAt applies equality check predicate on the "temporary_dispatch_quota_reset_at" field. It's identical to TemporaryDispatchQuotaResetAtEQ.
+func TemporaryDispatchQuotaResetAt(v time.Time) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchQuotaResetAt, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Group {
 	return predicate.Group(sql.FieldEQ(FieldCreatedAt, v))
@@ -2908,6 +2938,356 @@ func TemporaryDispatchExpiresAtIsNil() predicate.Group {
 // TemporaryDispatchExpiresAtNotNil applies the NotNil predicate on the "temporary_dispatch_expires_at" field.
 func TemporaryDispatchExpiresAtNotNil() predicate.Group {
 	return predicate.Group(sql.FieldNotNull(FieldTemporaryDispatchExpiresAt))
+}
+
+// TemporaryDispatchModeEQ applies the EQ predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchModeNEQ applies the NEQ predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchModeIn applies the In predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldTemporaryDispatchMode, vs...))
+}
+
+// TemporaryDispatchModeNotIn applies the NotIn predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldTemporaryDispatchMode, vs...))
+}
+
+// TemporaryDispatchModeGT applies the GT predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchModeGTE applies the GTE predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchModeLT applies the LT predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchModeLTE applies the LTE predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchModeContains applies the Contains predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchModeHasPrefix applies the HasPrefix predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchModeHasSuffix applies the HasSuffix predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchModeIsNil applies the IsNil predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldTemporaryDispatchMode))
+}
+
+// TemporaryDispatchModeNotNil applies the NotNil predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldTemporaryDispatchMode))
+}
+
+// TemporaryDispatchModeEqualFold applies the EqualFold predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchModeContainsFold applies the ContainsFold predicate on the "temporary_dispatch_mode" field.
+func TemporaryDispatchModeContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldTemporaryDispatchMode, v))
+}
+
+// TemporaryDispatchQuotaWindowEQ applies the EQ predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchQuotaWindowNEQ applies the NEQ predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowNEQ(v string) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchQuotaWindowIn applies the In predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldTemporaryDispatchQuotaWindow, vs...))
+}
+
+// TemporaryDispatchQuotaWindowNotIn applies the NotIn predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowNotIn(vs ...string) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldTemporaryDispatchQuotaWindow, vs...))
+}
+
+// TemporaryDispatchQuotaWindowGT applies the GT predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowGT(v string) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchQuotaWindowGTE applies the GTE predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowGTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchQuotaWindowLT applies the LT predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowLT(v string) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchQuotaWindowLTE applies the LTE predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowLTE(v string) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchQuotaWindowContains applies the Contains predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowContains(v string) predicate.Group {
+	return predicate.Group(sql.FieldContains(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchQuotaWindowHasPrefix applies the HasPrefix predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowHasPrefix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasPrefix(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchQuotaWindowHasSuffix applies the HasSuffix predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowHasSuffix(v string) predicate.Group {
+	return predicate.Group(sql.FieldHasSuffix(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchQuotaWindowIsNil applies the IsNil predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldTemporaryDispatchQuotaWindow))
+}
+
+// TemporaryDispatchQuotaWindowNotNil applies the NotNil predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldTemporaryDispatchQuotaWindow))
+}
+
+// TemporaryDispatchQuotaWindowEqualFold applies the EqualFold predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowEqualFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldEqualFold(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchQuotaWindowContainsFold applies the ContainsFold predicate on the "temporary_dispatch_quota_window" field.
+func TemporaryDispatchQuotaWindowContainsFold(v string) predicate.Group {
+	return predicate.Group(sql.FieldContainsFold(FieldTemporaryDispatchQuotaWindow, v))
+}
+
+// TemporaryDispatchBaselinePercentEQ applies the EQ predicate on the "temporary_dispatch_baseline_percent" field.
+func TemporaryDispatchBaselinePercentEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchBaselinePercent, v))
+}
+
+// TemporaryDispatchBaselinePercentNEQ applies the NEQ predicate on the "temporary_dispatch_baseline_percent" field.
+func TemporaryDispatchBaselinePercentNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldTemporaryDispatchBaselinePercent, v))
+}
+
+// TemporaryDispatchBaselinePercentIn applies the In predicate on the "temporary_dispatch_baseline_percent" field.
+func TemporaryDispatchBaselinePercentIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldTemporaryDispatchBaselinePercent, vs...))
+}
+
+// TemporaryDispatchBaselinePercentNotIn applies the NotIn predicate on the "temporary_dispatch_baseline_percent" field.
+func TemporaryDispatchBaselinePercentNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldTemporaryDispatchBaselinePercent, vs...))
+}
+
+// TemporaryDispatchBaselinePercentGT applies the GT predicate on the "temporary_dispatch_baseline_percent" field.
+func TemporaryDispatchBaselinePercentGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldTemporaryDispatchBaselinePercent, v))
+}
+
+// TemporaryDispatchBaselinePercentGTE applies the GTE predicate on the "temporary_dispatch_baseline_percent" field.
+func TemporaryDispatchBaselinePercentGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldTemporaryDispatchBaselinePercent, v))
+}
+
+// TemporaryDispatchBaselinePercentLT applies the LT predicate on the "temporary_dispatch_baseline_percent" field.
+func TemporaryDispatchBaselinePercentLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldTemporaryDispatchBaselinePercent, v))
+}
+
+// TemporaryDispatchBaselinePercentLTE applies the LTE predicate on the "temporary_dispatch_baseline_percent" field.
+func TemporaryDispatchBaselinePercentLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldTemporaryDispatchBaselinePercent, v))
+}
+
+// TemporaryDispatchBaselinePercentIsNil applies the IsNil predicate on the "temporary_dispatch_baseline_percent" field.
+func TemporaryDispatchBaselinePercentIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldTemporaryDispatchBaselinePercent))
+}
+
+// TemporaryDispatchBaselinePercentNotNil applies the NotNil predicate on the "temporary_dispatch_baseline_percent" field.
+func TemporaryDispatchBaselinePercentNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldTemporaryDispatchBaselinePercent))
+}
+
+// TemporaryDispatchTargetPercentEQ applies the EQ predicate on the "temporary_dispatch_target_percent" field.
+func TemporaryDispatchTargetPercentEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchTargetPercent, v))
+}
+
+// TemporaryDispatchTargetPercentNEQ applies the NEQ predicate on the "temporary_dispatch_target_percent" field.
+func TemporaryDispatchTargetPercentNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldTemporaryDispatchTargetPercent, v))
+}
+
+// TemporaryDispatchTargetPercentIn applies the In predicate on the "temporary_dispatch_target_percent" field.
+func TemporaryDispatchTargetPercentIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldTemporaryDispatchTargetPercent, vs...))
+}
+
+// TemporaryDispatchTargetPercentNotIn applies the NotIn predicate on the "temporary_dispatch_target_percent" field.
+func TemporaryDispatchTargetPercentNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldTemporaryDispatchTargetPercent, vs...))
+}
+
+// TemporaryDispatchTargetPercentGT applies the GT predicate on the "temporary_dispatch_target_percent" field.
+func TemporaryDispatchTargetPercentGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldTemporaryDispatchTargetPercent, v))
+}
+
+// TemporaryDispatchTargetPercentGTE applies the GTE predicate on the "temporary_dispatch_target_percent" field.
+func TemporaryDispatchTargetPercentGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldTemporaryDispatchTargetPercent, v))
+}
+
+// TemporaryDispatchTargetPercentLT applies the LT predicate on the "temporary_dispatch_target_percent" field.
+func TemporaryDispatchTargetPercentLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldTemporaryDispatchTargetPercent, v))
+}
+
+// TemporaryDispatchTargetPercentLTE applies the LTE predicate on the "temporary_dispatch_target_percent" field.
+func TemporaryDispatchTargetPercentLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldTemporaryDispatchTargetPercent, v))
+}
+
+// TemporaryDispatchTargetPercentIsNil applies the IsNil predicate on the "temporary_dispatch_target_percent" field.
+func TemporaryDispatchTargetPercentIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldTemporaryDispatchTargetPercent))
+}
+
+// TemporaryDispatchTargetPercentNotNil applies the NotNil predicate on the "temporary_dispatch_target_percent" field.
+func TemporaryDispatchTargetPercentNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldTemporaryDispatchTargetPercent))
+}
+
+// TemporaryDispatchCurrentPercentEQ applies the EQ predicate on the "temporary_dispatch_current_percent" field.
+func TemporaryDispatchCurrentPercentEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchCurrentPercent, v))
+}
+
+// TemporaryDispatchCurrentPercentNEQ applies the NEQ predicate on the "temporary_dispatch_current_percent" field.
+func TemporaryDispatchCurrentPercentNEQ(v float64) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldTemporaryDispatchCurrentPercent, v))
+}
+
+// TemporaryDispatchCurrentPercentIn applies the In predicate on the "temporary_dispatch_current_percent" field.
+func TemporaryDispatchCurrentPercentIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldTemporaryDispatchCurrentPercent, vs...))
+}
+
+// TemporaryDispatchCurrentPercentNotIn applies the NotIn predicate on the "temporary_dispatch_current_percent" field.
+func TemporaryDispatchCurrentPercentNotIn(vs ...float64) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldTemporaryDispatchCurrentPercent, vs...))
+}
+
+// TemporaryDispatchCurrentPercentGT applies the GT predicate on the "temporary_dispatch_current_percent" field.
+func TemporaryDispatchCurrentPercentGT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldTemporaryDispatchCurrentPercent, v))
+}
+
+// TemporaryDispatchCurrentPercentGTE applies the GTE predicate on the "temporary_dispatch_current_percent" field.
+func TemporaryDispatchCurrentPercentGTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldTemporaryDispatchCurrentPercent, v))
+}
+
+// TemporaryDispatchCurrentPercentLT applies the LT predicate on the "temporary_dispatch_current_percent" field.
+func TemporaryDispatchCurrentPercentLT(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldTemporaryDispatchCurrentPercent, v))
+}
+
+// TemporaryDispatchCurrentPercentLTE applies the LTE predicate on the "temporary_dispatch_current_percent" field.
+func TemporaryDispatchCurrentPercentLTE(v float64) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldTemporaryDispatchCurrentPercent, v))
+}
+
+// TemporaryDispatchCurrentPercentIsNil applies the IsNil predicate on the "temporary_dispatch_current_percent" field.
+func TemporaryDispatchCurrentPercentIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldTemporaryDispatchCurrentPercent))
+}
+
+// TemporaryDispatchCurrentPercentNotNil applies the NotNil predicate on the "temporary_dispatch_current_percent" field.
+func TemporaryDispatchCurrentPercentNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldTemporaryDispatchCurrentPercent))
+}
+
+// TemporaryDispatchQuotaResetAtEQ applies the EQ predicate on the "temporary_dispatch_quota_reset_at" field.
+func TemporaryDispatchQuotaResetAtEQ(v time.Time) predicate.Group {
+	return predicate.Group(sql.FieldEQ(FieldTemporaryDispatchQuotaResetAt, v))
+}
+
+// TemporaryDispatchQuotaResetAtNEQ applies the NEQ predicate on the "temporary_dispatch_quota_reset_at" field.
+func TemporaryDispatchQuotaResetAtNEQ(v time.Time) predicate.Group {
+	return predicate.Group(sql.FieldNEQ(FieldTemporaryDispatchQuotaResetAt, v))
+}
+
+// TemporaryDispatchQuotaResetAtIn applies the In predicate on the "temporary_dispatch_quota_reset_at" field.
+func TemporaryDispatchQuotaResetAtIn(vs ...time.Time) predicate.Group {
+	return predicate.Group(sql.FieldIn(FieldTemporaryDispatchQuotaResetAt, vs...))
+}
+
+// TemporaryDispatchQuotaResetAtNotIn applies the NotIn predicate on the "temporary_dispatch_quota_reset_at" field.
+func TemporaryDispatchQuotaResetAtNotIn(vs ...time.Time) predicate.Group {
+	return predicate.Group(sql.FieldNotIn(FieldTemporaryDispatchQuotaResetAt, vs...))
+}
+
+// TemporaryDispatchQuotaResetAtGT applies the GT predicate on the "temporary_dispatch_quota_reset_at" field.
+func TemporaryDispatchQuotaResetAtGT(v time.Time) predicate.Group {
+	return predicate.Group(sql.FieldGT(FieldTemporaryDispatchQuotaResetAt, v))
+}
+
+// TemporaryDispatchQuotaResetAtGTE applies the GTE predicate on the "temporary_dispatch_quota_reset_at" field.
+func TemporaryDispatchQuotaResetAtGTE(v time.Time) predicate.Group {
+	return predicate.Group(sql.FieldGTE(FieldTemporaryDispatchQuotaResetAt, v))
+}
+
+// TemporaryDispatchQuotaResetAtLT applies the LT predicate on the "temporary_dispatch_quota_reset_at" field.
+func TemporaryDispatchQuotaResetAtLT(v time.Time) predicate.Group {
+	return predicate.Group(sql.FieldLT(FieldTemporaryDispatchQuotaResetAt, v))
+}
+
+// TemporaryDispatchQuotaResetAtLTE applies the LTE predicate on the "temporary_dispatch_quota_reset_at" field.
+func TemporaryDispatchQuotaResetAtLTE(v time.Time) predicate.Group {
+	return predicate.Group(sql.FieldLTE(FieldTemporaryDispatchQuotaResetAt, v))
+}
+
+// TemporaryDispatchQuotaResetAtIsNil applies the IsNil predicate on the "temporary_dispatch_quota_reset_at" field.
+func TemporaryDispatchQuotaResetAtIsNil() predicate.Group {
+	return predicate.Group(sql.FieldIsNull(FieldTemporaryDispatchQuotaResetAt))
+}
+
+// TemporaryDispatchQuotaResetAtNotNil applies the NotNil predicate on the "temporary_dispatch_quota_reset_at" field.
+func TemporaryDispatchQuotaResetAtNotNil() predicate.Group {
+	return predicate.Group(sql.FieldNotNull(FieldTemporaryDispatchQuotaResetAt))
 }
 
 // HasAPIKeys applies the HasEdge predicate on the "api_keys" edge.

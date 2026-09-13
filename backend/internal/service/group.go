@@ -135,10 +135,16 @@ type Group struct {
 
 	// TemporaryDispatch* is an expiring scheduler overlay. The original
 	// account-group bindings remain untouched and resume when this expires.
-	TemporaryDispatchAccountID *int64
-	TemporaryDispatchID        string
-	TemporaryDispatchStartedAt *time.Time
-	TemporaryDispatchExpiresAt *time.Time
+	TemporaryDispatchAccountID       *int64
+	TemporaryDispatchID              string
+	TemporaryDispatchStartedAt       *time.Time
+	TemporaryDispatchExpiresAt       *time.Time
+	TemporaryDispatchMode            string
+	TemporaryDispatchQuotaWindow     string
+	TemporaryDispatchBaselinePercent *float64
+	TemporaryDispatchTargetPercent   *float64
+	TemporaryDispatchCurrentPercent  *float64
+	TemporaryDispatchQuotaResetAt    *time.Time
 
 	CreatedAt time.Time
 	UpdatedAt time.Time

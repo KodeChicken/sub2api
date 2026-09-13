@@ -1123,6 +1123,9 @@ func (s *OpenAIGatewayService) updateCodexUsageSnapshot(ctx context.Context, acc
 	if snapshot == nil {
 		return
 	}
+	// Temporary dispatch completion must observe every fresh response header,
+	// even when account Extra persistence is throttled.
+	notifyTemporaryDispatchQuota(accountID, snapshot)
 	if s == nil || s.accountRepo == nil {
 		return
 	}

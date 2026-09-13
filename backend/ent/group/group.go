@@ -158,6 +158,18 @@ const (
 	FieldTemporaryDispatchStartedAt = "temporary_dispatch_started_at"
 	// FieldTemporaryDispatchExpiresAt holds the string denoting the temporary_dispatch_expires_at field in the database.
 	FieldTemporaryDispatchExpiresAt = "temporary_dispatch_expires_at"
+	// FieldTemporaryDispatchMode holds the string denoting the temporary_dispatch_mode field in the database.
+	FieldTemporaryDispatchMode = "temporary_dispatch_mode"
+	// FieldTemporaryDispatchQuotaWindow holds the string denoting the temporary_dispatch_quota_window field in the database.
+	FieldTemporaryDispatchQuotaWindow = "temporary_dispatch_quota_window"
+	// FieldTemporaryDispatchBaselinePercent holds the string denoting the temporary_dispatch_baseline_percent field in the database.
+	FieldTemporaryDispatchBaselinePercent = "temporary_dispatch_baseline_percent"
+	// FieldTemporaryDispatchTargetPercent holds the string denoting the temporary_dispatch_target_percent field in the database.
+	FieldTemporaryDispatchTargetPercent = "temporary_dispatch_target_percent"
+	// FieldTemporaryDispatchCurrentPercent holds the string denoting the temporary_dispatch_current_percent field in the database.
+	FieldTemporaryDispatchCurrentPercent = "temporary_dispatch_current_percent"
+	// FieldTemporaryDispatchQuotaResetAt holds the string denoting the temporary_dispatch_quota_reset_at field in the database.
+	FieldTemporaryDispatchQuotaResetAt = "temporary_dispatch_quota_reset_at"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -304,6 +316,12 @@ var Columns = []string{
 	FieldTemporaryDispatchID,
 	FieldTemporaryDispatchStartedAt,
 	FieldTemporaryDispatchExpiresAt,
+	FieldTemporaryDispatchMode,
+	FieldTemporaryDispatchQuotaWindow,
+	FieldTemporaryDispatchBaselinePercent,
+	FieldTemporaryDispatchTargetPercent,
+	FieldTemporaryDispatchCurrentPercent,
+	FieldTemporaryDispatchQuotaResetAt,
 }
 
 var (
@@ -453,6 +471,10 @@ var (
 	DefaultProfitSafetyBuffer float64
 	// TemporaryDispatchIDValidator is a validator for the "temporary_dispatch_id" field. It is called by the builders before save.
 	TemporaryDispatchIDValidator func(string) error
+	// TemporaryDispatchModeValidator is a validator for the "temporary_dispatch_mode" field. It is called by the builders before save.
+	TemporaryDispatchModeValidator func(string) error
+	// TemporaryDispatchQuotaWindowValidator is a validator for the "temporary_dispatch_quota_window" field. It is called by the builders before save.
+	TemporaryDispatchQuotaWindowValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the Group queries.
@@ -776,6 +798,36 @@ func ByTemporaryDispatchStartedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByTemporaryDispatchExpiresAt orders the results by the temporary_dispatch_expires_at field.
 func ByTemporaryDispatchExpiresAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTemporaryDispatchExpiresAt, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchMode orders the results by the temporary_dispatch_mode field.
+func ByTemporaryDispatchMode(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchMode, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchQuotaWindow orders the results by the temporary_dispatch_quota_window field.
+func ByTemporaryDispatchQuotaWindow(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchQuotaWindow, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchBaselinePercent orders the results by the temporary_dispatch_baseline_percent field.
+func ByTemporaryDispatchBaselinePercent(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchBaselinePercent, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchTargetPercent orders the results by the temporary_dispatch_target_percent field.
+func ByTemporaryDispatchTargetPercent(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchTargetPercent, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchCurrentPercent orders the results by the temporary_dispatch_current_percent field.
+func ByTemporaryDispatchCurrentPercent(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchCurrentPercent, opts...).ToFunc()
+}
+
+// ByTemporaryDispatchQuotaResetAt orders the results by the temporary_dispatch_quota_reset_at field.
+func ByTemporaryDispatchQuotaResetAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTemporaryDispatchQuotaResetAt, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

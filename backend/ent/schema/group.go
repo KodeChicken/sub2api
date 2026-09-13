@@ -325,6 +325,35 @@ func (Group) Fields() []ent.Field {
 			Optional().
 			Nillable().
 			Comment("临时调度硬过期时间；到期后运行时忽略覆盖"),
+		field.String("temporary_dispatch_mode").
+			MaxLen(16).
+			Optional().
+			Nillable().
+			Comment("临时调度结束模式：time、usage、hybrid"),
+		field.String("temporary_dispatch_quota_window").
+			MaxLen(2).
+			Optional().
+			Nillable().
+			Comment("额度结束窗口：5h 或 7d"),
+		field.Float("temporary_dispatch_baseline_percent").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(7,3)"}).
+			Comment("额度模式启动时所选窗口的账号总用量"),
+		field.Float("temporary_dispatch_target_percent").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(7,3)"}).
+			Comment("额度模式所选窗口的账号总用量结束目标"),
+		field.Float("temporary_dispatch_current_percent").
+			Optional().
+			Nillable().
+			SchemaType(map[string]string{dialect.Postgres: "decimal(7,3)"}).
+			Comment("最近一次观测到的所选窗口账号总用量"),
+		field.Time("temporary_dispatch_quota_reset_at").
+			Optional().
+			Nillable().
+			Comment("额度模式启动时所选窗口的重置时间"),
 	}
 }
 

@@ -1319,6 +1319,147 @@ func (_u *GroupUpdate) ClearTemporaryDispatchExpiresAt() *GroupUpdate {
 	return _u
 }
 
+// SetTemporaryDispatchMode sets the "temporary_dispatch_mode" field.
+func (_u *GroupUpdate) SetTemporaryDispatchMode(v string) *GroupUpdate {
+	_u.mutation.SetTemporaryDispatchMode(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchMode sets the "temporary_dispatch_mode" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchMode(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchMode(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchMode clears the value of the "temporary_dispatch_mode" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchMode() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchMode()
+	return _u
+}
+
+// SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
+func (_u *GroupUpdate) SetTemporaryDispatchQuotaWindow(v string) *GroupUpdate {
+	_u.mutation.SetTemporaryDispatchQuotaWindow(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchQuotaWindow(v *string) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchQuotaWindow(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchQuotaWindow clears the value of the "temporary_dispatch_quota_window" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchQuotaWindow() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchQuotaWindow()
+	return _u
+}
+
+// SetTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field.
+func (_u *GroupUpdate) SetTemporaryDispatchBaselinePercent(v float64) *GroupUpdate {
+	_u.mutation.ResetTemporaryDispatchBaselinePercent()
+	_u.mutation.SetTemporaryDispatchBaselinePercent(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchBaselinePercent(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchBaselinePercent(*v)
+	}
+	return _u
+}
+
+// AddTemporaryDispatchBaselinePercent adds value to the "temporary_dispatch_baseline_percent" field.
+func (_u *GroupUpdate) AddTemporaryDispatchBaselinePercent(v float64) *GroupUpdate {
+	_u.mutation.AddTemporaryDispatchBaselinePercent(v)
+	return _u
+}
+
+// ClearTemporaryDispatchBaselinePercent clears the value of the "temporary_dispatch_baseline_percent" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchBaselinePercent() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchBaselinePercent()
+	return _u
+}
+
+// SetTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field.
+func (_u *GroupUpdate) SetTemporaryDispatchTargetPercent(v float64) *GroupUpdate {
+	_u.mutation.ResetTemporaryDispatchTargetPercent()
+	_u.mutation.SetTemporaryDispatchTargetPercent(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchTargetPercent(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchTargetPercent(*v)
+	}
+	return _u
+}
+
+// AddTemporaryDispatchTargetPercent adds value to the "temporary_dispatch_target_percent" field.
+func (_u *GroupUpdate) AddTemporaryDispatchTargetPercent(v float64) *GroupUpdate {
+	_u.mutation.AddTemporaryDispatchTargetPercent(v)
+	return _u
+}
+
+// ClearTemporaryDispatchTargetPercent clears the value of the "temporary_dispatch_target_percent" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchTargetPercent() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchTargetPercent()
+	return _u
+}
+
+// SetTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field.
+func (_u *GroupUpdate) SetTemporaryDispatchCurrentPercent(v float64) *GroupUpdate {
+	_u.mutation.ResetTemporaryDispatchCurrentPercent()
+	_u.mutation.SetTemporaryDispatchCurrentPercent(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchCurrentPercent(v *float64) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchCurrentPercent(*v)
+	}
+	return _u
+}
+
+// AddTemporaryDispatchCurrentPercent adds value to the "temporary_dispatch_current_percent" field.
+func (_u *GroupUpdate) AddTemporaryDispatchCurrentPercent(v float64) *GroupUpdate {
+	_u.mutation.AddTemporaryDispatchCurrentPercent(v)
+	return _u
+}
+
+// ClearTemporaryDispatchCurrentPercent clears the value of the "temporary_dispatch_current_percent" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchCurrentPercent() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchCurrentPercent()
+	return _u
+}
+
+// SetTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field.
+func (_u *GroupUpdate) SetTemporaryDispatchQuotaResetAt(v time.Time) *GroupUpdate {
+	_u.mutation.SetTemporaryDispatchQuotaResetAt(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field if the given value is not nil.
+func (_u *GroupUpdate) SetNillableTemporaryDispatchQuotaResetAt(v *time.Time) *GroupUpdate {
+	if v != nil {
+		_u.SetTemporaryDispatchQuotaResetAt(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchQuotaResetAt clears the value of the "temporary_dispatch_quota_reset_at" field.
+func (_u *GroupUpdate) ClearTemporaryDispatchQuotaResetAt() *GroupUpdate {
+	_u.mutation.ClearTemporaryDispatchQuotaResetAt()
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdate) AddAPIKeyIDs(ids ...int64) *GroupUpdate {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -1652,6 +1793,16 @@ func (_u *GroupUpdate) check() error {
 	if v, ok := _u.mutation.TemporaryDispatchID(); ok {
 		if err := group.TemporaryDispatchIDValidator(v); err != nil {
 			return &ValidationError{Name: "temporary_dispatch_id", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TemporaryDispatchMode(); ok {
+		if err := group.TemporaryDispatchModeValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_mode", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_mode": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TemporaryDispatchQuotaWindow(); ok {
+		if err := group.TemporaryDispatchQuotaWindowValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_quota_window", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_quota_window": %w`, err)}
 		}
 	}
 	return nil
@@ -2052,6 +2203,51 @@ func (_u *GroupUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.TemporaryDispatchExpiresAtCleared() {
 		_spec.ClearField(group.FieldTemporaryDispatchExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchMode(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchMode, field.TypeString, value)
+	}
+	if _u.mutation.TemporaryDispatchModeCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchMode, field.TypeString)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchQuotaWindow(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchQuotaWindow, field.TypeString, value)
+	}
+	if _u.mutation.TemporaryDispatchQuotaWindowCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchQuotaWindow, field.TypeString)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchBaselinePercent(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchBaselinePercent, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedTemporaryDispatchBaselinePercent(); ok {
+		_spec.AddField(group.FieldTemporaryDispatchBaselinePercent, field.TypeFloat64, value)
+	}
+	if _u.mutation.TemporaryDispatchBaselinePercentCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchBaselinePercent, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchTargetPercent(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchTargetPercent, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedTemporaryDispatchTargetPercent(); ok {
+		_spec.AddField(group.FieldTemporaryDispatchTargetPercent, field.TypeFloat64, value)
+	}
+	if _u.mutation.TemporaryDispatchTargetPercentCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchTargetPercent, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchCurrentPercent(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchCurrentPercent, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedTemporaryDispatchCurrentPercent(); ok {
+		_spec.AddField(group.FieldTemporaryDispatchCurrentPercent, field.TypeFloat64, value)
+	}
+	if _u.mutation.TemporaryDispatchCurrentPercentCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchCurrentPercent, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchQuotaResetAt(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchQuotaResetAt, field.TypeTime, value)
+	}
+	if _u.mutation.TemporaryDispatchQuotaResetAtCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchQuotaResetAt, field.TypeTime)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -3649,6 +3845,147 @@ func (_u *GroupUpdateOne) ClearTemporaryDispatchExpiresAt() *GroupUpdateOne {
 	return _u
 }
 
+// SetTemporaryDispatchMode sets the "temporary_dispatch_mode" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchMode(v string) *GroupUpdateOne {
+	_u.mutation.SetTemporaryDispatchMode(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchMode sets the "temporary_dispatch_mode" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchMode(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchMode(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchMode clears the value of the "temporary_dispatch_mode" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchMode() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchMode()
+	return _u
+}
+
+// SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchQuotaWindow(v string) *GroupUpdateOne {
+	_u.mutation.SetTemporaryDispatchQuotaWindow(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchQuotaWindow(v *string) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchQuotaWindow(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchQuotaWindow clears the value of the "temporary_dispatch_quota_window" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchQuotaWindow() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchQuotaWindow()
+	return _u
+}
+
+// SetTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchBaselinePercent(v float64) *GroupUpdateOne {
+	_u.mutation.ResetTemporaryDispatchBaselinePercent()
+	_u.mutation.SetTemporaryDispatchBaselinePercent(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchBaselinePercent(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchBaselinePercent(*v)
+	}
+	return _u
+}
+
+// AddTemporaryDispatchBaselinePercent adds value to the "temporary_dispatch_baseline_percent" field.
+func (_u *GroupUpdateOne) AddTemporaryDispatchBaselinePercent(v float64) *GroupUpdateOne {
+	_u.mutation.AddTemporaryDispatchBaselinePercent(v)
+	return _u
+}
+
+// ClearTemporaryDispatchBaselinePercent clears the value of the "temporary_dispatch_baseline_percent" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchBaselinePercent() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchBaselinePercent()
+	return _u
+}
+
+// SetTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchTargetPercent(v float64) *GroupUpdateOne {
+	_u.mutation.ResetTemporaryDispatchTargetPercent()
+	_u.mutation.SetTemporaryDispatchTargetPercent(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchTargetPercent(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchTargetPercent(*v)
+	}
+	return _u
+}
+
+// AddTemporaryDispatchTargetPercent adds value to the "temporary_dispatch_target_percent" field.
+func (_u *GroupUpdateOne) AddTemporaryDispatchTargetPercent(v float64) *GroupUpdateOne {
+	_u.mutation.AddTemporaryDispatchTargetPercent(v)
+	return _u
+}
+
+// ClearTemporaryDispatchTargetPercent clears the value of the "temporary_dispatch_target_percent" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchTargetPercent() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchTargetPercent()
+	return _u
+}
+
+// SetTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchCurrentPercent(v float64) *GroupUpdateOne {
+	_u.mutation.ResetTemporaryDispatchCurrentPercent()
+	_u.mutation.SetTemporaryDispatchCurrentPercent(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchCurrentPercent(v *float64) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchCurrentPercent(*v)
+	}
+	return _u
+}
+
+// AddTemporaryDispatchCurrentPercent adds value to the "temporary_dispatch_current_percent" field.
+func (_u *GroupUpdateOne) AddTemporaryDispatchCurrentPercent(v float64) *GroupUpdateOne {
+	_u.mutation.AddTemporaryDispatchCurrentPercent(v)
+	return _u
+}
+
+// ClearTemporaryDispatchCurrentPercent clears the value of the "temporary_dispatch_current_percent" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchCurrentPercent() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchCurrentPercent()
+	return _u
+}
+
+// SetTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field.
+func (_u *GroupUpdateOne) SetTemporaryDispatchQuotaResetAt(v time.Time) *GroupUpdateOne {
+	_u.mutation.SetTemporaryDispatchQuotaResetAt(v)
+	return _u
+}
+
+// SetNillableTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field if the given value is not nil.
+func (_u *GroupUpdateOne) SetNillableTemporaryDispatchQuotaResetAt(v *time.Time) *GroupUpdateOne {
+	if v != nil {
+		_u.SetTemporaryDispatchQuotaResetAt(*v)
+	}
+	return _u
+}
+
+// ClearTemporaryDispatchQuotaResetAt clears the value of the "temporary_dispatch_quota_reset_at" field.
+func (_u *GroupUpdateOne) ClearTemporaryDispatchQuotaResetAt() *GroupUpdateOne {
+	_u.mutation.ClearTemporaryDispatchQuotaResetAt()
+	return _u
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_u *GroupUpdateOne) AddAPIKeyIDs(ids ...int64) *GroupUpdateOne {
 	_u.mutation.AddAPIKeyIDs(ids...)
@@ -3995,6 +4332,16 @@ func (_u *GroupUpdateOne) check() error {
 	if v, ok := _u.mutation.TemporaryDispatchID(); ok {
 		if err := group.TemporaryDispatchIDValidator(v); err != nil {
 			return &ValidationError{Name: "temporary_dispatch_id", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TemporaryDispatchMode(); ok {
+		if err := group.TemporaryDispatchModeValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_mode", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_mode": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.TemporaryDispatchQuotaWindow(); ok {
+		if err := group.TemporaryDispatchQuotaWindowValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_quota_window", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_quota_window": %w`, err)}
 		}
 	}
 	return nil
@@ -4412,6 +4759,51 @@ func (_u *GroupUpdateOne) sqlSave(ctx context.Context) (_node *Group, err error)
 	}
 	if _u.mutation.TemporaryDispatchExpiresAtCleared() {
 		_spec.ClearField(group.FieldTemporaryDispatchExpiresAt, field.TypeTime)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchMode(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchMode, field.TypeString, value)
+	}
+	if _u.mutation.TemporaryDispatchModeCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchMode, field.TypeString)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchQuotaWindow(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchQuotaWindow, field.TypeString, value)
+	}
+	if _u.mutation.TemporaryDispatchQuotaWindowCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchQuotaWindow, field.TypeString)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchBaselinePercent(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchBaselinePercent, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedTemporaryDispatchBaselinePercent(); ok {
+		_spec.AddField(group.FieldTemporaryDispatchBaselinePercent, field.TypeFloat64, value)
+	}
+	if _u.mutation.TemporaryDispatchBaselinePercentCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchBaselinePercent, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchTargetPercent(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchTargetPercent, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedTemporaryDispatchTargetPercent(); ok {
+		_spec.AddField(group.FieldTemporaryDispatchTargetPercent, field.TypeFloat64, value)
+	}
+	if _u.mutation.TemporaryDispatchTargetPercentCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchTargetPercent, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchCurrentPercent(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchCurrentPercent, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedTemporaryDispatchCurrentPercent(); ok {
+		_spec.AddField(group.FieldTemporaryDispatchCurrentPercent, field.TypeFloat64, value)
+	}
+	if _u.mutation.TemporaryDispatchCurrentPercentCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchCurrentPercent, field.TypeFloat64)
+	}
+	if value, ok := _u.mutation.TemporaryDispatchQuotaResetAt(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchQuotaResetAt, field.TypeTime, value)
+	}
+	if _u.mutation.TemporaryDispatchQuotaResetAtCleared() {
+		_spec.ClearField(group.FieldTemporaryDispatchQuotaResetAt, field.TypeTime)
 	}
 	if _u.mutation.APIKeysCleared() {
 		edge := &sqlgraph.EdgeSpec{

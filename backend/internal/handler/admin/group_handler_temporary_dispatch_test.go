@@ -17,10 +17,13 @@ import (
 
 type temporaryDispatchAdminServiceStub struct {
 	service.AdminService
-	startInput service.StartTemporaryDispatchInput
-	startCalls int
-	stopIDs    []int64
-	stopCalls  int
+	startInput       service.StartTemporaryDispatchInput
+	startCalls       int
+	stopIDs          []int64
+	stopCalls        int
+	previewAccountID int64
+	previewWindow    string
+	previewCalls     int
 }
 
 func (s *temporaryDispatchAdminServiceStub) StartTemporaryDispatch(_ context.Context, input service.StartTemporaryDispatchInput) (*service.TemporaryDispatchResult, error) {
@@ -42,12 +45,20 @@ func (s *temporaryDispatchAdminServiceStub) StopTemporaryDispatch(_ context.Cont
 	return nil
 }
 
+func (s *temporaryDispatchAdminServiceStub) GetTemporaryDispatchQuotaPreview(_ context.Context, accountID int64, window string) (*service.TemporaryDispatchQuotaPreview, error) {
+	s.previewCalls++
+	s.previewAccountID = accountID
+	s.previewWindow = window
+	return &service.TemporaryDispatchQuotaPreview{Window: window, UsedPercent: 35, ResetAt: time.Now().Add(time.Hour)}, nil
+}
+
 func setupTemporaryDispatchGroupRouter(svc service.AdminService) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	handler := NewGroupHandler(svc, nil, nil)
 	router.POST("/api/v1/admin/groups/temporary-dispatch", handler.StartTemporaryDispatch)
 	router.POST("/api/v1/admin/groups/temporary-dispatch/stop", handler.StopTemporaryDispatch)
+	router.GET("/api/v1/admin/groups/temporary-dispatch/quota-preview", handler.GetTemporaryDispatchQuotaPreview)
 	return router
 }
 
@@ -55,7 +66,7 @@ func TestGroupHandlerStartsTemporaryDispatch(t *testing.T) {
 	svc := &temporaryDispatchAdminServiceStub{}
 	router := setupTemporaryDispatchGroupRouter(svc)
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups/temporary-dispatch", strings.NewReader(`{"group_ids":[11,12],"account_id":88,"duration_minutes":90}`))
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/admin/groups/temporary-dispatch", strings.NewReader(`{"group_ids":[11,12],"account_id":88,"mode":"hybrid","duration_minutes":90,"quota_window":"5h","target_delta_percent":30}`))
 	request.Header.Set("Content-Type", "application/json")
 
 	router.ServeHTTP(recorder, request)
@@ -64,7 +75,10 @@ func TestGroupHandlerStartsTemporaryDispatch(t *testing.T) {
 	require.Equal(t, 1, svc.startCalls)
 	require.Equal(t, []int64{11, 12}, svc.startInput.GroupIDs)
 	require.Equal(t, int64(88), svc.startInput.AccountID)
+	require.Equal(t, service.TemporaryDispatchModeHybrid, svc.startInput.Mode)
 	require.Equal(t, 90, svc.startInput.DurationMinutes)
+	require.Equal(t, service.TemporaryDispatchQuotaWindow5h, svc.startInput.QuotaWindow)
+	require.InDelta(t, 30, svc.startInput.TargetDeltaPercent, 0.001)
 	require.Contains(t, recorder.Body.String(), `"dispatch_id":"td_handler_test"`)
 }
 
@@ -80,6 +94,45 @@ func TestGroupHandlerStopsTemporaryDispatch(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, 1, svc.stopCalls)
 	require.Equal(t, []int64{11, 12}, svc.stopIDs)
+}
+
+func TestGroupHandlerGetsTemporaryDispatchQuotaPreview(t *testing.T) {
+	svc := &temporaryDispatchAdminServiceStub{}
+	router := setupTemporaryDispatchGroupRouter(svc)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/temporary-dispatch/quota-preview?account_id=88&quota_window=7d", nil)
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, 1, svc.previewCalls)
+	require.Equal(t, int64(88), svc.previewAccountID)
+	require.Equal(t, service.TemporaryDispatchQuotaWindow7d, svc.previewWindow)
+	require.Contains(t, recorder.Body.String(), `"used_percent":35`)
+}
+
+func TestGroupHandlerQuotaPreviewDefaultsTo5h(t *testing.T) {
+	svc := &temporaryDispatchAdminServiceStub{}
+	router := setupTemporaryDispatchGroupRouter(svc)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/temporary-dispatch/quota-preview?account_id=88", nil)
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, service.TemporaryDispatchQuotaWindow5h, svc.previewWindow)
+}
+
+func TestGroupHandlerRejectsInvalidQuotaPreviewAccount(t *testing.T) {
+	svc := &temporaryDispatchAdminServiceStub{}
+	router := setupTemporaryDispatchGroupRouter(svc)
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/api/v1/admin/groups/temporary-dispatch/quota-preview?account_id=invalid", nil)
+
+	router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Zero(t, svc.previewCalls)
 }
 
 func TestGroupHandlerRejectsInvalidTemporaryDispatchPayload(t *testing.T) {

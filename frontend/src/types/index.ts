@@ -659,6 +659,12 @@ export interface AdminGroup extends Group {
   temporary_dispatch_id?: string
   temporary_dispatch_started_at?: string
   temporary_dispatch_expires_at?: string
+  temporary_dispatch_mode?: TemporaryDispatchMode
+  temporary_dispatch_quota_window?: TemporaryDispatchQuotaWindow
+  temporary_dispatch_baseline_percent?: number
+  temporary_dispatch_target_percent?: number
+  temporary_dispatch_current_percent?: number
+  temporary_dispatch_quota_reset_at?: string
 
   // 分组排序
   sort_order: number
@@ -668,8 +674,32 @@ export interface TemporaryDispatchResult {
   dispatch_id: string
   group_ids: number[]
   account_id: number
+  mode: TemporaryDispatchMode
+  quota_window?: TemporaryDispatchQuotaWindow
+  baseline_percent?: number
+  target_percent?: number
+  current_percent?: number
+  quota_reset_at?: string
   started_at: string
   expires_at: string
+}
+
+export type TemporaryDispatchMode = 'time' | 'usage' | 'hybrid'
+export type TemporaryDispatchQuotaWindow = '5h' | '7d'
+
+export interface StartTemporaryDispatchInput {
+  group_ids: number[]
+  account_id: number
+  mode: TemporaryDispatchMode
+  duration_minutes?: number
+  quota_window?: TemporaryDispatchQuotaWindow
+  target_delta_percent?: number
+}
+
+export interface TemporaryDispatchQuotaPreview {
+  window: TemporaryDispatchQuotaWindow
+  used_percent: number
+  reset_at: string
 }
 
 export interface ModelAllowlist {

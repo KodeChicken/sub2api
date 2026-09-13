@@ -976,6 +976,90 @@ func (_c *GroupCreate) SetNillableTemporaryDispatchExpiresAt(v *time.Time) *Grou
 	return _c
 }
 
+// SetTemporaryDispatchMode sets the "temporary_dispatch_mode" field.
+func (_c *GroupCreate) SetTemporaryDispatchMode(v string) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchMode(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchMode sets the "temporary_dispatch_mode" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchMode(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchMode(*v)
+	}
+	return _c
+}
+
+// SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
+func (_c *GroupCreate) SetTemporaryDispatchQuotaWindow(v string) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchQuotaWindow(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchQuotaWindow(v *string) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchQuotaWindow(*v)
+	}
+	return _c
+}
+
+// SetTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field.
+func (_c *GroupCreate) SetTemporaryDispatchBaselinePercent(v float64) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchBaselinePercent(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchBaselinePercent(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchBaselinePercent(*v)
+	}
+	return _c
+}
+
+// SetTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field.
+func (_c *GroupCreate) SetTemporaryDispatchTargetPercent(v float64) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchTargetPercent(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchTargetPercent(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchTargetPercent(*v)
+	}
+	return _c
+}
+
+// SetTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field.
+func (_c *GroupCreate) SetTemporaryDispatchCurrentPercent(v float64) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchCurrentPercent(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchCurrentPercent(v *float64) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchCurrentPercent(*v)
+	}
+	return _c
+}
+
+// SetTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field.
+func (_c *GroupCreate) SetTemporaryDispatchQuotaResetAt(v time.Time) *GroupCreate {
+	_c.mutation.SetTemporaryDispatchQuotaResetAt(v)
+	return _c
+}
+
+// SetNillableTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field if the given value is not nil.
+func (_c *GroupCreate) SetNillableTemporaryDispatchQuotaResetAt(v *time.Time) *GroupCreate {
+	if v != nil {
+		_c.SetTemporaryDispatchQuotaResetAt(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *GroupCreate) AddAPIKeyIDs(ids ...int64) *GroupCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -1500,6 +1584,16 @@ func (_c *GroupCreate) check() error {
 			return &ValidationError{Name: "temporary_dispatch_id", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_id": %w`, err)}
 		}
 	}
+	if v, ok := _c.mutation.TemporaryDispatchMode(); ok {
+		if err := group.TemporaryDispatchModeValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_mode", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_mode": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.TemporaryDispatchQuotaWindow(); ok {
+		if err := group.TemporaryDispatchQuotaWindowValidator(v); err != nil {
+			return &ValidationError{Name: "temporary_dispatch_quota_window", err: fmt.Errorf(`ent: validator failed for field "Group.temporary_dispatch_quota_window": %w`, err)}
+		}
+	}
 	return nil
 }
 
@@ -1810,6 +1904,30 @@ func (_c *GroupCreate) createSpec() (*Group, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.TemporaryDispatchExpiresAt(); ok {
 		_spec.SetField(group.FieldTemporaryDispatchExpiresAt, field.TypeTime, value)
 		_node.TemporaryDispatchExpiresAt = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchMode(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchMode, field.TypeString, value)
+		_node.TemporaryDispatchMode = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchQuotaWindow(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchQuotaWindow, field.TypeString, value)
+		_node.TemporaryDispatchQuotaWindow = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchBaselinePercent(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchBaselinePercent, field.TypeFloat64, value)
+		_node.TemporaryDispatchBaselinePercent = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchTargetPercent(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchTargetPercent, field.TypeFloat64, value)
+		_node.TemporaryDispatchTargetPercent = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchCurrentPercent(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchCurrentPercent, field.TypeFloat64, value)
+		_node.TemporaryDispatchCurrentPercent = &value
+	}
+	if value, ok := _c.mutation.TemporaryDispatchQuotaResetAt(); ok {
+		_spec.SetField(group.FieldTemporaryDispatchQuotaResetAt, field.TypeTime, value)
+		_node.TemporaryDispatchQuotaResetAt = &value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -3110,6 +3228,132 @@ func (u *GroupUpsert) UpdateTemporaryDispatchExpiresAt() *GroupUpsert {
 // ClearTemporaryDispatchExpiresAt clears the value of the "temporary_dispatch_expires_at" field.
 func (u *GroupUpsert) ClearTemporaryDispatchExpiresAt() *GroupUpsert {
 	u.SetNull(group.FieldTemporaryDispatchExpiresAt)
+	return u
+}
+
+// SetTemporaryDispatchMode sets the "temporary_dispatch_mode" field.
+func (u *GroupUpsert) SetTemporaryDispatchMode(v string) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchMode, v)
+	return u
+}
+
+// UpdateTemporaryDispatchMode sets the "temporary_dispatch_mode" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchMode() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchMode)
+	return u
+}
+
+// ClearTemporaryDispatchMode clears the value of the "temporary_dispatch_mode" field.
+func (u *GroupUpsert) ClearTemporaryDispatchMode() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchMode)
+	return u
+}
+
+// SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
+func (u *GroupUpsert) SetTemporaryDispatchQuotaWindow(v string) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchQuotaWindow, v)
+	return u
+}
+
+// UpdateTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchQuotaWindow() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchQuotaWindow)
+	return u
+}
+
+// ClearTemporaryDispatchQuotaWindow clears the value of the "temporary_dispatch_quota_window" field.
+func (u *GroupUpsert) ClearTemporaryDispatchQuotaWindow() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchQuotaWindow)
+	return u
+}
+
+// SetTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field.
+func (u *GroupUpsert) SetTemporaryDispatchBaselinePercent(v float64) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchBaselinePercent, v)
+	return u
+}
+
+// UpdateTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchBaselinePercent() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchBaselinePercent)
+	return u
+}
+
+// AddTemporaryDispatchBaselinePercent adds v to the "temporary_dispatch_baseline_percent" field.
+func (u *GroupUpsert) AddTemporaryDispatchBaselinePercent(v float64) *GroupUpsert {
+	u.Add(group.FieldTemporaryDispatchBaselinePercent, v)
+	return u
+}
+
+// ClearTemporaryDispatchBaselinePercent clears the value of the "temporary_dispatch_baseline_percent" field.
+func (u *GroupUpsert) ClearTemporaryDispatchBaselinePercent() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchBaselinePercent)
+	return u
+}
+
+// SetTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field.
+func (u *GroupUpsert) SetTemporaryDispatchTargetPercent(v float64) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchTargetPercent, v)
+	return u
+}
+
+// UpdateTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchTargetPercent() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchTargetPercent)
+	return u
+}
+
+// AddTemporaryDispatchTargetPercent adds v to the "temporary_dispatch_target_percent" field.
+func (u *GroupUpsert) AddTemporaryDispatchTargetPercent(v float64) *GroupUpsert {
+	u.Add(group.FieldTemporaryDispatchTargetPercent, v)
+	return u
+}
+
+// ClearTemporaryDispatchTargetPercent clears the value of the "temporary_dispatch_target_percent" field.
+func (u *GroupUpsert) ClearTemporaryDispatchTargetPercent() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchTargetPercent)
+	return u
+}
+
+// SetTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field.
+func (u *GroupUpsert) SetTemporaryDispatchCurrentPercent(v float64) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchCurrentPercent, v)
+	return u
+}
+
+// UpdateTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchCurrentPercent() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchCurrentPercent)
+	return u
+}
+
+// AddTemporaryDispatchCurrentPercent adds v to the "temporary_dispatch_current_percent" field.
+func (u *GroupUpsert) AddTemporaryDispatchCurrentPercent(v float64) *GroupUpsert {
+	u.Add(group.FieldTemporaryDispatchCurrentPercent, v)
+	return u
+}
+
+// ClearTemporaryDispatchCurrentPercent clears the value of the "temporary_dispatch_current_percent" field.
+func (u *GroupUpsert) ClearTemporaryDispatchCurrentPercent() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchCurrentPercent)
+	return u
+}
+
+// SetTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field.
+func (u *GroupUpsert) SetTemporaryDispatchQuotaResetAt(v time.Time) *GroupUpsert {
+	u.Set(group.FieldTemporaryDispatchQuotaResetAt, v)
+	return u
+}
+
+// UpdateTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field to the value that was provided on create.
+func (u *GroupUpsert) UpdateTemporaryDispatchQuotaResetAt() *GroupUpsert {
+	u.SetExcluded(group.FieldTemporaryDispatchQuotaResetAt)
+	return u
+}
+
+// ClearTemporaryDispatchQuotaResetAt clears the value of the "temporary_dispatch_quota_reset_at" field.
+func (u *GroupUpsert) ClearTemporaryDispatchQuotaResetAt() *GroupUpsert {
+	u.SetNull(group.FieldTemporaryDispatchQuotaResetAt)
 	return u
 }
 
@@ -4495,6 +4739,153 @@ func (u *GroupUpsertOne) UpdateTemporaryDispatchExpiresAt() *GroupUpsertOne {
 func (u *GroupUpsertOne) ClearTemporaryDispatchExpiresAt() *GroupUpsertOne {
 	return u.Update(func(s *GroupUpsert) {
 		s.ClearTemporaryDispatchExpiresAt()
+	})
+}
+
+// SetTemporaryDispatchMode sets the "temporary_dispatch_mode" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchMode(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchMode(v)
+	})
+}
+
+// UpdateTemporaryDispatchMode sets the "temporary_dispatch_mode" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchMode() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchMode()
+	})
+}
+
+// ClearTemporaryDispatchMode clears the value of the "temporary_dispatch_mode" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchMode() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchMode()
+	})
+}
+
+// SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchQuotaWindow(v string) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchQuotaWindow(v)
+	})
+}
+
+// UpdateTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchQuotaWindow() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchQuotaWindow()
+	})
+}
+
+// ClearTemporaryDispatchQuotaWindow clears the value of the "temporary_dispatch_quota_window" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchQuotaWindow() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchQuotaWindow()
+	})
+}
+
+// SetTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchBaselinePercent(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchBaselinePercent(v)
+	})
+}
+
+// AddTemporaryDispatchBaselinePercent adds v to the "temporary_dispatch_baseline_percent" field.
+func (u *GroupUpsertOne) AddTemporaryDispatchBaselinePercent(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddTemporaryDispatchBaselinePercent(v)
+	})
+}
+
+// UpdateTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchBaselinePercent() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchBaselinePercent()
+	})
+}
+
+// ClearTemporaryDispatchBaselinePercent clears the value of the "temporary_dispatch_baseline_percent" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchBaselinePercent() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchBaselinePercent()
+	})
+}
+
+// SetTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchTargetPercent(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchTargetPercent(v)
+	})
+}
+
+// AddTemporaryDispatchTargetPercent adds v to the "temporary_dispatch_target_percent" field.
+func (u *GroupUpsertOne) AddTemporaryDispatchTargetPercent(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddTemporaryDispatchTargetPercent(v)
+	})
+}
+
+// UpdateTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchTargetPercent() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchTargetPercent()
+	})
+}
+
+// ClearTemporaryDispatchTargetPercent clears the value of the "temporary_dispatch_target_percent" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchTargetPercent() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchTargetPercent()
+	})
+}
+
+// SetTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchCurrentPercent(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchCurrentPercent(v)
+	})
+}
+
+// AddTemporaryDispatchCurrentPercent adds v to the "temporary_dispatch_current_percent" field.
+func (u *GroupUpsertOne) AddTemporaryDispatchCurrentPercent(v float64) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddTemporaryDispatchCurrentPercent(v)
+	})
+}
+
+// UpdateTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchCurrentPercent() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchCurrentPercent()
+	})
+}
+
+// ClearTemporaryDispatchCurrentPercent clears the value of the "temporary_dispatch_current_percent" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchCurrentPercent() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchCurrentPercent()
+	})
+}
+
+// SetTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field.
+func (u *GroupUpsertOne) SetTemporaryDispatchQuotaResetAt(v time.Time) *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchQuotaResetAt(v)
+	})
+}
+
+// UpdateTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field to the value that was provided on create.
+func (u *GroupUpsertOne) UpdateTemporaryDispatchQuotaResetAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchQuotaResetAt()
+	})
+}
+
+// ClearTemporaryDispatchQuotaResetAt clears the value of the "temporary_dispatch_quota_reset_at" field.
+func (u *GroupUpsertOne) ClearTemporaryDispatchQuotaResetAt() *GroupUpsertOne {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchQuotaResetAt()
 	})
 }
 
@@ -6046,6 +6437,153 @@ func (u *GroupUpsertBulk) UpdateTemporaryDispatchExpiresAt() *GroupUpsertBulk {
 func (u *GroupUpsertBulk) ClearTemporaryDispatchExpiresAt() *GroupUpsertBulk {
 	return u.Update(func(s *GroupUpsert) {
 		s.ClearTemporaryDispatchExpiresAt()
+	})
+}
+
+// SetTemporaryDispatchMode sets the "temporary_dispatch_mode" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchMode(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchMode(v)
+	})
+}
+
+// UpdateTemporaryDispatchMode sets the "temporary_dispatch_mode" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchMode() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchMode()
+	})
+}
+
+// ClearTemporaryDispatchMode clears the value of the "temporary_dispatch_mode" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchMode() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchMode()
+	})
+}
+
+// SetTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchQuotaWindow(v string) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchQuotaWindow(v)
+	})
+}
+
+// UpdateTemporaryDispatchQuotaWindow sets the "temporary_dispatch_quota_window" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchQuotaWindow() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchQuotaWindow()
+	})
+}
+
+// ClearTemporaryDispatchQuotaWindow clears the value of the "temporary_dispatch_quota_window" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchQuotaWindow() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchQuotaWindow()
+	})
+}
+
+// SetTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchBaselinePercent(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchBaselinePercent(v)
+	})
+}
+
+// AddTemporaryDispatchBaselinePercent adds v to the "temporary_dispatch_baseline_percent" field.
+func (u *GroupUpsertBulk) AddTemporaryDispatchBaselinePercent(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddTemporaryDispatchBaselinePercent(v)
+	})
+}
+
+// UpdateTemporaryDispatchBaselinePercent sets the "temporary_dispatch_baseline_percent" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchBaselinePercent() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchBaselinePercent()
+	})
+}
+
+// ClearTemporaryDispatchBaselinePercent clears the value of the "temporary_dispatch_baseline_percent" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchBaselinePercent() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchBaselinePercent()
+	})
+}
+
+// SetTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchTargetPercent(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchTargetPercent(v)
+	})
+}
+
+// AddTemporaryDispatchTargetPercent adds v to the "temporary_dispatch_target_percent" field.
+func (u *GroupUpsertBulk) AddTemporaryDispatchTargetPercent(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddTemporaryDispatchTargetPercent(v)
+	})
+}
+
+// UpdateTemporaryDispatchTargetPercent sets the "temporary_dispatch_target_percent" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchTargetPercent() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchTargetPercent()
+	})
+}
+
+// ClearTemporaryDispatchTargetPercent clears the value of the "temporary_dispatch_target_percent" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchTargetPercent() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchTargetPercent()
+	})
+}
+
+// SetTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchCurrentPercent(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchCurrentPercent(v)
+	})
+}
+
+// AddTemporaryDispatchCurrentPercent adds v to the "temporary_dispatch_current_percent" field.
+func (u *GroupUpsertBulk) AddTemporaryDispatchCurrentPercent(v float64) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.AddTemporaryDispatchCurrentPercent(v)
+	})
+}
+
+// UpdateTemporaryDispatchCurrentPercent sets the "temporary_dispatch_current_percent" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchCurrentPercent() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchCurrentPercent()
+	})
+}
+
+// ClearTemporaryDispatchCurrentPercent clears the value of the "temporary_dispatch_current_percent" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchCurrentPercent() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchCurrentPercent()
+	})
+}
+
+// SetTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field.
+func (u *GroupUpsertBulk) SetTemporaryDispatchQuotaResetAt(v time.Time) *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.SetTemporaryDispatchQuotaResetAt(v)
+	})
+}
+
+// UpdateTemporaryDispatchQuotaResetAt sets the "temporary_dispatch_quota_reset_at" field to the value that was provided on create.
+func (u *GroupUpsertBulk) UpdateTemporaryDispatchQuotaResetAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.UpdateTemporaryDispatchQuotaResetAt()
+	})
+}
+
+// ClearTemporaryDispatchQuotaResetAt clears the value of the "temporary_dispatch_quota_reset_at" field.
+func (u *GroupUpsertBulk) ClearTemporaryDispatchQuotaResetAt() *GroupUpsertBulk {
+	return u.Update(func(s *GroupUpsert) {
+		s.ClearTemporaryDispatchQuotaResetAt()
 	})
 }
 
