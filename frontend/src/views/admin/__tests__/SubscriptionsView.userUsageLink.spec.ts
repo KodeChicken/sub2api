@@ -6,7 +6,7 @@ import SubscriptionsView from '../SubscriptionsView.vue'
 
 const {
   listSubscriptions,
-  bulkResetQuota,
+  assignSubscription,
   getAllGroups,
   listUsers,
   searchUsageUsers,
@@ -14,7 +14,7 @@ const {
   showSuccess
 } = vi.hoisted(() => ({
   listSubscriptions: vi.fn(),
-  bulkResetQuota: vi.fn(),
+  assignSubscription: vi.fn(),
   getAllGroups: vi.fn(),
   listUsers: vi.fn(),
   searchUsageUsers: vi.fn(),
@@ -24,7 +24,7 @@ const {
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
-    subscriptions: { list: listSubscriptions, bulkResetQuota },
+    subscriptions: { list: listSubscriptions, assign: assignSubscription },
     groups: { getAll: getAllGroups },
     users: { list: listUsers },
     usage: { searchUsers: searchUsageUsers }
@@ -50,15 +50,9 @@ vi.mock('vue-i18n', async () => {
 })
 
 const DataTableStub = {
-  props: ['data', 'selectedKeys'],
-  emits: ['update:selectedKeys'],
+  props: ['data'],
   template: `
     <div>
-      <button
-        v-if="data.length"
-        data-test="select-first-subscription"
-        @click="$emit('update:selectedKeys', [data[0].id])"
-      >select</button>
       <div v-for="row in data" :key="row.id">
         <slot name="cell-user" :row="row" />
         <slot name="cell-usage" :row="row" />
@@ -98,6 +92,7 @@ describe('admin subscription users', () => {
       total: 1,
       pages: 1
     })
+    assignSubscription.mockResolvedValue({})
     getAllGroups.mockResolvedValue([])
     listUsers.mockResolvedValue({
       items: [{ id: 42, email: 'reader@example.com' }],
@@ -107,7 +102,6 @@ describe('admin subscription users', () => {
     searchUsageUsers.mockResolvedValue([
       { id: 14, email: 'deleted@example.com', deleted: true }
     ])
-    bulkResetQuota.mockResolvedValue({ updated_count: 1, subscriptions: [] })
   })
 
   const mountView = () => mount(SubscriptionsView, {
@@ -122,11 +116,7 @@ describe('admin subscription users', () => {
           props: ['show'],
           template: '<div v-if="show"><slot /><slot name="footer" /></div>'
         },
-        ConfirmDialog: {
-          props: ['show'],
-          emits: ['confirm', 'cancel'],
-          template: '<button v-if="show" data-test="confirm-dialog" @click="$emit(\'confirm\')">confirm</button>'
-        },
+        ConfirmDialog: true,
         EmptyState: true,
         Select: true,
         GroupBadge: true,
@@ -160,6 +150,50 @@ describe('admin subscription users', () => {
       expect(picker.text()).not.toContain('deleted@example.com')
       await picker.get('button').trigger('click')
       expect((search.element as HTMLInputElement).value).toBe('reader@example.com')
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(['another', ''])('clears the assignment user immediately when input changes to %j', async (keyword) => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const wrapper = mountView()
+    try {
+      await flushPromises()
+      await wrapper.findAll('button')
+        .find((button) => button.text() === 'admin.subscriptions.assignSubscription')!
+        .trigger('click')
+      const form = wrapper.get('#assign-subscription-form')
+      form.getComponent({ name: 'Select' }).vm.$emit('update:modelValue', 3)
+      const search = wrapper.get('[data-assign-user-search] input')
+      await search.trigger('focus')
+      await search.setValue('reader')
+      await vi.advanceTimersByTimeAsync(300)
+      await flushPromises()
+      await wrapper.get('[data-assign-user-search] button').trigger('click')
+
+      await search.setValue(keyword)
+      await form.trigger('submit')
+      await flushPromises()
+
+      expect(assignSubscription).not.toHaveBeenCalled()
+      expect(showError).toHaveBeenCalledWith('admin.subscriptions.pleaseSelectUser')
+      expect(listUsers).toHaveBeenCalledTimes(1)
+
+      listUsers.mockResolvedValue({ items: [{ id: 84, email: 'another@example.com' }] })
+      await search.trigger('focus')
+      await search.setValue('another')
+      await vi.advanceTimersByTimeAsync(300)
+      await flushPromises()
+      await wrapper.get('[data-assign-user-search] button').trigger('click')
+      await form.trigger('submit')
+      await flushPromises()
+
+      expect(assignSubscription).toHaveBeenCalledTimes(1)
+      expect(assignSubscription).toHaveBeenCalledWith({
+        user_id: 84, group_id: 3, validity_days: 30
+      })
     } finally {
       wrapper.unmount()
       vi.useRealTimers()
@@ -274,24 +308,4 @@ describe('admin subscription users', () => {
     expect(link.props('to')).toEqual({ path: '/admin/usage', query: { user_id: 42 } })
   })
 
-  it('bulk resets all quota windows for selected subscriptions', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-
-    await wrapper.get('[data-test="select-first-subscription"]').trigger('click')
-    await wrapper.get('[data-test="bulk-reset-quota"]').trigger('click')
-    await wrapper.get('[data-test="confirm-dialog"]').trigger('click')
-    await flushPromises()
-
-    expect(bulkResetQuota).toHaveBeenCalledWith({
-      subscription_ids: [9],
-      daily: true,
-      weekly: true,
-      monthly: true
-    })
-    expect(showSuccess).toHaveBeenCalledWith(
-      'admin.subscriptions.bulkQuotaResetSuccess'
-    )
-    expect(wrapper.find('[data-test="bulk-reset-quota"]').exists()).toBe(false)
-  })
 })
