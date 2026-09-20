@@ -20,7 +20,7 @@ export default {
       referenceAttached: 'The image edit endpoint will be used',
       generate: 'Generate',
       generating: 'Generating',
-      submitting: 'Submitting the image task…',
+      submitting: 'Generating the image…',
       processing: 'Generating the image…',
       preview: 'View image',
       reuse: 'Reuse',

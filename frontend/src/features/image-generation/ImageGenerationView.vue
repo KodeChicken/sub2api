@@ -186,7 +186,7 @@ import {
   saveImageHistory,
   saveImageSessions,
 } from './history'
-import type { ImageGenerationHistoryRecord, ImageGenerationSession } from './types'
+import type { ImageGenerationHistoryRecord, ImageGenerationResult, ImageGenerationSession } from './types'
 
 const SELECTED_KEY_STORAGE = 'image-generation-selected-key'
 const POLL_INTERVAL_MS = 2200
@@ -317,7 +317,7 @@ async function generate() {
   currentTaskId.value = ''
   pollController = new AbortController()
   try {
-    const task = await submitImageGeneration(key.key, {
+    const submission = await submitImageGeneration(key.key, {
       model: model.value,
       prompt: currentPrompt,
       size: size.value,
@@ -325,11 +325,17 @@ async function generate() {
       n: outputCount.value,
       referenceImage: referenceImage.value,
     })
-    currentTaskId.value = task.id || task.task_id || ''
-    if (!currentTaskId.value) throw new Error(t('imageGeneration.messages.invalidTask'))
-    generationStatus.value = t('imageGeneration.create.processing')
-    const completed = await pollTask(key.key, currentTaskId.value, pollController.signal)
-    const urls = imageResultURLs(completed.result)
+    let result: ImageGenerationResult | undefined
+    if (submission.mode === 'async') {
+      currentTaskId.value = submission.task.id || submission.task.task_id || ''
+      if (!currentTaskId.value) throw new Error(t('imageGeneration.messages.invalidTask'))
+      generationStatus.value = t('imageGeneration.create.processing')
+      const completed = await pollTask(key.key, currentTaskId.value, pollController.signal)
+      result = completed.result
+    } else {
+      result = submission.result
+    }
+    const urls = imageResultURLs(result)
     if (urls.length === 0) throw new Error(t('imageGeneration.messages.noImage'))
     const now = Date.now()
     const record: ImageGenerationHistoryRecord = {

@@ -20,7 +20,7 @@ export default {
       referenceAttached: '将使用图片编辑接口生成',
       generate: '生成图片',
       generating: '正在生成',
-      submitting: '正在提交生图任务…',
+      submitting: '正在生成图片，请稍候…',
       processing: '图片生成中，请稍候…',
       preview: '查看原图',
       reuse: '再次使用',
