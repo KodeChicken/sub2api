@@ -72,7 +72,7 @@
         </article>
       </div>
 
-      <form class="border-t border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-900 md:p-4" @submit.prevent="generate">
+      <form class="border-t border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-900 md:p-4" @paste="pasteReference" @submit.prevent="generate">
         <div v-if="referencePreviewURL" class="mb-3 flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-dark-700 dark:bg-dark-800">
           <img :src="referencePreviewURL" alt="" class="h-14 w-14 rounded-md object-cover" />
           <div class="min-w-0 flex-1">
@@ -392,13 +392,28 @@ function selectReference(event: Event) {
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
-  if (!file.type.startsWith('image/') || file.size > 20 * 1024 * 1024) {
+  attachReference(file)
+}
+
+function pasteReference(event: ClipboardEvent) {
+  if (generating.value || !event.clipboardData) return
+  const file = Array.from(event.clipboardData.files).find((item) => item.type.startsWith('image/'))
+    || Array.from(event.clipboardData.items)
+      .find((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      ?.getAsFile()
+  if (!file) return
+  event.preventDefault()
+  attachReference(file)
+}
+
+function attachReference(file: File) {
+  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024) {
     appStore.showError(t('imageGeneration.messages.invalidReference'))
     return
   }
   clearReference()
-  referenceImage.value = file
-  referencePreviewURL.value = URL.createObjectURL(file)
+  referenceImage.value = file.name ? file : new File([file], 'clipboard-image', { type: file.type, lastModified: file.lastModified })
+  referencePreviewURL.value = URL.createObjectURL(referenceImage.value)
 }
 
 function clearReference() {
