@@ -166,6 +166,7 @@ export default {
     dashboard: 'Dashboard',
     announcements: 'Announcements',
     apiKeys: 'API Keys',
+    imageGeneration: 'Image Generation',
     batchImage: 'Batch Images',
     usage: 'Usage',
     redeem: 'Redeem',

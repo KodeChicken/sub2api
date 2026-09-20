@@ -216,6 +216,34 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/image-generation',
+    component: () => import('@/features/image-generation/ImageGenerationLayout.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Image Generation',
+      titleKey: 'imageGeneration.title'
+    },
+    children: [
+      { path: '', redirect: '/image-generation/create' },
+      {
+        path: 'create',
+        name: 'ImageGenerationCreate',
+        component: () => import('@/features/image-generation/ImageGenerationView.vue')
+      },
+      {
+        path: 'materials',
+        name: 'ImageGenerationMaterials',
+        component: () => import('@/features/image-generation/ImageMaterialsView.vue')
+      },
+      {
+        path: 'history',
+        name: 'ImageGenerationHistory',
+        component: () => import('@/features/image-generation/ImageHistoryView.vue')
+      }
+    ]
+  },
+  {
     path: '/batch-image',
     name: 'BatchImageGuide',
     alias: '/docs/batch-image',
