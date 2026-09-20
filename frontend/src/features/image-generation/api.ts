@@ -85,12 +85,14 @@ async function sendImageGenerationRequest(
   apiKey: string,
   input: SubmitImageGenerationInput,
   useAsync: boolean,
+  signal?: AbortSignal,
 ): Promise<Response> {
   const request = buildImageGenerationRequest(apiKey, input, useAsync)
   const response = await fetch(buildGatewayUrl(request.path), {
     method: 'POST',
     headers: request.headers,
     body: request.body,
+    signal,
   })
   if (!response.ok) throw await parseGatewayError(response)
   return response
@@ -105,15 +107,16 @@ function isAsyncImageTasksDisabled(error: unknown): boolean {
 export async function submitImageGeneration(
   apiKey: string,
   input: SubmitImageGenerationInput,
+  signal?: AbortSignal,
 ): Promise<ImageGenerationSubmission> {
   try {
-    const response = await sendImageGenerationRequest(apiKey, input, true)
+    const response = await sendImageGenerationRequest(apiKey, input, true, signal)
     return { mode: 'async', task: await response.json() }
   } catch (error) {
     if (!isAsyncImageTasksDisabled(error)) throw error
   }
 
-  const response = await sendImageGenerationRequest(apiKey, input, false)
+  const response = await sendImageGenerationRequest(apiKey, input, false, signal)
   return { mode: 'sync', result: await response.json() }
 }
 

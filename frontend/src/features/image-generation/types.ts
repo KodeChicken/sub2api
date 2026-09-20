@@ -41,6 +41,11 @@ export interface ImageGenerationHistoryRecord {
   apiKeyId: number
   apiKeyName: string
   createdAt: number
+  referenceImage?: {
+    name: string
+    mimeType: string
+    blob: Blob
+  }
   images: Array<{
     url: string
     mimeType: string

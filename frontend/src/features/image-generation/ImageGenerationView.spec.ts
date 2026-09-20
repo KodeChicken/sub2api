@@ -4,11 +4,22 @@ import ImageGenerationView from './ImageGenerationView.vue'
 
 const mocks = vi.hoisted(() => ({
   showError: vi.fn(),
+  showSuccess: vi.fn(),
   loadKeys: vi.fn().mockResolvedValue({ items: [] }),
+  listModels: vi.fn().mockResolvedValue([]),
+  submitGeneration: vi.fn(),
+  cacheImages: vi.fn(),
+  listHistory: vi.fn().mockResolvedValue([]),
+  saveHistory: vi.fn(),
+  loadSessions: vi.fn(() => []),
+  saveSessions: vi.fn(),
+  deleteHistory: vi.fn(),
 }))
 
 vi.mock('vue-i18n', () => ({
-  useI18n: () => ({ t: (key: string) => key }),
+  useI18n: () => ({
+    t: (key: string, params?: Record<string, string>) => params?.name ? `${key}:${params.name}` : key,
+  }),
 }))
 
 vi.mock('@/api', () => ({
@@ -16,25 +27,26 @@ vi.mock('@/api', () => ({
 }))
 
 vi.mock('@/stores', () => ({
-  useAppStore: () => ({ showError: mocks.showError, showSuccess: vi.fn() }),
+  useAppStore: () => ({ showError: mocks.showError, showSuccess: mocks.showSuccess }),
 }))
 
 vi.mock('./api', () => ({
   getImageGenerationTask: vi.fn(),
-  imageResultURLs: vi.fn(),
-  isLikelyImageModel: vi.fn(),
-  listImageGenerationModels: vi.fn(),
-  submitImageGeneration: vi.fn(),
+  imageResultURLs: (result?: { data?: Array<{ url?: string }> }) => result?.data?.map((item) => item.url || '').filter(Boolean) || [],
+  isLikelyImageModel: (model: { id: string }) => model.id.includes('image'),
+  listImageGenerationModels: mocks.listModels,
+  submitImageGeneration: mocks.submitGeneration,
 }))
 
 vi.mock('./history', () => ({
-  cacheGeneratedImages: vi.fn(),
-  createImageSession: vi.fn(() => ({ id: 'session-1', title: 'Session', createdAt: 1, updatedAt: 1 })),
+  cacheGeneratedImages: mocks.cacheImages,
+  createImageSession: vi.fn((title: string) => ({ id: 'session-1', title, createdAt: 1, updatedAt: 1 })),
+  deleteImageHistory: mocks.deleteHistory,
   displayImageURL: vi.fn(),
-  listImageHistory: vi.fn().mockResolvedValue([]),
-  loadImageSessions: vi.fn(() => []),
-  saveImageHistory: vi.fn(),
-  saveImageSessions: vi.fn(),
+  listImageHistory: mocks.listHistory,
+  loadImageSessions: mocks.loadSessions,
+  saveImageHistory: mocks.saveHistory,
+  saveImageSessions: mocks.saveSessions,
 }))
 
 function clipboardEvent(items: Array<{ kind: string; type: string; getAsFile: () => File | null }>) {
@@ -48,6 +60,12 @@ function clipboardEvent(items: Array<{ kind: string; type: string; getAsFile: ()
 describe('ImageGenerationView clipboard images', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+    mocks.loadKeys.mockResolvedValue({ items: [] })
+    mocks.listModels.mockResolvedValue([])
+    mocks.loadSessions.mockReturnValue([])
+    mocks.listHistory.mockResolvedValue([])
+    mocks.cacheImages.mockResolvedValue([{ url: 'result.png', mimeType: 'image/png' }])
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:reference-image'),
       revokeObjectURL: vi.fn(),
@@ -86,5 +104,144 @@ describe('ImageGenerationView clipboard images', () => {
 
     expect(event.defaultPrevented).toBe(false)
     expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('renames a session inline', async () => {
+    const wrapper = mount(ImageGenerationView, {
+      global: { stubs: { Icon: true, RouterLink: true } },
+    })
+    await flushPromises()
+
+    await wrapper.get('[data-testid="rename-session"]').trigger('click')
+    const input = wrapper.get<HTMLInputElement>('[data-testid="session-title-input"]')
+    await input.setValue('  Product launch  ')
+    await input.trigger('keydown', { key: 'Enter' })
+
+    expect(wrapper.text()).toContain('Product launch')
+    expect(mocks.saveSessions).toHaveBeenCalled()
+  })
+
+  it('moves the prompt and reference image into the message stream while generating', async () => {
+    mocks.loadKeys.mockResolvedValue({
+      items: [{
+        id: 1,
+        name: 'Image key',
+        key: 'sk-test',
+        status: 'active',
+        group: { name: 'Default', platform: 'openai', allow_image_generation: true },
+      }],
+    })
+    mocks.listModels.mockResolvedValue([{ id: 'gpt-image-1' }])
+    let finishGeneration: ((value: { mode: 'sync'; result: { data: Array<{ url: string }> } }) => void) | undefined
+    mocks.submitGeneration.mockReturnValue(new Promise((resolve) => {
+      finishGeneration = resolve
+    }))
+    const wrapper = mount(ImageGenerationView, {
+      global: { stubs: { Icon: true, RouterLink: true } },
+    })
+    await flushPromises()
+    const file = new File(['image'], 'reference.png', { type: 'image/png' })
+    wrapper.find('form').element.dispatchEvent(clipboardEvent([
+      { kind: 'file', type: 'image/png', getAsFile: () => file },
+    ]))
+    await wrapper.get('textarea').setValue('生成一张夏日海边宣传海报')
+
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('')
+    expect(wrapper.get('article img').attributes('alt')).toContain('reference.png')
+    expect(wrapper.get('[data-testid="session-title"]').text()).toBe('生成一张夏日海边宣传海报')
+
+    finishGeneration?.({ mode: 'sync', result: { data: [{ url: 'result.png' }] } })
+    await flushPromises()
+    expect(mocks.showSuccess).toHaveBeenCalled()
+    expect(mocks.saveHistory).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: '生成一张夏日海边宣传海报',
+      referenceImage: expect.objectContaining({ name: 'reference.png', blob: file }),
+    }))
+  })
+
+  it('sends with Enter and keeps Shift+Enter for line breaks', async () => {
+    mocks.loadKeys.mockResolvedValue({
+      items: [{
+        id: 1,
+        name: 'Image key',
+        key: 'sk-test',
+        status: 'active',
+        group: { name: 'Default', platform: 'openai', allow_image_generation: true },
+      }],
+    })
+    mocks.listModels.mockResolvedValue([{ id: 'gpt-image-1' }])
+    mocks.submitGeneration.mockResolvedValue({ mode: 'sync', result: { data: [{ url: 'result.png' }] } })
+    const wrapper = mount(ImageGenerationView, {
+      global: { stubs: { Icon: true, RouterLink: true } },
+    })
+    await flushPromises()
+    const textarea = wrapper.get('textarea')
+    await textarea.setValue('Generate a poster')
+    const lineBreak = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true })
+    textarea.element.dispatchEvent(lineBreak)
+    expect(lineBreak.defaultPrevented).toBe(false)
+
+    const submit = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
+    textarea.element.dispatchEvent(submit)
+    await flushPromises()
+
+    expect(submit.defaultPrevented).toBe(true)
+    expect(mocks.submitGeneration).toHaveBeenCalledTimes(1)
+  })
+
+  it('restores the prompt and reference image when generation is stopped', async () => {
+    mocks.loadKeys.mockResolvedValue({
+      items: [{
+        id: 1,
+        name: 'Image key',
+        key: 'sk-test',
+        status: 'active',
+        group: { name: 'Default', platform: 'openai', allow_image_generation: true },
+      }],
+    })
+    mocks.listModels.mockResolvedValue([{ id: 'gpt-image-1' }])
+    mocks.submitGeneration.mockImplementation((_key, _input, signal: AbortSignal) => new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true })
+    }))
+    const wrapper = mount(ImageGenerationView, {
+      global: { stubs: { Icon: true, RouterLink: true } },
+    })
+    await flushPromises()
+    const file = new File(['image'], 'reference.png', { type: 'image/png' })
+    wrapper.find('form').element.dispatchEvent(clipboardEvent([
+      { kind: 'file', type: 'image/png', getAsFile: () => file },
+    ]))
+    await wrapper.get('textarea').setValue('Keep this draft')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    await wrapper.get('[data-testid="stop-generation"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('Keep this draft')
+    expect(wrapper.get('form').text()).toContain('reference.png')
+    expect(mocks.showError).not.toHaveBeenCalled()
+  })
+
+  it('deletes a session and selects the next one', async () => {
+    mocks.loadSessions.mockReturnValue([
+      { id: 'session-1', title: 'First session', createdAt: 1, updatedAt: 2 },
+      { id: 'session-2', title: 'Second session', createdAt: 1, updatedAt: 1 },
+    ])
+    vi.stubGlobal('confirm', vi.fn(() => true))
+    const wrapper = mount(ImageGenerationView, {
+      global: { stubs: { Icon: true, RouterLink: true } },
+    })
+    await flushPromises()
+
+    await wrapper.findAll('[data-testid="delete-session"]')[0].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('First session')
+    expect(wrapper.get('[data-testid="session-title"]').text()).toBe('Second session')
+    expect(mocks.saveSessions).toHaveBeenCalled()
   })
 })
