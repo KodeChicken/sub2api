@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ImageGenerationView from './ImageGenerationView.vue'
+import Select from '@/components/common/Select.vue'
 
 const mocks = vi.hoisted(() => ({
   showError: vi.fn(),
@@ -243,5 +244,50 @@ describe('ImageGenerationView clipboard images', () => {
     expect(wrapper.text()).not.toContain('First session')
     expect(wrapper.get('[data-testid="session-title"]').text()).toBe('Second session')
     expect(mocks.saveSessions).toHaveBeenCalled()
+  })
+
+  it('restores model parameters and exposes 4K only for gpt-image-2 models', async () => {
+    localStorage.setItem('image-generation-preferences-v1', JSON.stringify({
+      selectedModelByKey: { 1: 'gpt-image-2.5-flare' },
+      parametersByKeyModel: {
+        '1:gpt-image-2.5-flare': { size: '3840x2160', quality: 'high', outputCount: 3 },
+      },
+    }))
+    mocks.loadKeys.mockResolvedValue({
+      items: [{
+        id: 1,
+        name: 'Image key',
+        key: 'sk-test',
+        status: 'active',
+        group: { name: 'Default', platform: 'openai', allow_image_generation: true },
+      }],
+    })
+    mocks.listModels.mockResolvedValue([
+      { id: 'gpt-image-1.5' },
+      { id: 'gpt-image-2.5-flare' },
+    ])
+    const wrapper = mount(ImageGenerationView, {
+      global: { stubs: { Icon: true, RouterLink: true } },
+    })
+    await flushPromises()
+    const selects = wrapper.findAllComponents(Select)
+
+    expect(selects[1].props('modelValue')).toBe('gpt-image-2.5-flare')
+    expect(selects[2].props('modelValue')).toBe('3840x2160')
+    expect(selects[3].props('modelValue')).toBe('high')
+    expect(selects[4].props('modelValue')).toBe(3)
+    expect(selects[2].props('options')).toContainEqual({ value: '3840x2160', label: '3840 × 2160 · 4K' })
+
+    selects[1].vm.$emit('update:modelValue', 'gpt-image-1.5')
+    await wrapper.vm.$nextTick()
+
+    expect(selects[2].props('modelValue')).toBe('1024x1024')
+    expect(selects[2].props('options')).not.toContainEqual(expect.objectContaining({ value: '3840x2160' }))
+    expect(JSON.parse(localStorage.getItem('image-generation-preferences-v1') || '{}')).toMatchObject({
+      selectedModelByKey: { 1: 'gpt-image-1.5' },
+      parametersByKeyModel: {
+        '1:gpt-image-1.5': { size: '1024x1024', quality: 'high', outputCount: 3 },
+      },
+    })
   })
 })

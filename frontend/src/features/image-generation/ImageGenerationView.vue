@@ -259,11 +259,19 @@ import {
   saveImageSessions,
 } from './history'
 import type { ImageGenerationHistoryRecord, ImageGenerationResult, ImageGenerationSession } from './types'
+import {
+  imageSizeValues,
+  loadImageGenerationPreferences,
+  parameterPreferenceKey,
+  saveImageGenerationPreferences,
+} from './preferences'
 
 const SELECTED_KEY_STORAGE = 'image-generation-selected-key'
 const ACTIVE_SESSION_STORAGE = 'image-generation-active-session'
 const POLL_INTERVAL_MS = 2200
 const MAX_POLL_ATTEMPTS = 820
+const QUALITY_VALUES = ['auto', 'low', 'medium', 'high']
+const COUNT_VALUES = [1, 2, 3, 4]
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -294,7 +302,9 @@ const sessionTitleDraft = ref('')
 const history = ref<ImageGenerationHistoryRecord[]>([])
 const objectURLs = new Map<string, string>()
 const preview = ref<{ url: string; prompt: string } | null>(null)
+const generationPreferences = loadImageGenerationPreferences()
 let pollController: AbortController | null = null
+let pendingDraftSettings: { model: string; size: string; quality: string; outputCount: number | null } | null = null
 
 const imageKeysForGeneration = (keys: ApiKey[]) => keys.filter((key) =>
   key.status === 'active' &&
@@ -315,19 +325,17 @@ const keyOptions = computed(() => imageKeys.value.map((key) => ({
   label: `${key.name} · ${key.group?.name || t('keys.noGroup')}`,
 })))
 const modelOptions = computed(() => models.value.map((item) => ({ value: item.id, label: item.id })))
-const sizeOptions = computed(() => [
-  { value: 'auto', label: t('imageGeneration.options.auto') },
-  { value: '1024x1024', label: '1024 × 1024' },
-  { value: '1536x1024', label: '1536 × 1024' },
-  { value: '1024x1536', label: '1024 × 1536' },
-])
+const sizeOptions = computed(() => imageSizeValues(model.value).map((value) => ({
+  value,
+  label: imageSizeLabel(value),
+})))
 const qualityOptions = computed(() => [
   { value: 'auto', label: t('imageGeneration.options.auto') },
   { value: 'low', label: t('imageGeneration.options.low') },
   { value: 'medium', label: t('imageGeneration.options.medium') },
   { value: 'high', label: t('imageGeneration.options.high') },
 ])
-const countOptions = [1, 2, 3, 4].map((value) => ({ value, label: String(value) }))
+const countOptions = COUNT_VALUES.map((value) => ({ value, label: String(value) }))
 
 async function loadKeys() {
   loadingKeys.value = true
@@ -351,12 +359,13 @@ async function loadModels() {
   try {
     const result = await listImageGenerationModels(selectedKey.value.key)
     models.value = result
-    const draftModel = sessionStorage.getItem('image-generation-draft-model') || ''
-    model.value = result.find((item) => item.id === draftModel)?.id
+    const rememberedModel = generationPreferences.selectedModelByKey[String(selectedKey.value.id)] || ''
+    model.value = result.find((item) => item.id === pendingDraftSettings?.model)?.id
+      || result.find((item) => item.id === rememberedModel)?.id
       || result.find(isLikelyImageModel)?.id
       || result[0]?.id
       || ''
-    sessionStorage.removeItem('image-generation-draft-model')
+    applyPendingDraftSettings()
   } catch (error) {
     appStore.showError(errorMessage(error, t('imageGeneration.messages.modelsLoadFailed')))
   } finally {
@@ -437,6 +446,45 @@ function titleFromPrompt(value: string) {
   const normalized = value.trim().replace(/\s+/g, ' ')
   const characters = Array.from(normalized)
   return characters.length > 30 ? `${characters.slice(0, 30).join('')}…` : normalized
+}
+
+function imageSizeLabel(value: string) {
+  if (value === 'auto') return t('imageGeneration.options.auto')
+  const label = value.replace('x', ' × ')
+  return value === '3840x2160' || value === '2160x3840' ? `${label} · 4K` : label
+}
+
+function applyRememberedModelSettings(modelId: string) {
+  if (!selectedKey.value || !modelId) return
+  const remembered = generationPreferences.parametersByKeyModel[
+    parameterPreferenceKey(selectedKey.value.id, modelId)
+  ]
+  const allowedSizes = imageSizeValues(modelId)
+  size.value = remembered && allowedSizes.includes(remembered.size)
+    ? remembered.size
+    : allowedSizes.includes(size.value) ? size.value : '1024x1024'
+  if (remembered && QUALITY_VALUES.includes(remembered.quality)) quality.value = remembered.quality
+  if (remembered && COUNT_VALUES.includes(remembered.outputCount)) outputCount.value = remembered.outputCount
+}
+
+function applyPendingDraftSettings() {
+  if (!pendingDraftSettings) return
+  if (imageSizeValues(model.value).includes(pendingDraftSettings.size)) size.value = pendingDraftSettings.size
+  if (QUALITY_VALUES.includes(pendingDraftSettings.quality)) quality.value = pendingDraftSettings.quality
+  if (pendingDraftSettings.outputCount && COUNT_VALUES.includes(pendingDraftSettings.outputCount)) {
+    outputCount.value = pendingDraftSettings.outputCount
+  }
+  pendingDraftSettings = null
+}
+
+function saveCurrentModelSettings() {
+  if (!selectedKey.value || !model.value) return
+  generationPreferences.parametersByKeyModel[parameterPreferenceKey(selectedKey.value.id, model.value)] = {
+    size: size.value,
+    quality: quality.value,
+    outputCount: outputCount.value,
+  }
+  saveImageGenerationPreferences(generationPreferences)
 }
 
 async function generate() {
@@ -658,6 +706,13 @@ watch(selectedKeyId, (value) => {
   if (value) localStorage.setItem(SELECTED_KEY_STORAGE, String(value))
   void loadModels()
 })
+watch(model, (value) => {
+  if (!selectedKey.value || !value) return
+  generationPreferences.selectedModelByKey[String(selectedKey.value.id)] = value
+  applyRememberedModelSettings(value)
+  saveImageGenerationPreferences(generationPreferences)
+}, { flush: 'sync' })
+watch([size, quality, outputCount], saveCurrentModelSettings)
 watch(activeSessionId, (value) => {
   if (value) localStorage.setItem(ACTIVE_SESSION_STORAGE, value)
   void scrollToBottom()
@@ -665,14 +720,22 @@ watch(activeSessionId, (value) => {
 
 onMounted(async () => {
   const draftPrompt = sessionStorage.getItem('image-generation-draft-prompt')
+  const draftModel = sessionStorage.getItem('image-generation-draft-model') || ''
   const draftSize = sessionStorage.getItem('image-generation-draft-size')
   const draftQuality = sessionStorage.getItem('image-generation-draft-quality')
+  const draftCount = Number(sessionStorage.getItem('image-generation-draft-count'))
   if (draftPrompt) prompt.value = draftPrompt
-  if (draftSize) size.value = draftSize
-  if (draftQuality) quality.value = draftQuality
+  pendingDraftSettings = {
+    model: draftModel,
+    size: draftSize || '',
+    quality: draftQuality || '',
+    outputCount: COUNT_VALUES.includes(draftCount) ? draftCount : null,
+  }
   sessionStorage.removeItem('image-generation-draft-prompt')
+  sessionStorage.removeItem('image-generation-draft-model')
   sessionStorage.removeItem('image-generation-draft-size')
   sessionStorage.removeItem('image-generation-draft-quality')
+  sessionStorage.removeItem('image-generation-draft-count')
   try {
     await loadLocalState()
   } catch (error) {

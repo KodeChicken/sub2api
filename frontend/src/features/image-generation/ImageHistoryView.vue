@@ -133,6 +133,7 @@ function reuse(record: ImageGenerationHistoryRecord) {
   sessionStorage.setItem('image-generation-draft-model', record.model)
   sessionStorage.setItem('image-generation-draft-size', record.size)
   sessionStorage.setItem('image-generation-draft-quality', record.quality)
+  sessionStorage.setItem('image-generation-draft-count', String(record.outputCount))
   void router.push('/image-generation/create')
 }
 
