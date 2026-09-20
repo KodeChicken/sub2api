@@ -317,4 +317,45 @@ describe('ImageGenerationView clipboard images', () => {
     expect(selects[5].props('modelValue')).toBe('high')
     expect(wrapper.findAll<HTMLInputElement>('input[type="number"]').at(-1)?.element.value).toBe('3')
   })
+
+  it('updates the image size when the aspect ratio changes', async () => {
+    localStorage.setItem('image-generation-preferences-v1', JSON.stringify({
+      selectedModelByKey: { 1: 'gpt-image-2' },
+      parametersByKeyModel: {
+        '1:gpt-image-2': {
+          size: '2160x3840',
+          quality: 'high',
+          outputCount: 1,
+          values: { aspect_ratio: '9:16', size: '2160x3840', quality: 'high', n: 1 },
+        },
+      },
+    }))
+    mocks.loadKeys.mockResolvedValue({
+      items: [{
+        id: 1,
+        name: 'Image key',
+        key: 'sk-test',
+        status: 'active',
+        group: { name: 'Default', platform: 'openai', allow_image_generation: true },
+      }],
+    })
+    mocks.listModels.mockResolvedValue([{ id: 'gpt-image-2' }])
+    const wrapper = mount(ImageGenerationView, {
+      global: { stubs: { Icon: true, RouterLink: true } },
+    })
+    await flushPromises()
+    let selects = wrapper.findAllComponents(Select)
+
+    expect(selects[3].props('modelValue')).toBe('9:16')
+    expect(selects[4].props('modelValue')).toBe('2160x3840')
+
+    selects[3].vm.$emit('update:modelValue', '16:9')
+    await wrapper.vm.$nextTick()
+    selects = wrapper.findAllComponents(Select)
+
+    expect(selects[4].props('modelValue')).toBe('3840x2160')
+    expect(selects[4].props('options').map((option: { value: string }) => option.value)).toEqual([
+      'auto', '1536x864', '2048x1152', '3840x2160', '__custom_size__',
+    ])
+  })
 })

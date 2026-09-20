@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { imageModelCapabilities, normalizeImageParameters, validateCustomImageSize } from './modelCapabilities'
+import {
+  imageModelCapabilities,
+  imageSizeOptionsForAspectRatio,
+  normalizeImageParameters,
+  preferredImageSizeForAspectRatio,
+  validateCustomImageSize,
+} from './modelCapabilities'
 
 describe('image model capabilities', () => {
   it('exposes 4K sizes for gpt-image-2 profiles and later 2.x variants', () => {
@@ -37,5 +43,21 @@ describe('image model capabilities', () => {
       { value: 'low', label: 'low' },
     ])
     expect(parameters.find(item => item.key === 'n')?.max).toBe(10)
+  })
+
+  it('maps aspect ratios to the closest compatible size tier', () => {
+    const size = imageModelCapabilities('gpt-image-2').parameters.find(item => item.key === 'size')!
+    expect(preferredImageSizeForAspectRatio(size, '16:9', '2160x3840')).toBe('3840x2160')
+    expect(preferredImageSizeForAspectRatio(size, '9:16', '3840x2160')).toBe('2160x3840')
+    expect(preferredImageSizeForAspectRatio(size, '16:9', '1024x1024')).toBe('1536x864')
+    expect(imageSizeOptionsForAspectRatio(size, '16:9').map(option => option.value)).toEqual([
+      'auto', '1536x864', '2048x1152', '3840x2160',
+    ])
+  })
+
+  it('recognizes the approximate DALL-E landscape and portrait sizes', () => {
+    const size = imageModelCapabilities('dall-e-3').parameters.find(item => item.key === 'size')!
+    expect(preferredImageSizeForAspectRatio(size, '16:9', '1024x1792')).toBe('1792x1024')
+    expect(preferredImageSizeForAspectRatio(size, '9:16', '1792x1024')).toBe('1024x1792')
   })
 })

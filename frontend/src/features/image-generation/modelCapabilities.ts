@@ -22,6 +22,11 @@ export interface ImageCustomSizeConstraints {
   maxAspectRatio: number
 }
 
+interface ParsedImageSize {
+  width: number
+  height: number
+}
+
 export interface ImageModelCapabilities {
   supportsEdits: boolean
   maxReferenceImages: number
@@ -184,4 +189,58 @@ export function validateCustomImageSize(value: string, constraints: ImageCustomS
   if (pixels < constraints.minPixels || pixels > constraints.maxPixels) return `总像素需在 ${constraints.minPixels} 到 ${constraints.maxPixels} 之间`
   if (Math.max(width / height, height / width) > constraints.maxAspectRatio) return `宽高比不能超过 ${constraints.maxAspectRatio}:1`
   return ''
+}
+
+export function imageSizeOptionsForAspectRatio(definition: ImageParameterDefinition, aspectRatio: string) {
+  if (!aspectRatio || aspectRatio === 'auto') return definition.options || []
+  return (definition.options || []).filter(option => {
+    const value = String(option.value)
+    return value === 'auto' || imageSizeMatchesAspectRatio(value, aspectRatio)
+  })
+}
+
+export function preferredImageSizeForAspectRatio(
+  definition: ImageParameterDefinition,
+  aspectRatio: string,
+  currentSize: string,
+) {
+  if (!aspectRatio || aspectRatio === 'auto' || imageSizeMatchesAspectRatio(currentSize, aspectRatio)) return currentSize
+  const candidates = (definition.options || [])
+    .map(option => String(option.value))
+    .filter(value => value !== 'auto' && imageSizeMatchesAspectRatio(value, aspectRatio))
+  if (candidates.length === 0) return definition.options?.some(option => option.value === 'auto') ? 'auto' : String(definition.default)
+  const current = parseImageSize(currentSize)
+  const targetPixels = current ? current.width * current.height : 1024 * 1024
+  return candidates.reduce((best, candidate) => {
+    const bestSize = parseImageSize(best)!
+    const candidateSize = parseImageSize(candidate)!
+    const bestDistance = Math.abs(Math.log((bestSize.width * bestSize.height) / targetPixels))
+    const candidateDistance = Math.abs(Math.log((candidateSize.width * candidateSize.height) / targetPixels))
+    return candidateDistance < bestDistance ? candidate : best
+  })
+}
+
+export function imageSizeMatchesAspectRatio(size: string, aspectRatio: string) {
+  const parsedSize = parseImageSize(size)
+  const parsedRatio = parseAspectRatio(aspectRatio)
+  if (!parsedSize || !parsedRatio) return false
+  const actual = parsedSize.width / parsedSize.height
+  const expected = parsedRatio.width / parsedRatio.height
+  return Math.abs(actual - expected) / expected <= 0.025
+}
+
+function parseImageSize(value: string): ParsedImageSize | null {
+  const match = /^(\d+)x(\d+)$/.exec(value.trim())
+  if (!match) return null
+  const width = Number(match[1])
+  const height = Number(match[2])
+  return width > 0 && height > 0 ? { width, height } : null
+}
+
+function parseAspectRatio(value: string): ParsedImageSize | null {
+  const match = /^(\d+):(\d+)$/.exec(value.trim())
+  if (!match) return null
+  const width = Number(match[1])
+  const height = Number(match[2])
+  return width > 0 && height > 0 ? { width, height } : null
 }

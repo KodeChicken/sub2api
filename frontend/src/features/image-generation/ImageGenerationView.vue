@@ -241,7 +241,7 @@
               <p v-else class="col-span-2 text-xs text-gray-500">宽高需为 {{ definition.customSize.edgeMultiple }} 的倍数，单边不超过 {{ definition.customSize.maxEdge }} 像素。</p>
             </div>
           </div>
-          <Select v-else-if="definition.type === 'select'" :model-value="parameterValue(definition.key)" :options="definition.options || []" :disabled="generating" @update:model-value="setParameterValue(definition.key, $event)" />
+          <Select v-else-if="definition.type === 'select'" :model-value="parameterValue(definition.key)" :options="parameterOptions(definition)" :disabled="generating" @update:model-value="setParameterValue(definition.key, $event)" />
           <input v-else-if="definition.type === 'number'" :value="parameterValue(definition.key)" type="number" class="input w-full" :min="definition.min" :max="definition.max" :step="definition.step" :disabled="generating" @input="setParameterValue(definition.key, Number(($event.target as HTMLInputElement).value))" />
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs leading-5 text-gray-500 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400">
@@ -319,8 +319,11 @@ import {
 } from './preferences'
 import {
   defaultImageParameters,
+  imageSizeMatchesAspectRatio,
+  imageSizeOptionsForAspectRatio,
   imageModelCapabilities,
   normalizeImageParameters,
+  preferredImageSizeForAspectRatio,
   validateCustomImageSize,
   type ImageParameterDefinition,
 } from './modelCapabilities'
@@ -545,6 +548,7 @@ function applyRememberedModelSettings(modelId: string) {
   ]
 	if (remembered?.values) Object.assign(parameterValues, remembered.values)
 	size.value = remembered && acceptsSize(remembered.size) ? remembered.size : acceptsSize(size.value) ? size.value : String(parameterValues.size || '1024x1024')
+  alignSizeToAspectRatio()
   if (remembered && QUALITY_VALUES.includes(remembered.quality)) quality.value = remembered.quality
   if (remembered && COUNT_VALUES.includes(remembered.outputCount)) outputCount.value = remembered.outputCount
 	trimReferenceDrafts()
@@ -553,6 +557,7 @@ function applyRememberedModelSettings(modelId: string) {
 function applyPendingDraftSettings() {
   if (!pendingDraftSettings) return
 	if (acceptsSize(pendingDraftSettings.size)) size.value = pendingDraftSettings.size
+  alignSizeToAspectRatio()
   if (QUALITY_VALUES.includes(pendingDraftSettings.quality)) quality.value = pendingDraftSettings.quality
   if (pendingDraftSettings.outputCount && COUNT_VALUES.includes(pendingDraftSettings.outputCount)) {
     outputCount.value = pendingDraftSettings.outputCount
@@ -856,6 +861,7 @@ function restoreRecord(record: ImageGenerationHistoryRecord) {
     ? record.templateId
     : ''
   Object.assign(parameterValues, record.parameters || { size: record.size, quality: record.quality, n: record.outputCount })
+  alignSizeToAspectRatio()
   clearReferences()
   referenceDrafts.value = recordReferenceImages(record).map(reference => ({
     id: crypto.randomUUID(),
@@ -870,6 +876,7 @@ function restoreRecord(record: ImageGenerationHistoryRecord) {
 async function continueFrom(record: ImageGenerationHistoryRecord) {
   model.value = record.model
   Object.assign(parameterValues, record.parameters || { size: record.size, quality: record.quality, n: record.outputCount })
+  alignSizeToAspectRatio()
   selectedTemplateId.value = record.templateId && promptTemplates.value.some(item => item.id === record.templateId)
     ? record.templateId
     : ''
@@ -901,11 +908,17 @@ function parameterValue(key: string) {
 function setParameterValue(key: string, value: unknown) {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     parameterValues[key] = value
+    if (key === 'aspect_ratio' && typeof value === 'string') alignSizeToAspectRatio(value)
   }
 }
 
 function parameterOptions(definition: ImageParameterDefinition) {
-  return [...(definition.options || []), { value: CUSTOM_SIZE_OPTION, label: '自定义尺寸' }]
+  const options = definition.key === 'size'
+    ? imageSizeOptionsForAspectRatio(definition, String(parameterValues.aspect_ratio || 'auto'))
+    : definition.options || []
+  return definition.customSize
+    ? [...options, { value: CUSTOM_SIZE_OPTION, label: '自定义尺寸' }]
+    : options
 }
 
 function parameterSelectValue(definition: ImageParameterDefinition) {
@@ -915,7 +928,7 @@ function parameterSelectValue(definition: ImageParameterDefinition) {
 
 function setSelectParameterValue(definition: ImageParameterDefinition, value: unknown) {
   if (value === CUSTOM_SIZE_OPTION) {
-    setParameterValue(definition.key, '1280x1024')
+    setParameterValue(definition.key, defaultCustomSize(String(parameterValues.aspect_ratio || 'auto')))
     return
   }
   setParameterValue(definition.key, value)
@@ -933,7 +946,13 @@ function setCustomSizeDimension(key: string, index: 0 | 1, value: number) {
 
 function customSizeError(definition: ImageParameterDefinition) {
   if (!definition.customSize || parameterSelectValue(definition) !== CUSTOM_SIZE_OPTION) return ''
-  return validateCustomImageSize(String(parameterValue(definition.key) || ''), definition.customSize)
+  const value = String(parameterValue(definition.key) || '')
+  const validationError = validateCustomImageSize(value, definition.customSize)
+  if (validationError) return validationError
+  const aspectRatio = String(parameterValues.aspect_ratio || 'auto')
+  return aspectRatio !== 'auto' && !imageSizeMatchesAspectRatio(value, aspectRatio)
+    ? `尺寸需要匹配 ${aspectRatio} 宽高比`
+    : ''
 }
 
 function acceptsSize(value: string) {
@@ -941,6 +960,23 @@ function acceptsSize(value: string) {
   if (!definition) return false
   if (definition.options?.some(option => String(option.value) === value)) return true
   return !!definition.customSize && validateCustomImageSize(value, definition.customSize) === ''
+}
+
+function alignSizeToAspectRatio(aspectRatio = String(parameterValues.aspect_ratio || 'auto')) {
+  const definition = modelCapabilities.value.parameters.find(item => item.key === 'size')
+  if (!definition) return
+  const currentSize = String(parameterValues.size || definition.default)
+  parameterValues.size = preferredImageSizeForAspectRatio(definition, aspectRatio, currentSize)
+}
+
+function defaultCustomSize(aspectRatio: string) {
+  return ({
+    '1:1': '1280x1280',
+    '3:2': '1200x800',
+    '2:3': '800x1200',
+    '16:9': '1280x720',
+    '9:16': '720x1280',
+  } as Record<string, string>)[aspectRatio] || '1280x1024'
 }
 
 function trimReferenceDrafts() {
