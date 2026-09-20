@@ -4,7 +4,7 @@ export default {
     description: 'Generate images with your API key. Usage is billed to the selected key.',
     tabs: {
       create: 'Generate',
-      materials: 'Templates',
+      templates: 'Prompt templates',
       history: 'History',
     },
     sessions: {
@@ -41,6 +41,9 @@ export default {
       size: 'Image size',
       quality: 'Quality',
       count: 'Image count',
+      template: 'Style template',
+      noTemplate: 'No style template',
+      manageTemplates: 'Manage templates',
       billingHint: 'Requests use the existing image gateway and inherit the key’s group, quota, rate limits, moderation, and billing rules.',
     },
     options: {
@@ -48,18 +51,6 @@ export default {
       low: 'Low',
       medium: 'Medium',
       high: 'High',
-    },
-    materials: {
-      use: 'Use prompt',
-      categories: {
-        all: 'All',
-        product: 'Products',
-        food: 'Food',
-        poster: 'Posters',
-        social: 'Social',
-        travel: 'Travel',
-        illustration: 'Illustration',
-      },
     },
     history: {
       search: 'Search prompts, models, or keys',
@@ -81,6 +72,7 @@ export default {
       sessionDeleteFailed: 'Failed to delete the image session',
       historyLoadFailed: 'Failed to load image history',
       deleteFailed: 'Failed to delete the history record',
+      contextImageLoadFailed: 'The previous image could not be loaded. Text conversation context was preserved.',
     },
   },
 }

@@ -38,7 +38,7 @@ const { t } = useI18n()
 
 const tabs = computed(() => [
   { to: '/image-generation/create', label: t('imageGeneration.tabs.create'), icon: 'sparkles' as const },
-  { to: '/image-generation/materials', label: t('imageGeneration.tabs.materials'), icon: 'grid' as const },
+  { to: '/image-generation/templates', label: t('imageGeneration.tabs.templates'), icon: 'lightbulb' as const },
   { to: '/image-generation/history', label: t('imageGeneration.tabs.history'), icon: 'clock' as const },
 ])
 

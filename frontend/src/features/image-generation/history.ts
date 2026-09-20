@@ -1,8 +1,13 @@
-import type { ImageGenerationHistoryRecord, ImageGenerationSession } from './types'
+import type {
+  ImageGenerationHistoryRecord,
+  ImageGenerationSession,
+  ImageGenerationSessionDraft,
+} from './types'
 
 const DATABASE_NAME = 'sub2api-image-generation'
-const DATABASE_VERSION = 1
+const DATABASE_VERSION = 2
 const HISTORY_STORE = 'history'
+const DRAFT_STORE = 'drafts'
 const SESSION_STORAGE_KEY = 'sub2api-image-generation-sessions-v1'
 
 function openDatabase(): Promise<IDBDatabase> {
@@ -15,6 +20,9 @@ function openDatabase(): Promise<IDBDatabase> {
         store.createIndex('createdAt', 'createdAt')
         store.createIndex('sessionId', 'sessionId')
       }
+		if (!db.objectStoreNames.contains(DRAFT_STORE)) {
+			db.createObjectStore(DRAFT_STORE, { keyPath: 'sessionId' })
+		}
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error || new Error('Failed to open image history'))
@@ -22,13 +30,14 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 async function withStore<T>(
+	storeName: string,
   mode: IDBTransactionMode,
   action: (store: IDBObjectStore) => IDBRequest<T>,
 ): Promise<T> {
   const db = await openDatabase()
   return new Promise((resolve, reject) => {
-    const transaction = db.transaction(HISTORY_STORE, mode)
-    const request = action(transaction.objectStore(HISTORY_STORE))
+    const transaction = db.transaction(storeName, mode)
+    const request = action(transaction.objectStore(storeName))
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error || new Error('Image history operation failed'))
     transaction.oncomplete = () => db.close()
@@ -37,29 +46,56 @@ async function withStore<T>(
 }
 
 export async function listImageHistory(): Promise<ImageGenerationHistoryRecord[]> {
-  const items = await withStore<ImageGenerationHistoryRecord[]>('readonly', (store) => store.getAll())
+  const items = await withStore<ImageGenerationHistoryRecord[]>(HISTORY_STORE, 'readonly', (store) => store.getAll())
   return items.sort((a, b) => b.createdAt - a.createdAt)
 }
 
+export async function getImageHistory(id: string): Promise<ImageGenerationHistoryRecord | undefined> {
+	return withStore<ImageGenerationHistoryRecord | undefined>(HISTORY_STORE, 'readonly', store => store.get(id))
+}
+
 export async function saveImageHistory(record: ImageGenerationHistoryRecord): Promise<void> {
-  await withStore<IDBValidKey>('readwrite', (store) => store.put(record))
+  await withStore<IDBValidKey>(HISTORY_STORE, 'readwrite', (store) => store.put(record))
 }
 
 export async function deleteImageHistory(id: string): Promise<void> {
-  await withStore<undefined>('readwrite', (store) => store.delete(id) as IDBRequest<undefined>)
+  await withStore<undefined>(HISTORY_STORE, 'readwrite', (store) => store.delete(id) as IDBRequest<undefined>)
 }
 
-export async function cacheGeneratedImages(urls: string[]): Promise<ImageGenerationHistoryRecord['images']> {
-  return Promise.all(urls.map(async (url) => {
+export async function cacheGeneratedImages(
+	urls: string[],
+	revisedPrompts: Array<string | undefined> = [],
+): Promise<ImageGenerationHistoryRecord['images']> {
+  return Promise.all(urls.map(async (url, index) => {
     try {
       const response = await fetch(url)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const blob = await response.blob()
-      return { url, mimeType: blob.type || 'image/png', blob }
+		const dimensions = await imageDimensions(blob)
+      return {
+			url,
+			mimeType: blob.type || 'image/png',
+			blob,
+			fileSizeBytes: blob.size,
+			revisedPrompt: revisedPrompts[index],
+			...dimensions,
+		}
     } catch {
-      return { url, mimeType: 'image/png' }
+		return { url, mimeType: 'image/png', revisedPrompt: revisedPrompts[index] }
     }
   }))
+}
+
+async function imageDimensions(blob: Blob): Promise<{ width?: number; height?: number }> {
+	if (typeof createImageBitmap !== 'function') return {}
+	try {
+		const bitmap = await createImageBitmap(blob)
+		const dimensions = { width: bitmap.width, height: bitmap.height }
+		bitmap.close()
+		return dimensions
+	} catch {
+		return {}
+	}
 }
 
 export function displayImageURL(image: ImageGenerationHistoryRecord['images'][number]): string {
@@ -87,5 +123,18 @@ export function createImageSession(title = ''): ImageGenerationSession {
     title: title.trim() || new Date(now).toLocaleString(),
     createdAt: now,
     updatedAt: now,
+		sortOrder: now,
   }
+}
+
+export async function loadImageSessionDraft(sessionId: string): Promise<ImageGenerationSessionDraft | undefined> {
+	return withStore<ImageGenerationSessionDraft | undefined>(DRAFT_STORE, 'readonly', store => store.get(sessionId))
+}
+
+export async function saveImageSessionDraft(draft: ImageGenerationSessionDraft): Promise<void> {
+	await withStore<IDBValidKey>(DRAFT_STORE, 'readwrite', store => store.put(draft))
+}
+
+export async function deleteImageSessionDraft(sessionId: string): Promise<void> {
+	await withStore<undefined>(DRAFT_STORE, 'readwrite', store => store.delete(sessionId) as IDBRequest<undefined>)
 }

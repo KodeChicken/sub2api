@@ -9,12 +9,17 @@ const mocks = vi.hoisted(() => ({
   loadKeys: vi.fn().mockResolvedValue({ items: [] }),
   listModels: vi.fn().mockResolvedValue([]),
   submitGeneration: vi.fn(),
+  streamGeneration: vi.fn(),
+  cancelGeneration: vi.fn(),
   cacheImages: vi.fn(),
   listHistory: vi.fn().mockResolvedValue([]),
   saveHistory: vi.fn(),
   loadSessions: vi.fn(() => []),
   saveSessions: vi.fn(),
   deleteHistory: vi.fn(),
+  loadDraft: vi.fn(),
+  saveDraft: vi.fn(),
+  deleteDraft: vi.fn(),
 }))
 
 vi.mock('vue-i18n', () => ({
@@ -33,20 +38,25 @@ vi.mock('@/stores', () => ({
 
 vi.mock('./api', () => ({
   getImageGenerationTask: vi.fn(),
+  cancelImageGenerationTask: mocks.cancelGeneration,
   imageResultURLs: (result?: { data?: Array<{ url?: string }> }) => result?.data?.map((item) => item.url || '').filter(Boolean) || [],
   isLikelyImageModel: (model: { id: string }) => model.id.includes('image'),
   listImageGenerationModels: mocks.listModels,
   submitImageGeneration: mocks.submitGeneration,
+  streamImageGeneration: mocks.streamGeneration,
 }))
 
 vi.mock('./history', () => ({
   cacheGeneratedImages: mocks.cacheImages,
   createImageSession: vi.fn((title: string) => ({ id: 'session-1', title, createdAt: 1, updatedAt: 1 })),
   deleteImageHistory: mocks.deleteHistory,
+  deleteImageSessionDraft: mocks.deleteDraft,
   displayImageURL: vi.fn(),
   listImageHistory: mocks.listHistory,
   loadImageSessions: mocks.loadSessions,
+  loadImageSessionDraft: mocks.loadDraft,
   saveImageHistory: mocks.saveHistory,
+  saveImageSessionDraft: mocks.saveDraft,
   saveImageSessions: mocks.saveSessions,
 }))
 
@@ -67,6 +77,14 @@ describe('ImageGenerationView clipboard images', () => {
     mocks.loadSessions.mockReturnValue([])
     mocks.listHistory.mockResolvedValue([])
     mocks.cacheImages.mockResolvedValue([{ url: 'result.png', mimeType: 'image/png' }])
+    mocks.loadDraft.mockResolvedValue(undefined)
+    mocks.saveDraft.mockResolvedValue(undefined)
+    mocks.deleteDraft.mockResolvedValue(undefined)
+    mocks.cancelGeneration.mockResolvedValue({ status: 'cancelled' })
+    mocks.streamGeneration.mockImplementation(async (key, input, _onEvent, signal) => {
+      const submission = await mocks.submitGeneration(key, input, signal)
+      return submission.mode === 'sync' ? submission.result : submission.task.result
+    })
     vi.stubGlobal('URL', {
       createObjectURL: vi.fn(() => 'blob:reference-image'),
       revokeObjectURL: vi.fn(),
@@ -159,7 +177,7 @@ describe('ImageGenerationView clipboard images', () => {
     expect(mocks.showSuccess).toHaveBeenCalled()
     expect(mocks.saveHistory).toHaveBeenCalledWith(expect.objectContaining({
       prompt: '生成一张夏日海边宣传海报',
-      referenceImage: expect.objectContaining({ name: 'reference.png', blob: file }),
+      referenceImages: [expect.objectContaining({ name: 'reference.png', blob: file })],
     }))
   })
 
@@ -270,24 +288,33 @@ describe('ImageGenerationView clipboard images', () => {
       global: { stubs: { Icon: true, RouterLink: true } },
     })
     await flushPromises()
-    const selects = wrapper.findAllComponents(Select)
+    let selects = wrapper.findAllComponents(Select)
 
     expect(selects[1].props('modelValue')).toBe('gpt-image-2.5-flare')
-    expect(selects[2].props('modelValue')).toBe('3840x2160')
-    expect(selects[3].props('modelValue')).toBe('high')
-    expect(selects[4].props('modelValue')).toBe(3)
-    expect(selects[2].props('options')).toContainEqual({ value: '3840x2160', label: '3840 × 2160 · 4K' })
+    expect(selects[4].props('modelValue')).toBe('3840x2160')
+    expect(selects[5].props('modelValue')).toBe('high')
+    expect(selects[4].props('options')).toContainEqual({ value: '3840x2160', label: '3840 × 2160 · 4K' })
+    expect(wrapper.findAll<HTMLInputElement>('input[type="number"]').at(-1)?.element.value).toBe('3')
 
     selects[1].vm.$emit('update:modelValue', 'gpt-image-1.5')
     await wrapper.vm.$nextTick()
+    selects = wrapper.findAllComponents(Select)
 
-    expect(selects[2].props('modelValue')).toBe('1024x1024')
-    expect(selects[2].props('options')).not.toContainEqual(expect.objectContaining({ value: '3840x2160' }))
+    expect(selects[4].props('modelValue')).toBe('1024x1024')
+    expect(selects[4].props('options')).not.toContainEqual(expect.objectContaining({ value: '3840x2160' }))
     expect(JSON.parse(localStorage.getItem('image-generation-preferences-v1') || '{}')).toMatchObject({
       selectedModelByKey: { 1: 'gpt-image-1.5' },
       parametersByKeyModel: {
-        '1:gpt-image-1.5': { size: '1024x1024', quality: 'high', outputCount: 3 },
+        '1:gpt-image-1.5': { size: '1024x1024', quality: 'auto', outputCount: 1 },
       },
     })
+
+    selects[1].vm.$emit('update:modelValue', 'gpt-image-2.5-flare')
+    await wrapper.vm.$nextTick()
+    selects = wrapper.findAllComponents(Select)
+
+    expect(selects[4].props('modelValue')).toBe('3840x2160')
+    expect(selects[5].props('modelValue')).toBe('high')
+    expect(wrapper.findAll<HTMLInputElement>('input[type="number"]').at(-1)?.element.value).toBe('3')
   })
 })

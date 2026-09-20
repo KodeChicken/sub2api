@@ -4,7 +4,7 @@ export default {
     description: '使用你的 API 密钥在线生成图片，调用费用计入对应密钥的使用记录。',
     tabs: {
       create: '生图工作台',
-      materials: '素材库',
+      templates: '提示词模板',
       history: '历史作品',
     },
     sessions: {
@@ -41,6 +41,9 @@ export default {
       size: '图片尺寸',
       quality: '生成质量',
       count: '生成数量',
+      template: '风格模板',
+      noTemplate: '不使用风格模板',
+      manageTemplates: '管理模板',
       billingHint: '请求会直接进入现有生图网关，沿用该密钥的分组、额度、限流、内容审核和计费规则。',
     },
     options: {
@@ -48,18 +51,6 @@ export default {
       low: '低',
       medium: '中',
       high: '高',
-    },
-    materials: {
-      use: '用于生图',
-      categories: {
-        all: '全部',
-        product: '电商产品',
-        food: '餐饮美食',
-        poster: '海报设计',
-        social: '社交媒体',
-        travel: '旅游出行',
-        illustration: '插画',
-      },
     },
     history: {
       search: '搜索提示词、模型或密钥',
@@ -81,6 +72,7 @@ export default {
       sessionDeleteFailed: '删除生图会话失败',
       historyLoadFailed: '加载历史作品失败',
       deleteFailed: '删除历史作品失败',
+      contextImageLoadFailed: '无法读取上一张生成图片，已保留文本会话上下文',
     },
   },
 }

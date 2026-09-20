@@ -68,6 +68,7 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 	})
 	router.POST("/v1/images/generations/async", h.Submit)
 	router.GET("/v1/images/tasks/:task_id", h.Get)
+	router.POST("/v1/images/tasks/:task_id/cancel", h.Cancel)
 
 	requestCtx, cancelRequest := context.WithCancel(context.Background())
 	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", strings.NewReader(`{"model":"gpt-image-1","prompt":"cat"}`)).WithContext(requestCtx)
@@ -104,6 +105,51 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 	require.Equal(t, "no-store", pollWriter.Header().Get("Cache-Control"))
 	require.Empty(t, pollWriter.Header().Get("Retry-After"))
 	require.Contains(t, pollWriter.Body.String(), "https://example.test/image.png")
+}
+
+func TestAsyncImageHandlerCancelsRunningTask(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
+	tasks := service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute)
+	h := &AsyncImageHandler{tasks: tasks}
+	started := make(chan struct{})
+	h.execute = func(_ string, c *gin.Context) {
+		close(started)
+		<-c.Request.Context().Done()
+	}
+
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		groupID := int64(3)
+		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
+			ID: 9, UserID: 7, GroupID: &groupID,
+			Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI, AllowImageGeneration: true},
+		})
+		c.Next()
+	})
+	router.POST("/v1/images/generations/async", h.Submit)
+	router.POST("/v1/images/tasks/:task_id/cancel", h.Cancel)
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", strings.NewReader(`{"model":"gpt-image-1","prompt":"cat"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusAccepted, w.Code)
+	var accepted struct {
+		TaskID string `json:"task_id"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &accepted))
+	<-started
+
+	cancelReq := httptest.NewRequest(http.MethodPost, "/v1/images/tasks/"+accepted.TaskID+"/cancel", nil)
+	cancelWriter := httptest.NewRecorder()
+	router.ServeHTTP(cancelWriter, cancelReq)
+	require.Equal(t, http.StatusOK, cancelWriter.Code)
+	require.Contains(t, cancelWriter.Body.String(), service.ImageTaskStatusCancelled)
+	require.Eventually(t, func() bool {
+		got, err := tasks.Get(context.Background(), service.ImageTaskOwner{UserID: 7, APIKeyID: 9}, accepted.TaskID)
+		return err == nil && got.Status == service.ImageTaskStatusCancelled
+	}, time.Second, 10*time.Millisecond)
 }
 
 // When object storage is not configured the feature is fully disabled: the

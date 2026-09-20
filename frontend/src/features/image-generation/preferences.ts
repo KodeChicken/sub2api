@@ -2,6 +2,7 @@ export interface ImageGenerationParameters {
   size: string
   quality: string
   outputCount: number
+	values?: Record<string, string | number | boolean>
 }
 
 export interface ImageGenerationPreferences {

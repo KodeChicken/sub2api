@@ -89,3 +89,23 @@ func TestImageTaskServiceMapsStoreFailures(t *testing.T) {
 	_, err := svc.Create(context.Background(), ImageTaskOwner{UserID: 1, APIKeyID: 2})
 	require.ErrorIs(t, err, ErrImageTaskUnavailable)
 }
+
+func TestImageTaskServiceCancelIsTerminal(t *testing.T) {
+	store := &imageTaskMemoryStore{}
+	svc := NewImageTaskServiceWithOptions(store, time.Hour, time.Minute)
+	owner := ImageTaskOwner{UserID: 1, APIKeyID: 2}
+	created, err := svc.Create(context.Background(), owner)
+	require.NoError(t, err)
+
+	cancelled, err := svc.Cancel(context.Background(), owner, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, ImageTaskStatusCancelled, cancelled.Status)
+	require.Equal(t, 499, cancelled.HTTPStatus)
+
+	result := json.RawMessage(`{"data":[{"url":"https://example.test/late.png"}]}`)
+	require.NoError(t, svc.Complete(context.Background(), created.ID, http.StatusOK, result))
+	got, err := svc.Get(context.Background(), owner, created.ID)
+	require.NoError(t, err)
+	require.Equal(t, ImageTaskStatusCancelled, got.Status)
+	require.Empty(t, got.Result)
+}

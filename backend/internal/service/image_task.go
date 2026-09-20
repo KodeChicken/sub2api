@@ -18,6 +18,7 @@ const (
 	ImageTaskStatusProcessing = "processing"
 	ImageTaskStatusCompleted  = "completed"
 	ImageTaskStatusFailed     = "failed"
+	ImageTaskStatusCancelled  = "cancelled"
 
 	defaultImageTaskTTL              = 24 * time.Hour
 	defaultImageTaskExecutionTimeout = 30 * time.Minute
@@ -210,6 +211,37 @@ func (s *ImageTaskService) Fail(ctx context.Context, id string, statusCode int, 
 	return s.finish(ctx, id, ImageTaskStatusFailed, statusCode, nil, taskErr)
 }
 
+func (s *ImageTaskService) Cancel(ctx context.Context, owner ImageTaskOwner, id string) (*ImageTask, error) {
+	if s == nil || s.store == nil {
+		return nil, ErrImageTaskUnavailable
+	}
+	task, err := s.store.Get(ctx, strings.TrimSpace(id))
+	if err != nil {
+		if errors.Is(err, ErrImageTaskNotFound) {
+			return nil, ErrImageTaskNotFound
+		}
+		return nil, ErrImageTaskUnavailable.WithCause(err)
+	}
+	if task.UserID != owner.UserID || task.APIKeyID != owner.APIKeyID {
+		return nil, ErrImageTaskNotFound
+	}
+	if task.Status != ImageTaskStatusProcessing {
+		return imageTaskToPublic(task), nil
+	}
+	now := time.Now().UTC()
+	completedAt := now.Unix()
+	task.Status = ImageTaskStatusCancelled
+	task.HTTPStatus = 499
+	task.Result = nil
+	task.Error = imageTaskErrorJSON("cancelled_error", "image generation task was cancelled")
+	task.CompletedAt = &completedAt
+	task.ExpiresAt = now.Add(s.ttl).Unix()
+	if err := s.store.Save(ctx, task, s.ttl); err != nil {
+		return nil, ErrImageTaskUnavailable.WithCause(err)
+	}
+	return imageTaskToPublic(task), nil
+}
+
 func (s *ImageTaskService) finish(ctx context.Context, id, status string, statusCode int, result, taskErr json.RawMessage) error {
 	if s == nil || s.store == nil {
 		return ErrImageTaskUnavailable
@@ -220,6 +252,9 @@ func (s *ImageTaskService) finish(ctx context.Context, id, status string, status
 			return ErrImageTaskNotFound
 		}
 		return ErrImageTaskUnavailable.WithCause(err)
+	}
+	if task.Status != ImageTaskStatusProcessing {
+		return nil
 	}
 	now := time.Now().UTC()
 	completedAt := now.Unix()

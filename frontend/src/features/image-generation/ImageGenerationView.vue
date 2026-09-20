@@ -47,6 +47,20 @@
             <button
               type="button"
               class="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-gray-700 dark:hover:bg-dark-700 dark:hover:text-gray-200"
+              title="上移会话"
+              :disabled="generating"
+              @click.stop="moveSession(session, -1)"
+            ><Icon name="arrowUp" size="xs" /></button>
+            <button
+              type="button"
+              class="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-gray-700 dark:hover:bg-dark-700 dark:hover:text-gray-200"
+              title="下移会话"
+              :disabled="generating"
+              @click.stop="moveSession(session, 1)"
+            ><Icon name="arrowDown" size="xs" /></button>
+            <button
+              type="button"
+              class="rounded-md p-1.5 text-gray-400 hover:bg-white hover:text-gray-700 dark:hover:bg-dark-700 dark:hover:text-gray-200"
               :title="t('imageGeneration.sessions.rename')"
               data-testid="rename-session"
               :disabled="generating"
@@ -86,16 +100,17 @@
 
         <article v-for="record in activeRecords" :key="record.id" class="space-y-3">
           <div class="ml-auto max-w-2xl space-y-3 rounded-lg bg-primary-600 p-3 text-sm leading-6 text-white">
-            <button
-              v-if="record.referenceImage"
-              type="button"
-              class="block w-full max-w-sm overflow-hidden rounded-md bg-black/10 text-left"
-              @click="openReferencePreview(record)"
-            >
-              <img :src="displayReferenceURL(record)" :alt="t('imageGeneration.create.referenceImage', { name: record.referenceImage.name })" class="max-h-64 w-full object-contain" />
-              <span class="block truncate px-2.5 py-1.5 text-xs text-white/80">{{ record.referenceImage.name }}</span>
-            </button>
+            <div v-if="recordReferenceImages(record).length" class="grid max-w-xl gap-2 sm:grid-cols-2">
+              <button v-for="(reference, index) in recordReferenceImages(record)" :key="reference.id || index" type="button" class="overflow-hidden rounded-md bg-black/10 text-left" @click="openReferencePreview(record, index)">
+                <img :src="displayReferenceURL(record, index)" :alt="t('imageGeneration.create.referenceImage', { name: reference.name })" class="max-h-48 w-full object-contain" />
+                <span class="block truncate px-2.5 py-1.5 text-xs text-white/80">{{ reference.name }}</span>
+              </button>
+            </div>
             <p>{{ record.prompt }}</p>
+          </div>
+          <div v-if="record.status === 'failed' || record.status === 'cancelled'" class="rounded-lg border p-4 text-sm" :class="record.status === 'failed' ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/25 dark:text-red-300' : 'border-gray-200 bg-gray-100 text-gray-600 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-300'">
+            <p class="font-medium">{{ record.status === 'failed' ? '生成失败' : '已取消生成' }}</p>
+            <p v-if="record.error" class="mt-1 text-xs leading-5">{{ record.error }}</p>
           </div>
           <div class="grid gap-3" :class="record.images.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'">
             <button
@@ -113,27 +128,36 @@
             <span>{{ record.model }}</span>
             <span>{{ record.size }}</span>
             <span>{{ record.apiKeyName }}</span>
-            <button type="button" class="ml-auto text-primary-600 hover:text-primary-700 dark:text-primary-400" @click="reuseRecord(record)">{{ t('imageGeneration.create.reuse') }}</button>
+            <span v-if="record.durationMs">{{ formatDuration(record.durationMs) }}</span>
+            <div class="ml-auto flex flex-wrap items-center gap-3">
+              <button type="button" class="text-primary-600 hover:text-primary-700 dark:text-primary-400" @click="continueFrom(record)">从这里继续</button>
+              <button type="button" class="text-primary-600 hover:text-primary-700 dark:text-primary-400" @click="regenerateRecord(record)">重新生成</button>
+              <RouterLink v-if="record.images.length" :to="`/image-generation/editor/${record.id}/0`" class="text-primary-600 hover:text-primary-700 dark:text-primary-400">编辑图片</RouterLink>
+            </div>
+          </div>
+          <div v-if="branchSiblings(record).length > 1" class="flex justify-end gap-2 text-xs text-gray-500">
+            <button class="rounded-md border border-gray-200 px-2 py-1 dark:border-dark-700" @click="switchBranch(record, -1)">上一分支</button>
+            <span class="py-1">{{ branchPosition(record) }} / {{ branchSiblings(record).length }}</span>
+            <button class="rounded-md border border-gray-200 px-2 py-1 dark:border-dark-700" @click="switchBranch(record, 1)">下一分支</button>
           </div>
         </article>
 
         <article v-if="generating" class="space-y-3">
           <div class="ml-auto max-w-2xl space-y-3 rounded-lg bg-primary-600 p-3 text-sm leading-6 text-white">
-            <button
-              v-if="submittedReferencePreviewURL && submittedReferenceImage"
-              type="button"
-              class="block w-full max-w-sm overflow-hidden rounded-md bg-black/10 text-left"
-              @click="openSubmittedReferencePreview"
-            >
-              <img :src="submittedReferencePreviewURL" :alt="t('imageGeneration.create.referenceImage', { name: submittedReferenceImage.name })" class="max-h-64 w-full object-contain" />
-              <span class="block truncate px-2.5 py-1.5 text-xs text-white/80">{{ submittedReferenceImage.name }}</span>
-            </button>
+            <div v-if="submittedReferences.length" class="grid max-w-xl gap-2 sm:grid-cols-2">
+              <button v-for="(reference, index) in submittedReferences" :key="reference.id" type="button" class="overflow-hidden rounded-md bg-black/10 text-left" @click="openSubmittedReferencePreview(index)">
+                <img :src="reference.url" :alt="t('imageGeneration.create.referenceImage', { name: reference.file.name })" class="max-h-48 w-full object-contain" />
+                <span class="block truncate px-2.5 py-1.5 text-xs text-white/80">{{ reference.file.name }}</span>
+              </button>
+            </div>
             <p>{{ submittedPrompt }}</p>
           </div>
           <div class="grid min-h-72 place-items-center rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-900">
             <div class="text-center">
-              <LoadingSpinner />
+              <img v-if="partialPreviewURL" :src="partialPreviewURL" alt="生成过程预览" class="mx-auto max-h-80 max-w-full object-contain" />
+              <LoadingSpinner v-else />
               <p class="mt-4 text-sm font-medium text-gray-700 dark:text-gray-200">{{ generationStatus }}</p>
+              <p class="mt-1 text-xs text-gray-400">{{ formatDuration(elapsedMs) }}</p>
               <p v-if="currentTaskId" class="mt-1 font-mono text-xs text-gray-400">{{ currentTaskId }}</p>
             </div>
           </div>
@@ -141,16 +165,17 @@
       </div>
 
       <form class="border-t border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-900 md:p-4" @paste="pasteReference" @submit.prevent="generate">
-        <div v-if="referencePreviewURL" class="mb-3 flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-dark-700 dark:bg-dark-800">
-          <img :src="referencePreviewURL" alt="" class="h-14 w-14 rounded-md object-cover" />
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{{ referenceImage?.name }}</p>
-            <p class="text-xs text-gray-500">{{ t('imageGeneration.create.referenceAttached') }}</p>
+        <div v-if="referenceDrafts.length" class="mb-3 grid gap-2 sm:grid-cols-2">
+          <div v-for="(reference, index) in referenceDrafts" :key="reference.id" class="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-dark-700 dark:bg-dark-800">
+            <img :src="reference.url" alt="" class="h-14 w-14 rounded-md object-cover" />
+            <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium text-gray-800 dark:text-gray-200">{{ reference.file.name }}</p><p class="text-xs text-gray-500">参考图 {{ index + 1 }} / {{ modelCapabilities.maxReferenceImages }}</p></div>
+            <button type="button" class="rounded-lg p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-dark-700" :title="t('common.remove')" @click="removeReference(index)"><Icon name="x" size="sm" /></button>
           </div>
-          <button type="button" class="rounded-lg p-2 text-gray-500 hover:bg-gray-200 dark:hover:bg-dark-700" :title="t('common.remove')" @click="clearReference">
-            <Icon name="x" size="sm" />
-          </button>
         </div>
+        <p v-if="maskDraft" class="mb-3 flex items-center gap-2 text-xs text-primary-700 dark:text-primary-300">
+          <Icon name="checkCircle" size="xs" />扩图遮罩已就绪
+        </p>
+        <p v-if="continuationParent" class="mb-2 flex items-center justify-between rounded-lg bg-primary-50 px-3 py-2 text-xs text-primary-700 dark:bg-primary-900/20 dark:text-primary-300"><span>下一次生成将从“{{ continuationParent.prompt }}”继续</span><button type="button" @click="continuationParentId = ''">取消</button></p>
         <TextArea
           v-model="prompt"
           :rows="3"
@@ -163,7 +188,7 @@
           <label class="btn btn-secondary btn-sm cursor-pointer" :class="generating ? 'pointer-events-none opacity-60' : ''">
             <Icon name="upload" size="sm" class="mr-1.5" />
             {{ t('imageGeneration.create.addReference') }}
-            <input type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" :disabled="generating" @change="selectReference" />
+            <input type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" multiple :disabled="generating || modelCapabilities.maxReferenceImages === 0" @change="selectReference" />
           </label>
           <button v-if="generating" type="button" data-testid="stop-generation" class="btn btn-secondary min-w-28" @click="cancelGeneration">
             <Icon name="x" size="sm" class="mr-2" />
@@ -192,16 +217,32 @@
           <p v-if="loadingModels" class="input-hint mt-1.5">{{ t('imageGeneration.form.loadingModels') }}</p>
         </div>
         <div>
-          <label class="input-label mb-1.5 block">{{ t('imageGeneration.form.size') }}</label>
-          <Select v-model="size" :options="sizeOptions" :disabled="generating" />
+          <div class="mb-1.5 flex items-center justify-between gap-2">
+            <label class="input-label">{{ t('imageGeneration.form.template') }}</label>
+            <RouterLink to="/image-generation/templates" class="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400">
+              {{ t('imageGeneration.form.manageTemplates') }}
+            </RouterLink>
+          </div>
+          <Select v-model="selectedTemplateId" :options="templateOptions" :disabled="generating" />
+          <p v-if="currentTemplate?.description" class="input-hint mt-1.5">{{ currentTemplate.description }}</p>
         </div>
-        <div>
-          <label class="input-label mb-1.5 block">{{ t('imageGeneration.form.quality') }}</label>
-          <Select v-model="quality" :options="qualityOptions" :disabled="generating" />
-        </div>
-        <div>
-          <label class="input-label mb-1.5 block">{{ t('imageGeneration.form.count') }}</label>
-          <Select v-model="outputCount" :options="countOptions" :disabled="generating" />
+        <div v-for="definition in visibleParameterDefinitions" :key="definition.key">
+          <label class="input-label mb-1.5 block">{{ definition.label }}</label>
+          <div v-if="definition.type === 'select' && definition.customSize" class="space-y-2">
+            <Select :model-value="parameterSelectValue(definition)" :options="parameterOptions(definition)" :disabled="generating" @update:model-value="setSelectParameterValue(definition, $event)" />
+            <div v-if="parameterSelectValue(definition) === CUSTOM_SIZE_OPTION" class="grid grid-cols-2 gap-2">
+              <label class="input-hint">宽度
+                <input :value="customSizeDimension(definition.key, 0)" type="number" class="input mt-1 w-full" :step="definition.customSize.edgeMultiple" :max="definition.customSize.maxEdge" :disabled="generating" @input="setCustomSizeDimension(definition.key, 0, Number(($event.target as HTMLInputElement).value))" />
+              </label>
+              <label class="input-hint">高度
+                <input :value="customSizeDimension(definition.key, 1)" type="number" class="input mt-1 w-full" :step="definition.customSize.edgeMultiple" :max="definition.customSize.maxEdge" :disabled="generating" @input="setCustomSizeDimension(definition.key, 1, Number(($event.target as HTMLInputElement).value))" />
+              </label>
+              <p v-if="customSizeError(definition)" class="col-span-2 text-xs text-red-600 dark:text-red-400">{{ customSizeError(definition) }}</p>
+              <p v-else class="col-span-2 text-xs text-gray-500">宽高需为 {{ definition.customSize.edgeMultiple }} 的倍数，单边不超过 {{ definition.customSize.maxEdge }} 像素。</p>
+            </div>
+          </div>
+          <Select v-else-if="definition.type === 'select'" :model-value="parameterValue(definition.key)" :options="definition.options || []" :disabled="generating" @update:model-value="setParameterValue(definition.key, $event)" />
+          <input v-else-if="definition.type === 'number'" :value="parameterValue(definition.key)" type="number" class="input w-full" :min="definition.min" :max="definition.max" :step="definition.step" :disabled="generating" @input="setParameterValue(definition.key, Number(($event.target as HTMLInputElement).value))" />
         </div>
         <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs leading-5 text-gray-500 dark:border-dark-700 dark:bg-dark-800 dark:text-gray-400">
           {{ t('imageGeneration.form.billingHint') }}
@@ -232,7 +273,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { keysAPI } from '@/api'
 import type { ApiKey } from '@/types'
@@ -242,36 +283,57 @@ import Select from '@/components/common/Select.vue'
 import TextArea from '@/components/common/TextArea.vue'
 import { useAppStore } from '@/stores'
 import {
+  cancelImageGenerationTask,
   getImageGenerationTask,
   imageResultURLs,
   isLikelyImageModel,
   listImageGenerationModels,
   submitImageGeneration,
+  streamImageGeneration,
 } from './api'
 import {
   cacheGeneratedImages,
   createImageSession,
   deleteImageHistory,
+  deleteImageSessionDraft,
   displayImageURL,
   listImageHistory,
   loadImageSessions,
+  loadImageSessionDraft,
   saveImageHistory,
+  saveImageSessionDraft,
   saveImageSessions,
 } from './history'
-import type { ImageGenerationHistoryRecord, ImageGenerationResult, ImageGenerationSession } from './types'
+import type {
+  ImageGenerationHistoryRecord,
+  ImageGenerationParameterValue,
+  ImageGenerationReferenceImage,
+  ImageGenerationResult,
+  ImageGenerationSession,
+  ImagePromptTemplate,
+} from './types'
 import {
-  imageSizeValues,
   loadImageGenerationPreferences,
   parameterPreferenceKey,
   saveImageGenerationPreferences,
 } from './preferences'
+import {
+  defaultImageParameters,
+  imageModelCapabilities,
+  normalizeImageParameters,
+  validateCustomImageSize,
+  type ImageParameterDefinition,
+} from './modelCapabilities'
+import { loadImagePromptTemplates } from './templates'
 
 const SELECTED_KEY_STORAGE = 'image-generation-selected-key'
 const ACTIVE_SESSION_STORAGE = 'image-generation-active-session'
+const BRANCH_STORAGE = 'image-generation-branch-selections-v1'
 const POLL_INTERVAL_MS = 2200
 const MAX_POLL_ATTEMPTS = 820
-const QUALITY_VALUES = ['auto', 'low', 'medium', 'high']
-const COUNT_VALUES = [1, 2, 3, 4]
+const CUSTOM_SIZE_OPTION = '__custom_size__'
+const QUALITY_VALUES = ['auto', 'low', 'medium', 'high', 'standard', 'hd']
+const COUNT_VALUES = Array.from({ length: 10 }, (_, index) => index + 1)
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -281,29 +343,38 @@ const selectedKeyId = ref<number | null>(null)
 const models = ref<Array<{ id: string }>>([])
 const model = ref('')
 const prompt = ref('')
-const size = ref('1024x1024')
-const quality = ref('auto')
-const outputCount = ref(1)
+const promptTemplates = ref<ImagePromptTemplate[]>([])
+const selectedTemplateId = ref('')
+const parameterValues = reactive<Record<string, ImageGenerationParameterValue>>({})
+const size = computed({ get: () => String(parameterValues.size || '1024x1024'), set: value => { parameterValues.size = value } })
+const quality = computed({ get: () => String(parameterValues.quality || 'auto'), set: value => { parameterValues.quality = value } })
+const outputCount = computed({ get: () => Number(parameterValues.n || 1), set: value => { parameterValues.n = value } })
 const loadingKeys = ref(false)
 const loadingModels = ref(false)
 const generating = ref(false)
 const currentTaskId = ref('')
 const submittedPrompt = ref('')
 const generationStatus = ref('')
-const referenceImage = ref<File | null>(null)
-const referencePreviewURL = ref('')
-const submittedReferenceImage = ref<File | null>(null)
-const submittedReferencePreviewURL = ref('')
+interface ReferenceDraft { id: string; file: File; url: string; sourceRecordId?: string }
+const referenceDrafts = ref<ReferenceDraft[]>([])
+const maskDraft = ref<ImageGenerationReferenceImage | null>(null)
+const submittedReferences = ref<ReferenceDraft[]>([])
+const partialPreviewURL = ref('')
+const elapsedMs = ref(0)
 const sessions = ref<ImageGenerationSession[]>([])
 const activeSessionId = ref('')
 const sessionSearch = ref('')
 const editingSessionId = ref('')
 const sessionTitleDraft = ref('')
 const history = ref<ImageGenerationHistoryRecord[]>([])
+const continuationParentId = ref('')
+const branchSelections = reactive<Record<string, string>>(loadBranchSelections())
 const objectURLs = new Map<string, string>()
 const preview = ref<{ url: string; prompt: string } | null>(null)
 const generationPreferences = loadImageGenerationPreferences()
 let pollController: AbortController | null = null
+let elapsedTimer: number | null = null
+let draftTimer: number | null = null
 let pendingDraftSettings: { model: string; size: string; quality: string; outputCount: number | null } | null = null
 
 const imageKeysForGeneration = (keys: ApiKey[]) => keys.filter((key) =>
@@ -312,30 +383,35 @@ const imageKeysForGeneration = (keys: ApiKey[]) => keys.filter((key) =>
   (key.group.platform === 'openai' || key.group.platform === 'grok'))
 
 const selectedKey = computed(() => imageKeys.value.find((key) => key.id === selectedKeyId.value) || null)
-const activeRecords = computed(() => history.value.filter((record) => record.sessionId === activeSessionId.value).sort((a, b) => a.createdAt - b.createdAt))
+const sessionRecords = computed(() => history.value.filter(record => record.sessionId === activeSessionId.value).sort((a, b) => a.createdAt - b.createdAt))
+const activeRecords = computed(() => visibleBranch(sessionRecords.value))
+const continuationParent = computed(() => sessionRecords.value.find(record => record.id === continuationParentId.value) || null)
+const modelCapabilities = computed(() => imageModelCapabilities(model.value))
+const visibleParameterDefinitions = computed(() => modelCapabilities.value.parameters.filter(definition =>
+  (!definition.editOnly || referenceDrafts.value.length > 0)
+  && (!definition.visibleWhen || definition.visibleWhen.values.includes(parameterValues[definition.visibleWhen.key])),
+))
 const filteredSessions = computed(() => {
   const query = sessionSearch.value.trim().toLocaleLowerCase()
   return query
     ? sessions.value.filter((session) => session.title.toLocaleLowerCase().includes(query))
     : sessions.value
 })
-const canGenerate = computed(() => !generating.value && !!selectedKey.value && !!model.value.trim() && !!prompt.value.trim())
+const activeCustomSizeError = computed(() => {
+  const definition = modelCapabilities.value.parameters.find(item => item.key === 'size' && item.customSize)
+  return definition ? customSizeError(definition) : ''
+})
+const canGenerate = computed(() => !generating.value && !activeCustomSizeError.value && !!selectedKey.value && !!model.value.trim() && !!prompt.value.trim())
 const keyOptions = computed(() => imageKeys.value.map((key) => ({
   value: key.id,
   label: `${key.name} · ${key.group?.name || t('keys.noGroup')}`,
 })))
 const modelOptions = computed(() => models.value.map((item) => ({ value: item.id, label: item.id })))
-const sizeOptions = computed(() => imageSizeValues(model.value).map((value) => ({
-  value,
-  label: imageSizeLabel(value),
-})))
-const qualityOptions = computed(() => [
-  { value: 'auto', label: t('imageGeneration.options.auto') },
-  { value: 'low', label: t('imageGeneration.options.low') },
-  { value: 'medium', label: t('imageGeneration.options.medium') },
-  { value: 'high', label: t('imageGeneration.options.high') },
+const templateOptions = computed(() => [
+  { value: '', label: t('imageGeneration.form.noTemplate') },
+  ...promptTemplates.value.map(item => ({ value: item.id, label: item.title })),
 ])
-const countOptions = COUNT_VALUES.map((value) => ({ value, label: String(value) }))
+const currentTemplate = computed(() => promptTemplates.value.find(item => item.id === selectedTemplateId.value) || null)
 
 async function loadKeys() {
   loadingKeys.value = true
@@ -374,13 +450,14 @@ async function loadModels() {
 }
 
 async function loadLocalState() {
-  sessions.value = loadImageSessions().sort((a, b) => b.updatedAt - a.updatedAt)
+  sessions.value = loadImageSessions().sort((a, b) => (b.sortOrder || b.updatedAt) - (a.sortOrder || a.updatedAt))
   if (sessions.value.length === 0) sessions.value = [createImageSession(t('imageGeneration.sessions.defaultTitle'))]
   const storedSessionId = localStorage.getItem(ACTIVE_SESSION_STORAGE)
   activeSessionId.value = sessions.value.some((session) => session.id === storedSessionId)
     ? storedSessionId || sessions.value[0].id
     : sessions.value[0].id
   history.value = await listImageHistory()
+	await migrateLocalBranches()
 }
 
 function newSession() {
@@ -389,7 +466,19 @@ function newSession() {
   activeSessionId.value = session.id
   saveImageSessions(sessions.value)
   prompt.value = ''
-  clearReference()
+	clearReferences()
+	continuationParentId.value = ''
+}
+
+function moveSession(session: ImageGenerationSession, direction: -1 | 1) {
+  const index = sessions.value.findIndex(item => item.id === session.id)
+  const target = index + direction
+  if (index < 0 || target < 0 || target >= sessions.value.length) return
+  const next = [...sessions.value]
+  ;[next[index], next[target]] = [next[target], next[index]]
+  next.forEach((item, itemIndex) => { item.sortOrder = next.length - itemIndex })
+  sessions.value = next
+  saveImageSessions(next)
 }
 
 function beginSessionTitleEdit(session: ImageGenerationSession) {
@@ -416,6 +505,7 @@ async function deleteSession(session: ImageGenerationSession) {
   try {
     const deletedRecords = history.value.filter((record) => record.sessionId === session.id)
     await Promise.all(deletedRecords.map((record) => deleteImageHistory(record.id)))
+		await deleteImageSessionDraft(session.id)
     deletedRecords.forEach(revokeRecordURLs)
     history.value = history.value.filter((record) => record.sessionId !== session.id)
     sessions.value = sessions.value.filter((item) => item.id !== session.id)
@@ -432,7 +522,6 @@ function updateActiveSessionTitle(value: string) {
   if (!session) return
   if (isDefaultSessionTitle(session.title)) session.title = titleFromPrompt(value) || session.title
   session.updatedAt = Date.now()
-  sessions.value = [...sessions.value].sort((a, b) => b.updatedAt - a.updatedAt)
   saveImageSessions(sessions.value)
 }
 
@@ -448,28 +537,22 @@ function titleFromPrompt(value: string) {
   return characters.length > 30 ? `${characters.slice(0, 30).join('')}…` : normalized
 }
 
-function imageSizeLabel(value: string) {
-  if (value === 'auto') return t('imageGeneration.options.auto')
-  const label = value.replace('x', ' × ')
-  return value === '3840x2160' || value === '2160x3840' ? `${label} · 4K` : label
-}
-
 function applyRememberedModelSettings(modelId: string) {
   if (!selectedKey.value || !modelId) return
+	Object.assign(parameterValues, defaultImageParameters(modelId))
   const remembered = generationPreferences.parametersByKeyModel[
     parameterPreferenceKey(selectedKey.value.id, modelId)
   ]
-  const allowedSizes = imageSizeValues(modelId)
-  size.value = remembered && allowedSizes.includes(remembered.size)
-    ? remembered.size
-    : allowedSizes.includes(size.value) ? size.value : '1024x1024'
+	if (remembered?.values) Object.assign(parameterValues, remembered.values)
+	size.value = remembered && acceptsSize(remembered.size) ? remembered.size : acceptsSize(size.value) ? size.value : String(parameterValues.size || '1024x1024')
   if (remembered && QUALITY_VALUES.includes(remembered.quality)) quality.value = remembered.quality
   if (remembered && COUNT_VALUES.includes(remembered.outputCount)) outputCount.value = remembered.outputCount
+	trimReferenceDrafts()
 }
 
 function applyPendingDraftSettings() {
   if (!pendingDraftSettings) return
-  if (imageSizeValues(model.value).includes(pendingDraftSettings.size)) size.value = pendingDraftSettings.size
+	if (acceptsSize(pendingDraftSettings.size)) size.value = pendingDraftSettings.size
   if (QUALITY_VALUES.includes(pendingDraftSettings.quality)) quality.value = pendingDraftSettings.quality
   if (pendingDraftSettings.outputCount && COUNT_VALUES.includes(pendingDraftSettings.outputCount)) {
     outputCount.value = pendingDraftSettings.outputCount
@@ -483,6 +566,7 @@ function saveCurrentModelSettings() {
     size: size.value,
     quality: quality.value,
     outputCount: outputCount.value,
+		values: { ...parameterValues },
   }
   saveImageGenerationPreferences(generationPreferences)
 }
@@ -490,40 +574,73 @@ function saveCurrentModelSettings() {
 async function generate() {
   if (!canGenerate.value || !selectedKey.value) return
   const currentPrompt = prompt.value.trim()
-  const currentReference = referenceImage.value
-  const currentReferencePreviewURL = referencePreviewURL.value
   const sessionId = activeSessionId.value
   const key = selectedKey.value
+  const parentId = continuationParentId.value || activeRecords.value.at(-1)?.id || ''
+  const currentReferences = [...referenceDrafts.value]
+  const currentMask = maskDraft.value
+  const parentRecord = sessionRecords.value.find(record => record.id === parentId)
+  if (
+    parentRecord?.images[0]
+    && currentReferences.length < modelCapabilities.value.maxReferenceImages
+    && !currentReferences.some(reference => reference.sourceRecordId === parentRecord.id)
+  ) {
+    try {
+      currentReferences.unshift(await referenceDraftFromRecord(parentRecord))
+    } catch {
+      // Text context is still sufficient when an expired remote image cannot be restored.
+    }
+  }
+  const requestPrompt = buildGenerationPrompt(currentPrompt, parentId, currentTemplate.value?.prompt)
+  const requestParameters = normalizeImageParameters(model.value, { ...parameterValues }, currentReferences.length > 0)
   const controller = new AbortController()
+  const startedAt = Date.now()
   generating.value = true
   submittedPrompt.value = currentPrompt
-  submittedReferenceImage.value = currentReference
-  submittedReferencePreviewURL.value = currentReferencePreviewURL
+  submittedReferences.value = currentReferences
   prompt.value = ''
-  referenceImage.value = null
-  referencePreviewURL.value = ''
+  referenceDrafts.value = []
+  maskDraft.value = null
+  continuationParentId.value = ''
+  partialPreviewURL.value = ''
   generationStatus.value = t('imageGeneration.create.submitting')
   currentTaskId.value = ''
   pollController = controller
+  startElapsedTimer(startedAt)
   updateActiveSessionTitle(currentPrompt)
   try {
-    const submission = await submitImageGeneration(key.key, {
+    const request = {
       model: model.value,
-      prompt: currentPrompt,
+      prompt: requestPrompt,
       size: size.value,
       quality: quality.value,
       n: outputCount.value,
-      referenceImage: currentReference,
-    }, controller.signal)
+      referenceImages: currentReferences.map(item => item.file),
+      mask: currentMask ? referenceToFile(currentMask) : undefined,
+      parameters: requestParameters,
+    }
     let result: ImageGenerationResult | undefined
-    if (submission.mode === 'async') {
-      currentTaskId.value = submission.task.id || submission.task.task_id || ''
-      if (!currentTaskId.value) throw new Error(t('imageGeneration.messages.invalidTask'))
-      generationStatus.value = t('imageGeneration.create.processing')
-      const completed = await pollTask(key.key, currentTaskId.value, controller.signal)
-      result = completed.result
+    if (modelCapabilities.value.supportsStreaming) {
+      generationStatus.value = '模型正在生成图片'
+      result = await streamImageGeneration(key.key, request, event => {
+        if (event.type.endsWith('.partial_image') && event.url) {
+          partialPreviewURL.value = event.url
+          generationStatus.value = '模型正在细化图片'
+        } else if (event.type.endsWith('.completed')) {
+          generationStatus.value = '正在保存最终图片'
+        }
+      }, controller.signal)
     } else {
-      result = submission.result
+      const submission = await submitImageGeneration(key.key, request, controller.signal)
+      if (submission.mode === 'async') {
+        currentTaskId.value = submission.task.id || submission.task.task_id || ''
+        if (!currentTaskId.value) throw new Error(t('imageGeneration.messages.invalidTask'))
+        generationStatus.value = t('imageGeneration.create.processing')
+        const completed = await pollTask(key.key, currentTaskId.value, controller.signal)
+        result = completed.result
+      } else {
+        result = submission.result
+      }
     }
     const urls = imageResultURLs(result)
     if (urls.length === 0) throw new Error(t('imageGeneration.messages.noImage'))
@@ -537,42 +654,68 @@ async function generate() {
       size: size.value,
       quality: quality.value,
       outputCount: outputCount.value,
+      parameters: requestParameters,
       apiKeyId: key.id,
       apiKeyName: key.name,
-      createdAt: now,
-      referenceImage: currentReference ? {
-        name: currentReference.name,
-        mimeType: currentReference.type,
-        blob: currentReference,
-      } : undefined,
-      images: await cacheGeneratedImages(urls),
+      createdAt: startedAt,
+      completedAt: now,
+      durationMs: now - startedAt,
+      status: 'completed',
+      parentId: parentId || undefined,
+      templateId: currentTemplate.value?.id,
+      templateTitle: currentTemplate.value?.title,
+      templatePrompt: currentTemplate.value?.prompt,
+      referenceImages: currentReferences.map(referenceToHistory),
+      maskImage: currentMask || undefined,
+      images: await cacheGeneratedImages(urls, result?.data?.map(item => item.revised_prompt)),
     }
     await saveImageHistory(record)
     history.value = [record, ...history.value]
+    selectRecordBranch(record)
+    await deleteImageSessionDraft(sessionId)
     appStore.showSuccess(t('imageGeneration.messages.generated'))
   } catch (error) {
-    if (!prompt.value.trim()) prompt.value = currentPrompt
-    if (currentReference && !referenceImage.value) {
-      referenceImage.value = currentReference
-      referencePreviewURL.value = currentReferencePreviewURL || URL.createObjectURL(currentReference)
-      submittedReferencePreviewURL.value = ''
+    const cancelled = isAbortError(error)
+    const now = Date.now()
+    const record: ImageGenerationHistoryRecord = {
+      id: crypto.randomUUID(), sessionId, taskId: currentTaskId.value, prompt: currentPrompt,
+      model: model.value, size: size.value, quality: quality.value, outputCount: outputCount.value,
+      parameters: requestParameters, apiKeyId: key.id, apiKeyName: key.name, createdAt: startedAt,
+      completedAt: now, durationMs: now - startedAt, status: cancelled ? 'cancelled' : 'failed',
+      error: cancelled ? '用户停止了生成' : errorMessage(error, t('imageGeneration.messages.generateFailed')),
+      parentId: parentId || undefined, templateId: currentTemplate.value?.id,
+      templateTitle: currentTemplate.value?.title, templatePrompt: currentTemplate.value?.prompt,
+      referenceImages: currentReferences.map(referenceToHistory), maskImage: currentMask || undefined, images: [],
     }
-    if (!isAbortError(error)) {
+    await saveImageHistory(record)
+    history.value = [record, ...history.value]
+    selectRecordBranch(record)
+    if (!prompt.value.trim()) prompt.value = currentPrompt
+    referenceDrafts.value = currentReferences
+    maskDraft.value = currentMask
+    submittedReferences.value = []
+    if (!cancelled) {
       appStore.showError(errorMessage(error, t('imageGeneration.messages.generateFailed')))
     }
   } finally {
-    if (preview.value?.url === submittedReferencePreviewURL.value) preview.value = null
-    if (submittedReferencePreviewURL.value) URL.revokeObjectURL(submittedReferencePreviewURL.value)
+    stopElapsedTimer()
+    submittedReferences.value.forEach((reference) => {
+      if (!referenceDrafts.value.some(draft => draft.id === reference.id)) URL.revokeObjectURL(reference.url)
+    })
     generating.value = false
     currentTaskId.value = ''
     pollController = null
-    submittedReferenceImage.value = null
-    submittedReferencePreviewURL.value = ''
+    submittedReferences.value = []
+    partialPreviewURL.value = ''
     await scrollToBottom()
   }
 }
 
-function cancelGeneration() {
+async function cancelGeneration() {
+  if (currentTaskId.value && selectedKey.value) {
+    generationStatus.value = '正在取消任务'
+    await cancelImageGenerationTask(selectedKey.value.key, currentTaskId.value).catch(() => undefined)
+  }
   pollController?.abort()
 }
 
@@ -588,6 +731,7 @@ async function pollTask(apiKey: string, taskId: string, signal: AbortSignal) {
     const task = await getImageGenerationTask(apiKey, taskId, signal)
     if (task.status === 'completed') return task
     if (task.status === 'failed') throw new Error(task.error?.message || t('imageGeneration.messages.generateFailed'))
+    if (task.status === 'cancelled') throw new DOMException('Aborted', 'AbortError')
     await new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(resolve, POLL_INTERVAL_MS)
       signal.addEventListener('abort', () => {
@@ -601,37 +745,57 @@ async function pollTask(apiKey: string, taskId: string, signal: AbortSignal) {
 
 function selectReference(event: Event) {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
+  const files = Array.from(input.files || [])
   input.value = ''
-  if (!file) return
-  attachReference(file)
+  attachReferences(files)
 }
 
 function pasteReference(event: ClipboardEvent) {
   if (generating.value || !event.clipboardData) return
-  const file = Array.from(event.clipboardData.files).find((item) => item.type.startsWith('image/'))
-    || Array.from(event.clipboardData.items)
-      .find((item) => item.kind === 'file' && item.type.startsWith('image/'))
-      ?.getAsFile()
-  if (!file) return
+  const files = Array.from(event.clipboardData.files).filter(item => item.type.startsWith('image/'))
+  if (files.length === 0) {
+    for (const item of Array.from(event.clipboardData.items)) {
+      if (item.kind === 'file' && item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) files.push(file)
+      }
+    }
+  }
+  if (files.length === 0) return
   event.preventDefault()
-  attachReference(file)
+  attachReferences(files)
 }
 
-function attachReference(file: File) {
-  if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024) {
-    appStore.showError(t('imageGeneration.messages.invalidReference'))
+function attachReferences(files: File[]) {
+  if (modelCapabilities.value.maxReferenceImages <= 0) {
+    appStore.showError('当前模型不支持参考图')
     return
   }
-  clearReference()
-  referenceImage.value = file.name ? file : new File([file], 'clipboard-image', { type: file.type, lastModified: file.lastModified })
-  referencePreviewURL.value = URL.createObjectURL(referenceImage.value)
+  const slots = modelCapabilities.value.maxReferenceImages - referenceDrafts.value.length
+  for (const file of files.slice(0, Math.max(0, slots))) {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 20 * 1024 * 1024) {
+      appStore.showError(t('imageGeneration.messages.invalidReference'))
+      continue
+    }
+    const normalized = file.name ? file : new File([file], `clipboard-image-${Date.now()}.png`, { type: file.type, lastModified: file.lastModified })
+    referenceDrafts.value.push({ id: crypto.randomUUID(), file: normalized, url: URL.createObjectURL(normalized) })
+  }
+  if (files.length > slots) appStore.showError(`当前模型最多支持 ${modelCapabilities.value.maxReferenceImages} 张参考图`)
+  scheduleDraftSave()
 }
 
-function clearReference() {
-  if (referencePreviewURL.value) URL.revokeObjectURL(referencePreviewURL.value)
-  referencePreviewURL.value = ''
-  referenceImage.value = null
+function removeReference(index: number) {
+  const reference = referenceDrafts.value[index]
+  if (reference) URL.revokeObjectURL(reference.url)
+  referenceDrafts.value.splice(index, 1)
+  if (index === 0) maskDraft.value = null
+  scheduleDraftSave()
+}
+
+function clearReferences() {
+  referenceDrafts.value.forEach(reference => URL.revokeObjectURL(reference.url))
+  referenceDrafts.value = []
+  maskDraft.value = null
 }
 
 function displayURL(record: ImageGenerationHistoryRecord, index: number) {
@@ -642,10 +806,16 @@ function displayURL(record: ImageGenerationHistoryRecord, index: number) {
   return objectURLs.get(key) || image.url
 }
 
-function displayReferenceURL(record: ImageGenerationHistoryRecord) {
-  if (!record.referenceImage) return ''
-  const key = `${record.id}:reference`
-  if (!objectURLs.has(key)) objectURLs.set(key, URL.createObjectURL(record.referenceImage.blob))
+function recordReferenceImages(record: ImageGenerationHistoryRecord): ImageGenerationReferenceImage[] {
+  if (record.referenceImages?.length) return record.referenceImages
+  return record.referenceImage ? [{ id: `${record.id}:legacy`, ...record.referenceImage }] : []
+}
+
+function displayReferenceURL(record: ImageGenerationHistoryRecord, index: number) {
+  const reference = recordReferenceImages(record)[index]
+  if (!reference) return ''
+  const key = `${record.id}:reference:${index}`
+  if (!objectURLs.has(key)) objectURLs.set(key, URL.createObjectURL(reference.blob))
   return objectURLs.get(key) || ''
 }
 
@@ -653,19 +823,21 @@ function openPreview(record: ImageGenerationHistoryRecord, index: number) {
   preview.value = { url: displayURL(record, index), prompt: record.prompt }
 }
 
-function openReferencePreview(record: ImageGenerationHistoryRecord) {
-  if (!record.referenceImage) return
+function openReferencePreview(record: ImageGenerationHistoryRecord, index: number) {
+  const reference = recordReferenceImages(record)[index]
+  if (!reference) return
   preview.value = {
-    url: displayReferenceURL(record),
-    prompt: t('imageGeneration.create.referenceImage', { name: record.referenceImage.name }),
+    url: displayReferenceURL(record, index),
+    prompt: t('imageGeneration.create.referenceImage', { name: reference.name }),
   }
 }
 
-function openSubmittedReferencePreview() {
-  if (!submittedReferenceImage.value || !submittedReferencePreviewURL.value) return
+function openSubmittedReferencePreview(index: number) {
+  const reference = submittedReferences.value[index]
+  if (!reference) return
   preview.value = {
-    url: submittedReferencePreviewURL.value,
-    prompt: t('imageGeneration.create.referenceImage', { name: submittedReferenceImage.value.name }),
+    url: reference.url,
+    prompt: t('imageGeneration.create.referenceImage', { name: reference.file.name }),
   }
 }
 
@@ -677,12 +849,273 @@ function revokeRecordURLs(record: ImageGenerationHistoryRecord) {
   }
 }
 
-function reuseRecord(record: ImageGenerationHistoryRecord) {
+function restoreRecord(record: ImageGenerationHistoryRecord) {
   prompt.value = record.prompt
   model.value = record.model
-  size.value = record.size
-  quality.value = record.quality
-  outputCount.value = record.outputCount
+  selectedTemplateId.value = record.templateId && promptTemplates.value.some(item => item.id === record.templateId)
+    ? record.templateId
+    : ''
+  Object.assign(parameterValues, record.parameters || { size: record.size, quality: record.quality, n: record.outputCount })
+  clearReferences()
+  referenceDrafts.value = recordReferenceImages(record).map(reference => ({
+    id: crypto.randomUUID(),
+    file: new File([reference.blob], reference.name, { type: reference.mimeType }),
+    url: URL.createObjectURL(reference.blob),
+		sourceRecordId: reference.sourceRecordId,
+  }))
+  maskDraft.value = record.maskImage || null
+  scheduleDraftSave()
+}
+
+async function continueFrom(record: ImageGenerationHistoryRecord) {
+  model.value = record.model
+  Object.assign(parameterValues, record.parameters || { size: record.size, quality: record.quality, n: record.outputCount })
+  selectedTemplateId.value = record.templateId && promptTemplates.value.some(item => item.id === record.templateId)
+    ? record.templateId
+    : ''
+  clearReferences()
+  prompt.value = ''
+  continuationParentId.value = record.id
+  const image = record.images[0]
+  if (image && modelCapabilities.value.maxReferenceImages > 0) {
+    try {
+      referenceDrafts.value = [await referenceDraftFromRecord(record)]
+    } catch (error) {
+      appStore.showError(errorMessage(error, t('imageGeneration.messages.contextImageLoadFailed')))
+    }
+  }
+  scheduleDraftSave()
+}
+
+async function regenerateRecord(record: ImageGenerationHistoryRecord) {
+  restoreRecord(record)
+  continuationParentId.value = record.parentId || ''
+  await nextTick()
+  await generate()
+}
+
+function parameterValue(key: string) {
+  return parameterValues[key]
+}
+
+function setParameterValue(key: string, value: unknown) {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    parameterValues[key] = value
+  }
+}
+
+function parameterOptions(definition: ImageParameterDefinition) {
+  return [...(definition.options || []), { value: CUSTOM_SIZE_OPTION, label: '自定义尺寸' }]
+}
+
+function parameterSelectValue(definition: ImageParameterDefinition) {
+  const value = String(parameterValue(definition.key) || '')
+  return definition.options?.some(option => String(option.value) === value) ? value : CUSTOM_SIZE_OPTION
+}
+
+function setSelectParameterValue(definition: ImageParameterDefinition, value: unknown) {
+  if (value === CUSTOM_SIZE_OPTION) {
+    setParameterValue(definition.key, '1280x1024')
+    return
+  }
+  setParameterValue(definition.key, value)
+}
+
+function customSizeDimension(key: string, index: 0 | 1) {
+  return Number(String(parameterValue(key) || '').split('x')[index]) || 0
+}
+
+function setCustomSizeDimension(key: string, index: 0 | 1, value: number) {
+  const dimensions: [number, number] = [customSizeDimension(key, 0), customSizeDimension(key, 1)]
+  dimensions[index] = Math.max(0, Math.floor(value || 0))
+  setParameterValue(key, `${dimensions[0]}x${dimensions[1]}`)
+}
+
+function customSizeError(definition: ImageParameterDefinition) {
+  if (!definition.customSize || parameterSelectValue(definition) !== CUSTOM_SIZE_OPTION) return ''
+  return validateCustomImageSize(String(parameterValue(definition.key) || ''), definition.customSize)
+}
+
+function acceptsSize(value: string) {
+  const definition = modelCapabilities.value.parameters.find(item => item.key === 'size')
+  if (!definition) return false
+  if (definition.options?.some(option => String(option.value) === value)) return true
+  return !!definition.customSize && validateCustomImageSize(value, definition.customSize) === ''
+}
+
+function trimReferenceDrafts() {
+  const limit = modelCapabilities.value.maxReferenceImages
+  if (referenceDrafts.value.length <= limit) return
+  referenceDrafts.value.slice(limit).forEach(reference => URL.revokeObjectURL(reference.url))
+  referenceDrafts.value = referenceDrafts.value.slice(0, limit)
+}
+
+function referenceToHistory(reference: ReferenceDraft): ImageGenerationReferenceImage {
+  return {
+		id: reference.id,
+		name: reference.file.name,
+		mimeType: reference.file.type,
+		blob: reference.file,
+		sourceRecordId: reference.sourceRecordId,
+	}
+}
+
+function referenceToFile(reference: ImageGenerationReferenceImage) {
+  return new File([reference.blob], reference.name, { type: reference.mimeType })
+}
+
+function buildGenerationPrompt(current: string, parentId: string, stylePrompt?: string) {
+  const context: string[] = []
+  let currentParentId = parentId
+  const byId = new Map(sessionRecords.value.map(record => [record.id, record]))
+  while (currentParentId && context.length < 6) {
+    const record = byId.get(currentParentId)
+    if (!record) break
+    context.unshift(record.prompt)
+    currentParentId = record.parentId || ''
+  }
+  let result = context.length
+    ? `Conversation context:\n${context.map(item => `User: ${item}\nAssistant: Image generated.`).join('\n')}\nCurrent request: ${current}`
+    : current
+  if (stylePrompt?.trim()) result += `\nStyle guidance: ${stylePrompt.trim()}`
+  return result
+}
+
+async function fetchImageBlob(url: string) {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
+async function referenceDraftFromRecord(record: ImageGenerationHistoryRecord): Promise<ReferenceDraft> {
+  const image = record.images[0]
+  if (!image) throw new Error('Generated image is unavailable')
+  const blob = image.blob || await fetchImageBlob(image.url)
+  const extension = blob.type.includes('jpeg') ? 'jpg' : blob.type.includes('webp') ? 'webp' : 'png'
+  const file = new File([blob], `continuation-${record.id}.${extension}`, { type: blob.type || image.mimeType || 'image/png' })
+  return { id: crypto.randomUUID(), file, url: URL.createObjectURL(file), sourceRecordId: record.id }
+}
+
+function branchKey(parentId?: string) {
+  return parentId || 'root'
+}
+
+function loadBranchSelections(): Record<string, string> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(BRANCH_STORAGE) || '{}')
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function saveBranchSelections() {
+  localStorage.setItem(BRANCH_STORAGE, JSON.stringify(branchSelections))
+}
+
+function visibleBranch(records: ImageGenerationHistoryRecord[]) {
+  if (records.length <= 1) return records
+  const children = new Map<string, ImageGenerationHistoryRecord[]>()
+  for (const record of records) {
+    const key = branchKey(record.parentId)
+    children.set(key, [...(children.get(key) || []), record])
+  }
+  const result: ImageGenerationHistoryRecord[] = []
+  let parentKey = 'root'
+  const visited = new Set<string>()
+  while (true) {
+    const siblings = (children.get(parentKey) || []).sort((a, b) => a.createdAt - b.createdAt)
+    if (siblings.length === 0) break
+    const selectedId = branchSelections[`${activeSessionId.value}:${parentKey}`]
+    const selected = siblings.find(item => item.id === selectedId) || siblings.at(-1)!
+    if (visited.has(selected.id)) break
+    visited.add(selected.id)
+    result.push(selected)
+    parentKey = selected.id
+  }
+  return result.length ? result : records
+}
+
+function branchSiblings(record: ImageGenerationHistoryRecord) {
+  return sessionRecords.value.filter(item => branchKey(item.parentId) === branchKey(record.parentId)).sort((a, b) => a.createdAt - b.createdAt)
+}
+
+function branchPosition(record: ImageGenerationHistoryRecord) {
+  return branchSiblings(record).findIndex(item => item.id === record.id) + 1
+}
+
+function switchBranch(record: ImageGenerationHistoryRecord, direction: -1 | 1) {
+  const siblings = branchSiblings(record)
+  const current = siblings.findIndex(item => item.id === record.id)
+  const next = siblings[(current + direction + siblings.length) % siblings.length]
+  if (!next) return
+  branchSelections[`${activeSessionId.value}:${branchKey(record.parentId)}`] = next.id
+  saveBranchSelections()
+}
+
+function selectRecordBranch(record: ImageGenerationHistoryRecord) {
+  branchSelections[`${record.sessionId}:${branchKey(record.parentId)}`] = record.id
+  saveBranchSelections()
+}
+
+async function migrateLocalBranches() {
+  for (const session of sessions.value) {
+    const records = history.value.filter(record => record.sessionId === session.id).sort((a, b) => a.createdAt - b.createdAt)
+    if (records.length < 2 || records.some(record => record.parentId)) continue
+    for (let index = 1; index < records.length; index += 1) {
+      records[index].parentId = records[index - 1].id
+      await saveImageHistory(records[index])
+    }
+  }
+}
+
+function startElapsedTimer(startedAt: number) {
+  stopElapsedTimer()
+  elapsedMs.value = 0
+  elapsedTimer = window.setInterval(() => { elapsedMs.value = Date.now() - startedAt }, 250)
+}
+
+function stopElapsedTimer() {
+  if (elapsedTimer !== null) window.clearInterval(elapsedTimer)
+  elapsedTimer = null
+}
+
+function formatDuration(value: number) {
+  const seconds = Math.max(0, Math.floor(value / 1000))
+  const minutes = Math.floor(seconds / 60)
+  return minutes ? `${minutes} 分 ${seconds % 60} 秒` : `${seconds} 秒`
+}
+
+function scheduleDraftSave() {
+  if (draftTimer !== null) window.clearTimeout(draftTimer)
+  draftTimer = window.setTimeout(() => { void persistDraft(activeSessionId.value) }, 300)
+}
+
+async function persistDraft(sessionId: string) {
+  if (!sessionId || generating.value) return
+  await saveImageSessionDraft({
+    sessionId,
+    prompt: prompt.value,
+    referenceImages: referenceDrafts.value.map(referenceToHistory),
+    maskImage: maskDraft.value || undefined,
+    updatedAt: Date.now(),
+  })
+}
+
+async function loadDraft(sessionId: string) {
+  clearReferences()
+  prompt.value = ''
+  continuationParentId.value = ''
+  const draft = await loadImageSessionDraft(sessionId)
+  if (!draft) return
+  prompt.value = draft.prompt
+  referenceDrafts.value = draft.referenceImages.slice(0, modelCapabilities.value.maxReferenceImages).map(reference => ({
+    id: reference.id || crypto.randomUUID(),
+    file: new File([reference.blob], reference.name, { type: reference.mimeType }),
+    url: URL.createObjectURL(reference.blob),
+		sourceRecordId: reference.sourceRecordId,
+  }))
+  maskDraft.value = draft.maskImage || null
 }
 
 async function scrollToBottom() {
@@ -712,19 +1145,22 @@ watch(model, (value) => {
   applyRememberedModelSettings(value)
   saveImageGenerationPreferences(generationPreferences)
 }, { flush: 'sync' })
-watch([size, quality, outputCount], saveCurrentModelSettings)
-watch(activeSessionId, (value) => {
+watch(parameterValues, saveCurrentModelSettings, { deep: true })
+watch(prompt, scheduleDraftSave)
+watch(activeSessionId, async (value) => {
   if (value) localStorage.setItem(ACTIVE_SESSION_STORAGE, value)
+  if (value) await loadDraft(value)
   void scrollToBottom()
 })
 
 onMounted(async () => {
+  promptTemplates.value = loadImagePromptTemplates()
   const draftPrompt = sessionStorage.getItem('image-generation-draft-prompt')
+  const draftTemplateId = sessionStorage.getItem('image-generation-draft-template-id') || ''
   const draftModel = sessionStorage.getItem('image-generation-draft-model') || ''
   const draftSize = sessionStorage.getItem('image-generation-draft-size')
   const draftQuality = sessionStorage.getItem('image-generation-draft-quality')
   const draftCount = Number(sessionStorage.getItem('image-generation-draft-count'))
-  if (draftPrompt) prompt.value = draftPrompt
   pendingDraftSettings = {
     model: draftModel,
     size: draftSize || '',
@@ -732,6 +1168,7 @@ onMounted(async () => {
     outputCount: COUNT_VALUES.includes(draftCount) ? draftCount : null,
   }
   sessionStorage.removeItem('image-generation-draft-prompt')
+  sessionStorage.removeItem('image-generation-draft-template-id')
   sessionStorage.removeItem('image-generation-draft-model')
   sessionStorage.removeItem('image-generation-draft-size')
   sessionStorage.removeItem('image-generation-draft-quality')
@@ -742,13 +1179,18 @@ onMounted(async () => {
     appStore.showError(errorMessage(error, t('imageGeneration.messages.historyLoadFailed')))
   }
   await loadKeys()
+	if (draftPrompt) prompt.value = draftPrompt
+  if (promptTemplates.value.some(item => item.id === draftTemplateId)) selectedTemplateId.value = draftTemplateId
   await scrollToBottom()
 })
 
 onBeforeUnmount(() => {
   pollController?.abort()
-  clearReference()
-  if (submittedReferencePreviewURL.value) URL.revokeObjectURL(submittedReferencePreviewURL.value)
+	stopElapsedTimer()
+	if (draftTimer !== null) window.clearTimeout(draftTimer)
+	void persistDraft(activeSessionId.value)
+  clearReferences()
+	submittedReferences.value.forEach(reference => URL.revokeObjectURL(reference.url))
   for (const url of objectURLs.values()) {
     if (url.startsWith('blob:')) URL.revokeObjectURL(url)
   }

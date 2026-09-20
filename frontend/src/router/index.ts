@@ -232,14 +232,23 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/features/image-generation/ImageGenerationView.vue')
       },
       {
+        path: 'templates',
+        name: 'ImageGenerationTemplates',
+        component: () => import('@/features/image-generation/ImagePromptTemplatesView.vue')
+      },
+      {
         path: 'materials',
-        name: 'ImageGenerationMaterials',
-        component: () => import('@/features/image-generation/ImageMaterialsView.vue')
+        redirect: '/image-generation/templates'
       },
       {
         path: 'history',
         name: 'ImageGenerationHistory',
         component: () => import('@/features/image-generation/ImageHistoryView.vue')
+      },
+      {
+        path: 'editor/:recordId/:index?',
+        name: 'ImageGenerationEditor',
+        component: () => import('@/features/image-generation/ImageEditorView.vue')
       }
     ]
   },

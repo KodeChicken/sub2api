@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -21,13 +22,15 @@ import (
 )
 
 type AsyncImageHandler struct {
-	tasks   *service.ImageTaskService
-	openAI  *OpenAIGatewayHandler
-	execute func(platform string, c *gin.Context)
+	tasks    *service.ImageTaskService
+	openAI   *OpenAIGatewayHandler
+	execute  func(platform string, c *gin.Context)
+	activeMu sync.Mutex
+	active   map[string]context.CancelFunc
 }
 
 func NewAsyncImageHandler(tasks *service.ImageTaskService, openAI *OpenAIGatewayHandler) *AsyncImageHandler {
-	h := &AsyncImageHandler{tasks: tasks, openAI: openAI}
+	h := &AsyncImageHandler{tasks: tasks, openAI: openAI, active: make(map[string]context.CancelFunc)}
 	h.execute = h.executeWithGateway
 	return h
 }
@@ -122,7 +125,29 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		"poll_url":   pollURL,
 	})
 
+	h.registerActive(task.ID, cancel)
 	go h.run(task.ID, platform, taskCtx, recorder, cancel)
+}
+
+func (h *AsyncImageHandler) Cancel(c *gin.Context) {
+	if !h.pollable() {
+		imageTaskJSONError(c, http.StatusNotFound, "not_found_error", "async image tasks are not enabled")
+		return
+	}
+	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.UserID <= 0 || apiKey.ID <= 0 {
+		imageTaskError(c, service.ErrImageTaskForbidden)
+		return
+	}
+	owner := service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID}
+	task, err := h.tasks.Cancel(c.Request.Context(), owner, c.Param("task_id"))
+	if err != nil {
+		imageTaskError(c, err)
+		return
+	}
+	h.cancelActive(task.ID)
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, task)
 }
 
 func (h *AsyncImageHandler) checkSecurityAuditBeforeSubmit(c *gin.Context, apiKey *service.APIKey, platform string, body []byte) bool {
@@ -221,6 +246,7 @@ func (h *AsyncImageHandler) executeWithGateway(platform string, c *gin.Context) 
 }
 
 func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, recorder *httptest.ResponseRecorder, cancel context.CancelFunc) {
+	defer h.unregisterActive(taskID)
 	defer cancel()
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -250,6 +276,30 @@ func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, r
 		return
 	}
 	h.failTask(taskID, statusCode, extractImageTaskError(body))
+}
+
+func (h *AsyncImageHandler) registerActive(taskID string, cancel context.CancelFunc) {
+	h.activeMu.Lock()
+	defer h.activeMu.Unlock()
+	if h.active == nil {
+		h.active = make(map[string]context.CancelFunc)
+	}
+	h.active[taskID] = cancel
+}
+
+func (h *AsyncImageHandler) unregisterActive(taskID string) {
+	h.activeMu.Lock()
+	defer h.activeMu.Unlock()
+	delete(h.active, taskID)
+}
+
+func (h *AsyncImageHandler) cancelActive(taskID string) {
+	h.activeMu.Lock()
+	cancel := h.active[taskID]
+	h.activeMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 func (h *AsyncImageHandler) failTask(taskID string, statusCode int, taskErr json.RawMessage) {

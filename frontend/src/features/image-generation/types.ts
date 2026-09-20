@@ -20,6 +20,16 @@ export interface ImageGenerationTask {
   poll_url?: string
 }
 
+export type ImageGenerationParameterValue = string | number | boolean
+
+export interface ImageGenerationReferenceImage {
+  id: string
+  name: string
+  mimeType: string
+  blob: Blob
+	sourceRecordId?: string
+}
+
 export interface ImageGenerationResult {
   created?: number
   data?: Array<{
@@ -38,9 +48,20 @@ export interface ImageGenerationHistoryRecord {
   size: string
   quality: string
   outputCount: number
+	parameters?: Record<string, ImageGenerationParameterValue>
   apiKeyId: number
   apiKeyName: string
   createdAt: number
+	completedAt?: number
+	durationMs?: number
+	status?: 'completed' | 'failed' | 'cancelled'
+	error?: string
+	parentId?: string
+	templateId?: string
+	templateTitle?: string
+	templatePrompt?: string
+	referenceImages?: ImageGenerationReferenceImage[]
+	maskImage?: ImageGenerationReferenceImage
   referenceImage?: {
     name: string
     mimeType: string
@@ -50,6 +71,10 @@ export interface ImageGenerationHistoryRecord {
     url: string
     mimeType: string
     blob?: Blob
+		width?: number
+		height?: number
+		fileSizeBytes?: number
+		revisedPrompt?: string
   }>
 }
 
@@ -58,6 +83,24 @@ export interface ImageGenerationSession {
   title: string
   createdAt: number
   updatedAt: number
+	sortOrder?: number
+}
+
+export interface ImageGenerationSessionDraft {
+	sessionId: string
+	prompt: string
+	referenceImages: ImageGenerationReferenceImage[]
+	maskImage?: ImageGenerationReferenceImage
+	updatedAt: number
+}
+
+export interface ImagePromptTemplate {
+	id: string
+	title: string
+	prompt: string
+	description: string
+	createdAt: number
+	updatedAt: number
 }
 
 export interface PromptMaterial {
