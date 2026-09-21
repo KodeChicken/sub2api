@@ -15,20 +15,21 @@ import (
 
 const settingKeyImageStorageConfig = "image_storage_config"
 
-// ErrImageStorageIncomplete 表示开关已打开但凭证不全，无法启用异步生图。
-var ErrImageStorageIncomplete = errors.New("image storage is enabled but bucket/access_key_id/secret_access_key are incomplete")
+// ErrImageStorageIncomplete 表示开关已打开但所选存储未配置完整，无法启用异步生图。
+var ErrImageStorageIncomplete = errors.New("image storage is enabled but the selected storage is not fully configured")
 
-// ImageStorageFactory 由 repository 层提供，把配置变成一个可用的对象存储实现。
+// ImageStorageFactory 由 repository 层提供，把配置变成一个可用的图片存储实现。
 // 与 BackupObjectStoreFactory 同样的注入方式，避免 service 反向依赖 repository。
 type ImageStorageFactory func(ctx context.Context, cfg *config.ImageStorageConfig) (ImageStorage, error)
 
-// ImageStorageSettings 是后台可编辑的异步生图对象存储配置。
+// ImageStorageSettings 是后台可编辑的异步生图存储配置。
 //
 // ReuseBackupS3 为真时不保存自己的凭证，直接借用数据库备份已配置的 S3 端点与密钥，
 // 只用自己的 Bucket/Prefix 区分对象；这样"数据走 backups/、图片走 images/"无需重复配置。
 type ImageStorageSettings struct {
-	Enabled       bool `json:"enabled"`
-	ReuseBackupS3 bool `json:"reuse_backup_s3"`
+	Enabled           bool `json:"enabled"`
+	AllowLocalStorage bool `json:"allow_local_storage"`
+	ReuseBackupS3     bool `json:"reuse_backup_s3"`
 
 	Bucket           string `json:"bucket"` // 留空且复用备份时，沿用备份桶
 	Prefix           string `json:"prefix"`
@@ -167,7 +168,13 @@ func (s *ImageStorageSettingService) SecretConfigured(ctx context.Context) bool 
 func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorageSettings) (*ImageStorageSettings, error) {
 	normalizeImageStorageSettings(&in)
 
-	if in.ReuseBackupS3 {
+	if in.AllowLocalStorage {
+		if old, err := s.load(ctx); err == nil && old != nil {
+			in.SecretAccessKey = old.SecretAccessKey
+		} else {
+			in.SecretAccessKey = ""
+		}
+	} else if in.ReuseBackupS3 {
 		// 复用备份凭证时不落自己的密钥，避免同一份密钥在库里存两份。
 		in.Endpoint, in.Region, in.AccessKeyID, in.SecretAccessKey = "", "", "", ""
 		in.ForcePathStyle = false
@@ -205,7 +212,7 @@ func (s *ImageStorageSettingService) Update(ctx context.Context, in ImageStorage
 // 与 Update 一样支持留空 SecretAccessKey 表示沿用已保存的值。
 func (s *ImageStorageSettingService) TestConnection(ctx context.Context, in ImageStorageSettings) error {
 	normalizeImageStorageSettings(&in)
-	if !in.ReuseBackupS3 && in.SecretAccessKey == "" {
+	if !in.AllowLocalStorage && !in.ReuseBackupS3 && in.SecretAccessKey == "" {
 		old, err := s.load(ctx)
 		if err == nil && old != nil {
 			in.SecretAccessKey = old.SecretAccessKey
@@ -239,19 +246,27 @@ func (s *ImageStorageSettingService) effectiveConfig(ctx context.Context) (*conf
 
 func (s *ImageStorageSettingService) toImageStorageConfig(ctx context.Context, in *ImageStorageSettings) (*config.ImageStorageConfig, error) {
 	cfg := &config.ImageStorageConfig{
-		Enabled:         in.Enabled,
-		Bucket:          in.Bucket,
-		Prefix:          in.Prefix,
-		PublicBaseURL:   in.PublicBaseURL,
-		PresignExpiry:   in.PresignExpiry,
-		MaxDownloadByte: in.MaxDownloadBytes,
-		Endpoint:        in.Endpoint,
-		Region:          in.Region,
-		AccessKeyID:     in.AccessKeyID,
-		SecretAccessKey: in.SecretAccessKey,
-		ForcePathStyle:  in.ForcePathStyle,
+		Enabled:           in.Enabled,
+		AllowLocalStorage: in.AllowLocalStorage,
+		LocalDir:          s.fallback.LocalDir,
+		Bucket:            in.Bucket,
+		Prefix:            in.Prefix,
+		PublicBaseURL:     in.PublicBaseURL,
+		PresignExpiry:     in.PresignExpiry,
+		MaxDownloadByte:   in.MaxDownloadBytes,
+		Endpoint:          in.Endpoint,
+		Region:            in.Region,
+		AccessKeyID:       in.AccessKeyID,
+		SecretAccessKey:   in.SecretAccessKey,
+		ForcePathStyle:    in.ForcePathStyle,
+	}
+	if strings.TrimSpace(cfg.LocalDir) == "" {
+		cfg.LocalDir = "./data/image-storage"
 	}
 
+	if in.AllowLocalStorage {
+		return cfg, nil
+	}
 	if in.ReuseBackupS3 {
 		backupCfg, err := s.backupCredentials(ctx)
 		if err != nil {
@@ -306,17 +321,18 @@ func (s *ImageStorageSettingService) load(ctx context.Context) (*ImageStorageSet
 
 func settingsFromConfig(cfg config.ImageStorageConfig) *ImageStorageSettings {
 	return &ImageStorageSettings{
-		Enabled:          cfg.Enabled,
-		Bucket:           cfg.Bucket,
-		Prefix:           cfg.Prefix,
-		PublicBaseURL:    cfg.PublicBaseURL,
-		PresignExpiry:    cfg.PresignExpiry,
-		MaxDownloadBytes: cfg.MaxDownloadByte,
-		Endpoint:         cfg.Endpoint,
-		Region:           cfg.Region,
-		AccessKeyID:      cfg.AccessKeyID,
-		SecretAccessKey:  cfg.SecretAccessKey,
-		ForcePathStyle:   cfg.ForcePathStyle,
+		Enabled:           cfg.Enabled,
+		AllowLocalStorage: cfg.AllowLocalStorage,
+		Bucket:            cfg.Bucket,
+		Prefix:            cfg.Prefix,
+		PublicBaseURL:     cfg.PublicBaseURL,
+		PresignExpiry:     cfg.PresignExpiry,
+		MaxDownloadBytes:  cfg.MaxDownloadByte,
+		Endpoint:          cfg.Endpoint,
+		Region:            cfg.Region,
+		AccessKeyID:       cfg.AccessKeyID,
+		SecretAccessKey:   cfg.SecretAccessKey,
+		ForcePathStyle:    cfg.ForcePathStyle,
 	}
 }
 

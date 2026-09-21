@@ -754,7 +754,13 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 			if isOpenAIHTTPUpstreamAccessStateError(resp.StatusCode, upstreamMsg, respBody) {
 				return nil, newOpenAIUpstreamFailoverError(resp.StatusCode, resp.Header, respBody, upstreamMsg, retryableOnSameAccount)
 			}
-			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode, ResponseBody: respBody, RetryableOnSameAccount: retryableOnSameAccount}
+			failoverErr := newOpenAIUpstreamFailoverError(resp.StatusCode, resp.Header, respBody, upstreamMsg, retryableOnSameAccount)
+			if strings.TrimSpace(failoverErr.ClientMessage) == "" && resp.StatusCode >= http.StatusInternalServerError {
+				imageErr := openAIImagesUpstreamErrorFromHTTP(resp.StatusCode, resp.Header, respBody)
+				failoverErr.ClientStatusCode = imageErr.clientStatusCode()
+				failoverErr.ClientMessage = imageErr.clientMessage()
+			}
+			return nil, failoverErr
 		}
 		return s.handleOpenAIImagesErrorResponse(upstreamCtx, resp, c, account, upstreamModel)
 	}

@@ -1402,6 +1402,8 @@ func (s *OpenAIGatewayService) handleOpenAIImagesOAuthNonStreamingResponse(
 		return OpenAIUsage{}, 0, nil, &UpstreamFailoverError{
 			StatusCode:             http.StatusBadGateway,
 			ResponseBody:           body,
+			ClientStatusCode:       http.StatusBadGateway,
+			ClientMessage:          "upstream did not return image output",
 			RetryableOnSameAccount: true,
 		}
 	}

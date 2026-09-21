@@ -29,6 +29,9 @@ func RegisterGatewayRoutes(
 	compositeResolver *service.CompositeRouteResolver,
 	cfg *config.Config,
 ) {
+	if localDir := strings.TrimSpace(cfg.ImageStorage.LocalDir); localDir != "" {
+		r.StaticFS("/v1/images/storage", gin.Dir(localDir, false))
+	}
 	bodyLimit := middleware.RequestBodyLimit(cfg.Gateway.MaxBodySize)
 	textBodyLimit := middleware.RequestBodyLimit(cfg.Gateway.TextMaxBodySize)
 	clientRequestID := middleware.ClientRequestID()

@@ -54,7 +54,7 @@
         </div>
       </div>
 
-      <!-- Async image object storage -->
+      <!-- Async image storage -->
       <div class="card p-6">
         <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -71,22 +71,34 @@
           </label>
         </div>
 
-        <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-          <input v-model="imageStorageForm.reuse_backup_s3" type="checkbox" />
-          <span>{{ t('admin.backup.imageStorage.reuseBackupS3') }}</span>
-        </label>
+        <div class="space-y-2">
+          <label class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input v-model="imageStorageForm.allow_local_storage" type="checkbox" />
+            <span>{{ t('admin.backup.imageStorage.allowLocalStorage') }}</span>
+          </label>
+          <p v-if="imageStorageForm.allow_local_storage" class="text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.backup.imageStorage.localStorageHint') }}
+          </p>
+          <label v-else class="inline-flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+            <input v-model="imageStorageForm.reuse_backup_s3" type="checkbox" />
+            <span>{{ t('admin.backup.imageStorage.reuseBackupS3') }}</span>
+          </label>
+        </div>
 
         <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div>
-            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.imageStorage.bucket') }}</label>
-            <input v-model="imageStorageForm.bucket" class="input w-full" :placeholder="imageStorageForm.reuse_backup_s3 ? t('admin.backup.imageStorage.bucketInherited') : ''" />
-          </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.imageStorage.prefix') }}</label>
             <input v-model="imageStorageForm.prefix" class="input w-full" placeholder="images/" />
           </div>
 
-          <template v-if="!imageStorageForm.reuse_backup_s3">
+          <template v-if="!imageStorageForm.allow_local_storage">
+            <div>
+              <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.imageStorage.bucket') }}</label>
+              <input v-model="imageStorageForm.bucket" class="input w-full" :placeholder="imageStorageForm.reuse_backup_s3 ? t('admin.backup.imageStorage.bucketInherited') : ''" />
+            </div>
+          </template>
+
+          <template v-if="!imageStorageForm.allow_local_storage && !imageStorageForm.reuse_backup_s3">
             <div>
               <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.s3.endpoint') }}</label>
               <input v-model="imageStorageForm.endpoint" class="input w-full" placeholder="https://<account_id>.r2.cloudflarestorage.com" />
@@ -109,18 +121,18 @@
             </label>
           </template>
 
-          <div>
+          <div v-if="!imageStorageForm.allow_local_storage">
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.imageStorage.publicBaseUrl') }}</label>
             <input v-model="imageStorageForm.public_base_url" class="input w-full" :placeholder="t('admin.backup.imageStorage.publicBaseUrlPlaceholder')" />
           </div>
-          <div>
+          <div v-if="!imageStorageForm.allow_local_storage">
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">{{ t('admin.backup.imageStorage.presignExpiryHours') }}</label>
             <input v-model.number="imageStorageForm.presign_expiry_hours" type="number" min="1" class="input w-full" />
           </div>
         </div>
 
         <div class="mt-4 flex flex-wrap gap-2">
-          <button type="button" class="btn btn-secondary btn-sm" :disabled="testingImageStorage" @click="testImageStorage">
+          <button v-if="!imageStorageForm.allow_local_storage" type="button" class="btn btn-secondary btn-sm" :disabled="testingImageStorage" @click="testImageStorage">
             {{ testingImageStorage ? t('common.loading') : t('admin.backup.s3.testConnection') }}
           </button>
           <button type="button" class="btn btn-primary btn-sm" :disabled="savingImageStorage" @click="saveImageStorageConfig">
@@ -443,10 +455,10 @@ const s3SecretConfigured = ref(false)
 const savingS3 = ref(false)
 const testingS3 = ref(false)
 
-// Async image object storage. Shares the S3 client with backups, so the default is
-// to reuse the credentials configured above and only differ by prefix.
+// Async image storage. Local disk is opt-in; S3 remains the default for existing installs.
 const imageStorageForm = ref<ImageStorageConfig>({
   enabled: false,
+  allow_local_storage: false,
   reuse_backup_s3: true,
   bucket: '',
   prefix: 'images/',
@@ -638,6 +650,7 @@ async function loadImageStorageConfig() {
     const { config, secret_configured } = await adminAPI.backup.getImageStorageConfig()
     imageStorageForm.value = {
       ...config,
+      allow_local_storage: Boolean(config.allow_local_storage),
       prefix: config.prefix || 'images/',
       region: config.region || 'auto',
       secret_access_key: '',

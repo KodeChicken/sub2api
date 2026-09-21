@@ -184,12 +184,15 @@ func ProvideEnt(cfg *config.Config) (*ent.Client, error) {
 	return client, err
 }
 
-// ProvideImageStorageFactory 提供按需构造对象存储客户端的工厂。
+// ProvideImageStorageFactory 提供按需构造图片存储客户端的工厂。
 //
 // 这里返回工厂而不是实例：异步生图的开关与凭证可以在后台随时改动，客户端必须能在
 // 设置保存后重建，而不是在启动时定死一份。
 func ProvideImageStorageFactory() service.ImageStorageFactory {
 	return func(ctx context.Context, cfg *config.ImageStorageConfig) (service.ImageStorage, error) {
+		if cfg.AllowLocalStorage {
+			return NewLocalImageStorage(cfg.LocalDir)
+		}
 		return NewS3ImageStorage(ctx, cfg)
 	}
 }

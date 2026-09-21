@@ -79,12 +79,10 @@ export async function testS3Connection(config: BackupS3Config): Promise<TestS3Re
   return data
 }
 
-// Async image object storage
-//
-// Shares the S3 client with backups, so `reuse_backup_s3` borrows the endpoint and
-// credentials configured above and only keeps its own bucket/prefix.
+// Async image storage. Local disk and S3-compatible storage share this config.
 export interface ImageStorageConfig {
   enabled: boolean
+  allow_local_storage: boolean
   reuse_backup_s3: boolean
   bucket: string
   prefix: string

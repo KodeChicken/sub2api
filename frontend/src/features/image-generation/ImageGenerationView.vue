@@ -601,6 +601,9 @@ async function generate() {
   }
   const requestPrompt = buildGenerationPrompt(currentPrompt, parentId, currentTemplate.value?.prompt)
   const requestParameters = normalizeImageParameters(model.value, { ...parameterValues }, currentReferences.length > 0)
+  const requestSize = String(requestParameters.size ?? size.value)
+  const requestQuality = String(requestParameters.quality ?? quality.value)
+  const requestCount = Number(requestParameters.n ?? outputCount.value)
   const controller = new AbortController()
   const startedAt = Date.now()
   generating.value = true
@@ -620,9 +623,9 @@ async function generate() {
     const request = {
       model: model.value,
       prompt: requestPrompt,
-      size: size.value,
-      quality: quality.value,
-      n: outputCount.value,
+      size: requestSize,
+      quality: requestQuality,
+      n: requestCount,
       referenceImages: currentReferences.map(item => item.file),
       mask: currentMask ? referenceToFile(currentMask) : undefined,
       parameters: requestParameters,
@@ -659,9 +662,9 @@ async function generate() {
       taskId: currentTaskId.value,
       prompt: currentPrompt,
       model: model.value,
-      size: size.value,
-      quality: quality.value,
-      outputCount: outputCount.value,
+      size: requestSize,
+      quality: requestQuality,
+      outputCount: requestCount,
       parameters: requestParameters,
       apiKeyId: key.id,
       apiKeyName: key.name,
@@ -687,7 +690,7 @@ async function generate() {
     const now = Date.now()
     const record: ImageGenerationHistoryRecord = {
       id: crypto.randomUUID(), sessionId, taskId: currentTaskId.value, prompt: currentPrompt,
-      model: model.value, size: size.value, quality: quality.value, outputCount: outputCount.value,
+      model: model.value, size: requestSize, quality: requestQuality, outputCount: requestCount,
       parameters: requestParameters, apiKeyId: key.id, apiKeyName: key.name, createdAt: startedAt,
       completedAt: now, durationMs: now - startedAt, status: cancelled ? 'cancelled' : 'failed',
       error: cancelled ? '用户停止了生成' : errorMessage(error, t('imageGeneration.messages.generateFailed')),

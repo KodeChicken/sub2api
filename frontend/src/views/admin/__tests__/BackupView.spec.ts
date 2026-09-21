@@ -6,12 +6,14 @@ import BackupView from '../BackupView.vue'
 const {
   getS3Config,
   getImageStorageConfig,
+  updateImageStorageConfig,
   getSchedule,
   listBackups,
   getDownloadURL,
 } = vi.hoisted(() => ({
   getS3Config: vi.fn(),
   getImageStorageConfig: vi.fn(),
+  updateImageStorageConfig: vi.fn(),
   getSchedule: vi.fn(),
   listBackups: vi.fn(),
   getDownloadURL: vi.fn(),
@@ -24,7 +26,7 @@ vi.mock('@/api', () => ({
       updateS3Config: vi.fn(),
       testS3Connection: vi.fn(),
       getImageStorageConfig,
-      updateImageStorageConfig: vi.fn(),
+      updateImageStorageConfig,
       testImageStorageConnection: vi.fn(),
       getSchedule,
       updateSchedule: vi.fn(),
@@ -88,6 +90,8 @@ describe('admin BackupView 分卷备份', () => {
     getImageStorageConfig.mockResolvedValue({ config: {}, secret_configured: false })
     getSchedule.mockResolvedValue({ enabled: false, cron_expr: '', retain_days: 14, retain_count: 10 })
     getDownloadURL.mockReset()
+    updateImageStorageConfig.mockReset()
+    updateImageStorageConfig.mockResolvedValue({})
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
   })
 
@@ -150,5 +154,31 @@ describe('admin BackupView 分卷备份', () => {
 
     expect(wrapper.find('tbody tr td:nth-child(5)').text()).toBe('-')
     expect(wrapper.findAll('button').some(button => button.text() === 'common.delete')).toBe(false)
+  })
+
+  it('本地存储模式隐藏 S3 配置并保存开关', async () => {
+    listBackups.mockResolvedValue({ items: [] })
+    getImageStorageConfig.mockResolvedValue({
+      config: { enabled: true, allow_local_storage: true, prefix: 'images/' },
+      secret_configured: false,
+    })
+
+    const wrapper = mountBackupView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.backup.imageStorage.localStorageHint')
+    const imageStorageSection = wrapper.findAll('.card').find(card =>
+      card.text().includes('admin.backup.imageStorage.title'),
+    )!
+    expect(imageStorageSection.text()).not.toContain('admin.backup.s3.testConnection')
+    const saveButton = imageStorageSection.findAll('button').find(button => button.text() === 'common.save')
+    await saveButton!.trigger('click')
+    await flushPromises()
+
+    expect(updateImageStorageConfig).toHaveBeenCalledWith(expect.objectContaining({
+      enabled: true,
+      allow_local_storage: true,
+      prefix: 'images/',
+    }))
   })
 })

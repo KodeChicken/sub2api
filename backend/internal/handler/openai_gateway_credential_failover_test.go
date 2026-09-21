@@ -261,6 +261,25 @@ func TestInferenceFailoverExhaustionRestoresRetryAfter(t *testing.T) {
 	require.Equal(t, "17", recorder.Header().Get("Retry-After"))
 }
 
+func TestInferenceFailoverExhaustionReturnsSafeClientMessage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	h := &OpenAIGatewayHandler{}
+
+	h.handleFailoverExhausted(c, &service.UpstreamFailoverError{
+		StatusCode:       http.StatusBadGateway,
+		ResponseBody:     []byte(`{"error":{"message":"provider overloaded"}}`),
+		ClientStatusCode: http.StatusBadGateway,
+		ClientMessage:    "provider overloaded",
+	}, true)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "event: error")
+	require.Contains(t, recorder.Body.String(), "provider overloaded")
+	require.NotContains(t, recorder.Body.String(), "Upstream service temporarily unavailable")
+}
+
 func TestFailoverExhaustionRejectsSecretBearingRetryAfter(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()

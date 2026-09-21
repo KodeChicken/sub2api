@@ -34,7 +34,17 @@ Turning the switch off stops new submissions but keeps already-accepted tasks po
 
 The admin setting takes precedence. When nothing has ever been saved there, the `image_storage` block in `config.yaml` is used instead, so deployments that enabled the feature before the admin UI existed keep working untouched.
 
-Configure an S3-compatible object store (AWS S3, Cloudflare R2, Aliyun OSS, MinIO, …) in `config.yaml` (all keys also accept the `IMAGE_STORAGE_*` environment overrides):
+Without object storage, enable local disk storage:
+
+```yaml
+image_storage:
+  enabled: true
+  allow_local_storage: true
+  local_dir: "./data/image-storage"
+  prefix: "images/"
+```
+
+Alternatively, configure an S3-compatible object store (AWS S3, Cloudflare R2, Aliyun OSS, MinIO, …) in `config.yaml` (all keys also accept the `IMAGE_STORAGE_*` environment overrides):
 
 ```yaml
 image_storage:

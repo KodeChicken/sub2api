@@ -55,6 +55,10 @@ describe('image model capabilities', () => {
     expect(parameters.find(item => item.key === 'input_fidelity')?.editOnly).toBe(true)
   })
 
+  it('replaces stale GPT Image 2.5 quality values before sending', () => {
+    expect(normalizeImageParameters('gpt-image-2.5-flare', { quality: 'pro' }, true).quality).toBe('auto')
+  })
+
   it('keeps aspect ratio local and omits hidden compression settings', () => {
     expect(normalizeImageParameters('gpt-image-2', {
       aspect_ratio: '16:9', output_format: 'png', output_compression: 35,

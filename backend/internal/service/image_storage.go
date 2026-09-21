@@ -16,19 +16,19 @@ import (
 
 const defaultImageMaxDownloadBytes int64 = 32 << 20 // 32 MiB
 
-// ImageStorage 把图片字节写入对象存储并返回可访问 URL。
+// ImageStorage 把图片字节写入持久化存储并返回可访问 URL。
 //
-// 这是对象存储的可插拔抽象：适配一个新的对象存储厂商，只需实现本接口
+// 这是图片存储的可插拔抽象：适配本地磁盘或新的对象存储厂商，只需实现本接口
 // （例如包一个厂商 SDK），无需改动任务/网关逻辑。仓库内自带一个 S3 兼容实现
 // （repository.S3ImageStorage），适用于 AWS S3 / Cloudflare R2 / 阿里云 OSS / MinIO 等。
 type ImageStorage interface {
-	// Save 把 data 以 key 存入对象存储，返回可下载的 URL（公开直链或 presigned 临时链接）。
+	// Save 把 data 以 key 存入持久化存储，返回可下载的 URL。
 	// contentType 为图片 MIME 类型，如 "image/png"。
 	Save(ctx context.Context, key, contentType string, data []byte) (url string, err error)
 }
 
 // ImageResultUploader 是 ImageStorage 的上层编排器（与具体厂商无关）：
-// 把上游生图响应里的每张图片（b64_json 解码 / url 下载）转存到对象存储，
+// 把上游生图响应里的每张图片（b64_json 解码 / url 下载）转存到持久化存储，
 // 并把响应结果改写为只含短链接的紧凑 JSON，从而避免大 base64 落 Redis。
 type ImageResultUploader struct {
 	storage          ImageStorage
@@ -57,8 +57,8 @@ func defaultImageDownloadHTTPClient() *http.Client {
 	return &http.Client{Timeout: 60 * time.Second}
 }
 
-// Rewrite 将 result（上游生图响应 JSON）里的每张图片转存到对象存储，
-// 返回改写后的紧凑结果（data[i].url 指向对象存储，b64_json 被移除）。
+// Rewrite 将 result（上游生图响应 JSON）里的每张图片转存到持久化存储，
+// 返回改写后的紧凑结果（data[i].url 指向存储地址，b64_json 被移除）。
 // 任一图片转存失败即返回 error（调用方据此将任务标记为失败，绝不把大 blob 落 Redis）。
 func (u *ImageResultUploader) Rewrite(ctx context.Context, taskID string, result json.RawMessage) (json.RawMessage, error) {
 	if u == nil || u.storage == nil {
@@ -88,7 +88,7 @@ func (u *ImageResultUploader) Rewrite(ctx context.Context, taskID string, result
 		key := u.buildKey(taskID, i, contentType)
 		url, err := u.storage.Save(ctx, key, contentType, data)
 		if err != nil {
-			return nil, fmt.Errorf("image %d: upload to object storage: %w", i, err)
+			return nil, fmt.Errorf("image %d: save to image storage: %w", i, err)
 		}
 		urlRaw, err := json.Marshal(url)
 		if err != nil {

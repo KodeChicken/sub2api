@@ -1229,6 +1229,9 @@ update:
 # service.ImageStorage 接口（Save(ctx, key, contentType, data) -> url）即可。
 image_storage:
   enabled: false
+  # 无对象存储时可启用本地磁盘模式，图片保存到 local_dir。
+  allow_local_storage: false
+  local_dir: "./data/image-storage"
   # S3 兼容端点。AWS 官方可留空；R2 形如 https://<account_id>.r2.cloudflarestorage.com
   endpoint: ""
   # 区域。Cloudflare R2 用 "auto"

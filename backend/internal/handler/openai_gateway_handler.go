@@ -3414,6 +3414,14 @@ func (h *OpenAIGatewayHandler) handleFailoverExhausted(c *gin.Context, failoverE
 	// 记录原始上游状态码，以便 ops 错误日志捕获真实的上游错误
 	upstreamMsg := service.ExtractUpstreamErrorMessage(responseBody)
 	service.SetOpsUpstreamError(c, statusCode, upstreamMsg, "")
+	if clientMessage := strings.TrimSpace(failoverErr.ClientMessage); clientMessage != "" {
+		clientStatus := failoverErr.ClientStatusCode
+		if clientStatus <= 0 {
+			clientStatus = statusCode
+		}
+		h.handleStreamingAwareError(c, clientStatus, "upstream_error", clientMessage, streamStarted)
+		return
+	}
 
 	// 使用默认的错误映射
 	status, errType, errMsg := h.mapUpstreamError(statusCode)

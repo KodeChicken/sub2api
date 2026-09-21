@@ -25,6 +25,11 @@ describe('image generation API helpers', () => {
     ])
   })
 
+  it('resolves local image storage paths against the gateway origin', () => {
+    expect(imageResultURLs({ data: [{ url: '/v1/images/storage/images/result.png' }] }))
+      .toEqual(['http://localhost:3000/v1/images/storage/images/result.png'])
+  })
+
   it('prioritizes common image model names without excluding custom models', () => {
     expect(isLikelyImageModel({ id: 'gpt-image-2' })).toBe(true)
     expect(isLikelyImageModel({ id: 'grok-imagine-1.0' })).toBe(true)

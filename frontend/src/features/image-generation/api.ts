@@ -224,7 +224,7 @@ export async function cancelImageGenerationTask(apiKey: string, taskId: string):
 export function imageResultURLs(result?: ImageGenerationResult): string[] {
   return (result?.data || [])
     .map((item) => {
-      if (item.url) return item.url
+      if (item.url) return item.url.startsWith('/') ? buildGatewayUrl(item.url) : item.url
       if (item.b64_json) return `data:image/png;base64,${item.b64_json}`
       return ''
     })

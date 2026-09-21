@@ -233,6 +233,24 @@ func TestImageStorageSettingsIncompleteStaysDisabled(t *testing.T) {
 	require.Empty(t, *built, "no client is built from an incomplete configuration")
 }
 
+func TestImageStorageSettingsAllowLocalStorageWithoutS3(t *testing.T) {
+	svc, _, built := newImageStorageFixture(t, config.ImageStorageConfig{LocalDir: t.TempDir()})
+
+	saved, err := svc.Update(context.Background(), ImageStorageSettings{
+		Enabled: true, AllowLocalStorage: true, Prefix: "images",
+	})
+	require.NoError(t, err)
+	require.True(t, saved.AllowLocalStorage)
+
+	uploader, enabled := svc.resolve()
+	require.True(t, enabled)
+	require.NotNil(t, uploader)
+	require.Len(t, *built, 1)
+	require.True(t, (*built)[0].AllowLocalStorage)
+	require.NotEmpty(t, (*built)[0].LocalDir)
+	require.Empty(t, (*built)[0].Bucket)
+}
+
 // Deployments that already enabled the feature through config.yaml must keep
 // working after the setting moves into the database.
 func TestImageStorageSettingsFallBackToConfigFile(t *testing.T) {
