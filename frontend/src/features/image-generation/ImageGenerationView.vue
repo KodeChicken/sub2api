@@ -674,7 +674,7 @@ async function generate() {
       templateTitle: currentTemplate.value?.title,
       templatePrompt: currentTemplate.value?.prompt,
       referenceImages: currentReferences.map(referenceToHistory),
-      maskImage: currentMask || undefined,
+      maskImage: snapshotReferenceImage(currentMask),
       images: await cacheGeneratedImages(urls, result?.data?.map(item => item.revised_prompt)),
     }
     await saveImageHistory(record)
@@ -693,7 +693,7 @@ async function generate() {
       error: cancelled ? '用户停止了生成' : errorMessage(error, t('imageGeneration.messages.generateFailed')),
       parentId: parentId || undefined, templateId: currentTemplate.value?.id,
       templateTitle: currentTemplate.value?.title, templatePrompt: currentTemplate.value?.prompt,
-      referenceImages: currentReferences.map(referenceToHistory), maskImage: currentMask || undefined, images: [],
+      referenceImages: currentReferences.map(referenceToHistory), maskImage: snapshotReferenceImage(currentMask), images: [],
     }
     await saveImageHistory(record)
     history.value = [record, ...history.value]
@@ -1009,6 +1009,17 @@ function referenceToFile(reference: ImageGenerationReferenceImage) {
   return new File([reference.blob], reference.name, { type: reference.mimeType })
 }
 
+function snapshotReferenceImage(reference: ImageGenerationReferenceImage | null | undefined) {
+  if (!reference) return undefined
+  return {
+    id: reference.id,
+    name: reference.name,
+    mimeType: reference.mimeType,
+    blob: reference.blob,
+    sourceRecordId: reference.sourceRecordId,
+  }
+}
+
 function buildGenerationPrompt(current: string, parentId: string, stylePrompt?: string) {
   const context: string[] = []
   let currentParentId = parentId
@@ -1133,7 +1144,11 @@ function formatDuration(value: number) {
 
 function scheduleDraftSave() {
   if (draftTimer !== null) window.clearTimeout(draftTimer)
-  draftTimer = window.setTimeout(() => { void persistDraft(activeSessionId.value) }, 300)
+  draftTimer = window.setTimeout(() => saveDraftInBackground(activeSessionId.value), 300)
+}
+
+function saveDraftInBackground(sessionId: string) {
+  void persistDraft(sessionId).catch(error => console.warn('[ImageGeneration] Failed to save draft', error))
 }
 
 async function persistDraft(sessionId: string) {
@@ -1142,7 +1157,7 @@ async function persistDraft(sessionId: string) {
     sessionId,
     prompt: prompt.value,
     referenceImages: referenceDrafts.value.map(referenceToHistory),
-    maskImage: maskDraft.value || undefined,
+    maskImage: snapshotReferenceImage(maskDraft.value),
     updatedAt: Date.now(),
   })
 }
@@ -1233,7 +1248,7 @@ onBeforeUnmount(() => {
   pollController?.abort()
 	stopElapsedTimer()
 	if (draftTimer !== null) window.clearTimeout(draftTimer)
-	void persistDraft(activeSessionId.value)
+	saveDraftInBackground(activeSessionId.value)
   clearReferences()
 	submittedReferences.value.forEach(reference => URL.revokeObjectURL(reference.url))
   for (const url of objectURLs.values()) {

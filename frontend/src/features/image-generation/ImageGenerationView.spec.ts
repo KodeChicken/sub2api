@@ -92,6 +92,7 @@ describe('ImageGenerationView clipboard images', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
   })
 
@@ -109,6 +110,35 @@ describe('ImageGenerationView clipboard images', () => {
     expect(event.defaultPrevented).toBe(true)
     expect(wrapper.text()).toContain('clipboard.png')
     expect(URL.createObjectURL).toHaveBeenCalledWith(file)
+  })
+
+  it('saves a cloneable draft after restoring a mask image', async () => {
+    vi.useFakeTimers()
+    const mask = {
+      id: 'mask-1',
+      name: 'mask.png',
+      mimeType: 'image/png',
+      blob: new Blob(['mask'], { type: 'image/png' }),
+    }
+    mocks.loadDraft.mockResolvedValue({
+      sessionId: 'session-1',
+      prompt: 'Restore this draft',
+      referenceImages: [],
+      maskImage: mask,
+      updatedAt: 1,
+    })
+    const wrapper = mount(ImageGenerationView, {
+      global: { stubs: { Icon: true, RouterLink: true } },
+    })
+    await flushPromises()
+
+    vi.advanceTimersByTime(300)
+    await flushPromises()
+
+    const savedDraft = mocks.saveDraft.mock.calls.at(-1)?.[0]
+    expect(savedDraft?.maskImage).toEqual(mask)
+    expect(() => structuredClone(savedDraft)).not.toThrow()
+    wrapper.unmount()
   })
 
   it('does not intercept normal text paste', async () => {
