@@ -42,6 +42,7 @@ const option = (value: string, label = value) => ({
 })
 const auto = option('auto', '自动')
 const qualityOptions = [auto, option('low', '低'), option('medium', '中'), option('high', '高')]
+const quality25Options = [...qualityOptions, option('xhigh', '超高'), option('max', '最高')]
 const baseSizes = ['auto', '1024x1024', '1536x1024', '1024x1536']
 const v2Sizes = [
   ...baseSizes,
@@ -65,19 +66,39 @@ function count(max: number): ImageParameterDefinition {
 
 export function imageModelCapabilities(model: string): ImageModelCapabilities {
   const id = model.trim().toLowerCase()
-  if (/^gpt-image-2(?:$|[.-])/.test(id)) {
+  if (/^gpt-image-2\.5(?:$|[.-])/.test(id)) {
     return {
       supportsEdits: true,
-      maxReferenceImages: 10,
+      maxReferenceImages: 16,
+      supportsStreaming: true,
+      parameters: [
+        select('aspect_ratio', '宽高比', ['auto', '1:1', '3:2', '2:3', '16:9', '9:16']),
+        { ...select('size', '图片尺寸', v2Sizes, '1024x1024'), customSize: gptImage2CustomSize },
+        { key: 'quality', label: '生成质量', type: 'select', default: 'auto', options: quality25Options },
+        select('background', '背景', ['auto', 'opaque', 'transparent']),
+        select('output_format', '输出格式', ['png', 'jpeg', 'webp']),
+        { key: 'output_compression', label: '压缩质量', type: 'number', default: 100, min: 0, max: 100, step: 1, visibleWhen: { key: 'output_format', values: ['jpeg', 'webp'] } },
+        select('moderation', '内容审核', ['auto', 'low']),
+        { key: 'input_fidelity', label: '参考图保真度', type: 'select', default: 'low', options: [option('low', '低'), option('high', '高')], editOnly: true },
+        { key: 'partial_images', label: '过程预览', type: 'number', default: 1, min: 0, max: 3, step: 1 },
+        count(10),
+      ],
+    }
+  }
+  if (/^gpt-image-2(?:$|-)/.test(id)) {
+    return {
+      supportsEdits: true,
+      maxReferenceImages: 16,
       supportsStreaming: true,
       parameters: [
         select('aspect_ratio', '宽高比', ['auto', '1:1', '3:2', '2:3', '16:9', '9:16']),
         { ...select('size', '图片尺寸', v2Sizes, '1024x1024'), customSize: gptImage2CustomSize },
         { key: 'quality', label: '生成质量', type: 'select', default: 'auto', options: qualityOptions },
-        select('background', '背景', ['auto', 'opaque']),
+        select('background', '背景', ['auto', 'opaque', 'transparent']),
         select('output_format', '输出格式', ['png', 'jpeg', 'webp']),
         { key: 'output_compression', label: '压缩质量', type: 'number', default: 100, min: 0, max: 100, step: 1, visibleWhen: { key: 'output_format', values: ['jpeg', 'webp'] } },
         select('moderation', '内容审核', ['auto', 'low']),
+        { key: 'input_fidelity', label: '参考图保真度', type: 'select', default: 'low', options: [option('low', '低'), option('high', '高')], editOnly: true },
         { key: 'partial_images', label: '过程预览', type: 'number', default: 1, min: 0, max: 3, step: 1 },
         count(10),
       ],
@@ -86,7 +107,7 @@ export function imageModelCapabilities(model: string): ImageModelCapabilities {
   if (id.startsWith('gpt-image-')) {
     return {
       supportsEdits: true,
-      maxReferenceImages: 10,
+      maxReferenceImages: 16,
       supportsStreaming: true,
       parameters: [
         select('aspect_ratio', '宽高比', ['auto', '1:1', '3:2', '2:3']),
@@ -100,28 +121,6 @@ export function imageModelCapabilities(model: string): ImageModelCapabilities {
         { key: 'partial_images', label: '过程预览', type: 'number', default: 1, min: 0, max: 3, step: 1 },
         count(10),
       ],
-    }
-  }
-  if (id === 'dall-e-3') {
-    return {
-      supportsEdits: false,
-      maxReferenceImages: 0,
-      supportsStreaming: false,
-      parameters: [
-        select('aspect_ratio', '宽高比', ['auto', '1:1', '16:9', '9:16']),
-        select('size', '图片尺寸', ['auto', '1024x1024', '1792x1024', '1024x1792'], '1024x1024'),
-        select('quality', '生成质量', ['standard', 'hd'], 'standard'),
-        select('style', '画面风格', ['vivid', 'natural'], 'vivid'),
-        count(1),
-      ],
-    }
-  }
-  if (id === 'dall-e-2') {
-    return {
-      supportsEdits: true,
-      maxReferenceImages: 1,
-      supportsStreaming: false,
-      parameters: [select('size', '图片尺寸', ['256x256', '512x512', '1024x1024'], '1024x1024'), count(10)],
     }
   }
   if (id.includes('grok') && (id.includes('image') || id.includes('imagine'))) {
@@ -160,6 +159,8 @@ export function normalizeImageParameters(
   const definitions = imageModelCapabilities(model).parameters.filter(parameter => editing || !parameter.editOnly)
   const normalized: Record<string, ImageGenerationParameterValue> = {}
   for (const definition of definitions) {
+    if (definition.key === 'aspect_ratio') continue
+    if (definition.visibleWhen && !definition.visibleWhen.values.includes(values[definition.visibleWhen.key])) continue
     const candidate = values[definition.key] ?? definition.default
     if (definition.type === 'select') {
       const allowed = definition.options?.map(item => item.value) || []
@@ -175,6 +176,7 @@ export function normalizeImageParameters(
     }
     normalized[definition.key] = Boolean(candidate)
   }
+  if (normalized.background === 'transparent' && normalized.output_format === 'jpeg') normalized.output_format = 'png'
   return normalized
 }
 

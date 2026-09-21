@@ -57,6 +57,8 @@ describe('image generation API helpers', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('/v1/images/generations/async')
     expect(fetchMock.mock.calls[1][0]).toContain('/v1/images/generations')
     expect(fetchMock.mock.calls[1][0]).not.toContain('/async')
+    const body = JSON.parse(String(fetchMock.mock.calls[1][1]?.body))
+    expect(body).not.toHaveProperty('response_format')
   })
 
   it('submits multiple references and an outpaint mask in upload order', async () => {

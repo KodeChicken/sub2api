@@ -83,7 +83,6 @@ function buildImageGenerationRequest(apiKey: string, input: SubmitImageGeneratio
       size: input.size,
       quality: input.quality,
       n: input.n,
-      response_format: 'url',
 			...input.parameters,
     })
     headers = authHeaders(apiKey, { 'Content-Type': 'application/json' })

@@ -31,6 +31,7 @@ func isOpenAIImagesForceResponses(ctx context.Context) bool {
 func usesCodexDirectImages(model string) bool {
 	switch strings.TrimSpace(model) {
 	case "gpt-image-1.5", "gpt-image-2",
+		"gpt-image-2-2026-04-21",
 		"gpt-image-2.5-flare", "gpt-image-2.5-sunburst",
 		"gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08":
 		return true
@@ -68,7 +69,7 @@ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([
 		{"size", parsed.Size}, {"quality", parsed.Quality},
 		{"background", parsed.Background}, {"output_format", parsed.OutputFormat},
 		{"moderation", parsed.Moderation}, {"input_fidelity", parsed.InputFidelity},
-		{"style", parsed.Style},
+		{"user", parsed.User},
 	} {
 		if value := strings.TrimSpace(field.value); value != "" {
 			payload[field.key] = value
@@ -90,10 +91,15 @@ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([
 	endpoint := "/images/generations"
 	if parsed.IsEdits() {
 		endpoint = "/images/edits"
-		images := make([]map[string]string, 0, len(parsed.InputImageURLs)+len(parsed.Uploads))
+		images := make([]map[string]string, 0, len(parsed.InputImageURLs)+len(parsed.InputImageFileIDs)+len(parsed.Uploads))
 		for _, imageURL := range parsed.InputImageURLs {
 			if imageURL = strings.TrimSpace(imageURL); imageURL != "" {
 				images = append(images, map[string]string{"image_url": imageURL})
+			}
+		}
+		for _, fileID := range parsed.InputImageFileIDs {
+			if fileID = strings.TrimSpace(fileID); fileID != "" {
+				images = append(images, map[string]string{"file_id": fileID})
 			}
 		}
 		for _, upload := range parsed.Uploads {
@@ -117,6 +123,8 @@ func buildOpenAIImagesOAuthPayload(parsed *OpenAIImagesRequest, model string) ([
 		}
 		if mask != "" {
 			payload["mask"] = map[string]string{"image_url": mask}
+		} else if fileID := strings.TrimSpace(parsed.MaskFileID); fileID != "" {
+			payload["mask"] = map[string]string{"file_id": fileID}
 		}
 	}
 	body, err := json.Marshal(payload)

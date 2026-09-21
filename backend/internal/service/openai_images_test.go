@@ -114,6 +114,40 @@ func TestOpenAIImagesRequestModerationBody_JSONEditIncludesInputImageURLs(t *tes
 	require.Equal(t, []string{"https://example.com/source.png", "https://example.com/mask.png"}, input.Images)
 }
 
+func TestRewriteOpenAIImagesRequestKeepsOnlyOfficialFields(t *testing.T) {
+	body := []byte(`{"model":"gpt-image-2","prompt":"draw","size":"1024x1024","user":"user-1","aspect_ratio":"1:1","style":"vivid","response_format":"url","custom":"drop"}`)
+	rewritten, contentType, err := rewriteOpenAIImagesRequest(body, "application/json", "gpt-image-2-2026-04-21", openAIImagesGenerationsEndpoint, true)
+	require.NoError(t, err)
+	require.Equal(t, "application/json", contentType)
+	require.Equal(t, "gpt-image-2-2026-04-21", gjson.GetBytes(rewritten, "model").String())
+	require.Equal(t, "draw", gjson.GetBytes(rewritten, "prompt").String())
+	require.Equal(t, "user-1", gjson.GetBytes(rewritten, "user").String())
+	for _, field := range []string{"aspect_ratio", "style", "response_format", "custom"} {
+		require.False(t, gjson.GetBytes(rewritten, field).Exists(), field)
+	}
+}
+
+func TestRewriteOpenAIImagesRequestPreservesNonGPTImageFields(t *testing.T) {
+	body := []byte(`{"model":"grok-imagine-image","prompt":"draw","resolution":"2k","aspect_ratio":"16:9"}`)
+	rewritten, _, err := rewriteOpenAIImagesRequest(body, "application/json", "grok-imagine-image", openAIImagesGenerationsEndpoint, false)
+	require.NoError(t, err)
+	require.Equal(t, "2k", gjson.GetBytes(rewritten, "resolution").String())
+	require.Equal(t, "16:9", gjson.GetBytes(rewritten, "aspect_ratio").String())
+}
+
+func TestParseOpenAIImagesEditSupportsFileIDs(t *testing.T) {
+	body := []byte(`{"model":"gpt-image-2","prompt":"edit","images":[{"file_id":"file-source"}],"mask":{"file_id":"file-mask"},"input_fidelity":"high","user":"user-1"}`)
+	c, _ := newOpenAIImagesTestContext(t, body)
+	c.Request.URL.Path = openAIImagesEditsEndpoint
+	svc := &OpenAIGatewayService{}
+	parsed, err := svc.ParseOpenAIImagesRequest(c, body)
+	require.NoError(t, err)
+	require.Equal(t, []string{"file-source"}, parsed.InputImageFileIDs)
+	require.Equal(t, "file-mask", parsed.MaskFileID)
+	require.Equal(t, "high", parsed.InputFidelity)
+	require.Equal(t, "user-1", parsed.User)
+}
+
 func TestOpenAIImagesRequestModerationBody_MultipartEditIncludesUploadsInMemory(t *testing.T) {
 	parsed := &OpenAIImagesRequest{
 		Endpoint: openAIImagesEditsEndpoint,
@@ -1993,7 +2027,7 @@ func TestBuildOpenAIImagesResponsesRequest_DoesNotPassNForDallE3(t *testing.T) {
 	require.Equal(t, "dall-e-3", gjson.GetBytes(body, "tools.0.model").String())
 }
 
-func TestBuildOpenAIImagesResponsesRequest_StripsInputFidelity(t *testing.T) {
+func TestBuildOpenAIImagesResponsesRequest_PassesInputFidelity(t *testing.T) {
 	parsed := &OpenAIImagesRequest{
 		Endpoint:      openAIImagesEditsEndpoint,
 		Model:         "gpt-image-2",
@@ -2007,7 +2041,7 @@ func TestBuildOpenAIImagesResponsesRequest_StripsInputFidelity(t *testing.T) {
 	body, err := buildOpenAIImagesResponsesRequest(parsed, "gpt-image-2")
 	require.NoError(t, err)
 	require.NotNil(t, body)
-	require.False(t, gjson.GetBytes(body, "tools.0.input_fidelity").Exists())
+	require.Equal(t, "high", gjson.GetBytes(body, "tools.0.input_fidelity").String())
 	require.Equal(t, "edit", gjson.GetBytes(body, "tools.0.action").String())
 }
 

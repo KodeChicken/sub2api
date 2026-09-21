@@ -378,7 +378,7 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 		}
 		inputImages = append(inputImages, dataURL)
 	}
-	if parsed.IsEdits() && len(inputImages) == 0 {
+	if parsed.IsEdits() && len(inputImages) == 0 && len(parsed.InputImageFileIDs) == 0 {
 		return nil, fmt.Errorf("image input is required")
 	}
 
@@ -392,6 +392,16 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 		part := []byte(`{"type":"input_image","image_url":""}`)
 		part, _ = sjson.SetBytes(part, "image_url", imageURL)
 		input, _ = sjson.SetRawBytes(input, fmt.Sprintf("0.content.%d", index+1), part)
+	}
+	for _, fileID := range parsed.InputImageFileIDs {
+		fileID = strings.TrimSpace(fileID)
+		if fileID == "" {
+			continue
+		}
+		part := []byte(`{"type":"input_image","file_id":""}`)
+		part, _ = sjson.SetBytes(part, "file_id", fileID)
+		index := len(gjson.GetBytes(input, "0.content").Array())
+		input, _ = sjson.SetRawBytes(input, fmt.Sprintf("0.content.%d", index), part)
 	}
 	req, _ = sjson.SetRawBytes(req, "input", input)
 
@@ -415,7 +425,7 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 		{path: "background", value: parsed.Background},
 		{path: "output_format", value: parsed.OutputFormat},
 		{path: "moderation", value: parsed.Moderation},
-		{path: "style", value: parsed.Style},
+		{path: "input_fidelity", value: parsed.InputFidelity},
 	} {
 		if trimmed := strings.TrimSpace(field.value); trimmed != "" {
 			tool, _ = sjson.SetBytes(tool, field.path, trimmed)
@@ -438,6 +448,8 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 	}
 	if maskImageURL != "" {
 		tool, _ = sjson.SetBytes(tool, "input_image_mask.image_url", maskImageURL)
+	} else if fileID := strings.TrimSpace(parsed.MaskFileID); fileID != "" {
+		tool, _ = sjson.SetBytes(tool, "input_image_mask.file_id", fileID)
 	}
 
 	req, _ = sjson.SetRawBytes(req, "tools", []byte(`[]`))

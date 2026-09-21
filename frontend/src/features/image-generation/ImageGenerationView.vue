@@ -335,7 +335,7 @@ const BRANCH_STORAGE = 'image-generation-branch-selections-v1'
 const POLL_INTERVAL_MS = 2200
 const MAX_POLL_ATTEMPTS = 820
 const CUSTOM_SIZE_OPTION = '__custom_size__'
-const QUALITY_VALUES = ['auto', 'low', 'medium', 'high', 'standard', 'hd']
+const QUALITY_VALUES = ['auto', 'low', 'medium', 'high', 'xhigh', 'max']
 const COUNT_VALUES = Array.from({ length: 10 }, (_, index) => index + 1)
 
 const { t } = useI18n()
@@ -547,6 +547,9 @@ function applyRememberedModelSettings(modelId: string) {
     parameterPreferenceKey(selectedKey.value.id, modelId)
   ]
 	if (remembered?.values) Object.assign(parameterValues, remembered.values)
+	if (parameterValues.background === 'transparent' && parameterValues.output_format === 'jpeg') {
+		parameterValues.output_format = 'png'
+	}
 	size.value = remembered && acceptsSize(remembered.size) ? remembered.size : acceptsSize(size.value) ? size.value : String(parameterValues.size || '1024x1024')
   alignSizeToAspectRatio()
   if (remembered && QUALITY_VALUES.includes(remembered.quality)) quality.value = remembered.quality
@@ -909,13 +912,19 @@ function setParameterValue(key: string, value: unknown) {
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
     parameterValues[key] = value
     if (key === 'aspect_ratio' && typeof value === 'string') alignSizeToAspectRatio(value)
+    if (key === 'background' && value === 'transparent' && parameterValues.output_format === 'jpeg') {
+      parameterValues.output_format = 'png'
+    }
   }
 }
 
 function parameterOptions(definition: ImageParameterDefinition) {
-  const options = definition.key === 'size'
+  let options = definition.key === 'size'
     ? imageSizeOptionsForAspectRatio(definition, String(parameterValues.aspect_ratio || 'auto'))
     : definition.options || []
+  if (definition.key === 'output_format' && parameterValues.background === 'transparent') {
+    options = options.filter(option => option.value !== 'jpeg')
+  }
   return definition.customSize
     ? [...options, { value: CUSTOM_SIZE_OPTION, label: '自定义尺寸' }]
     : options

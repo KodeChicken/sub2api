@@ -18,9 +18,13 @@ func directImagesTestAccount() *Account {
 }
 
 func TestCodexDirectImagesRouting(t *testing.T) {
-	for _, model := range []string{"gpt-image-1.5", "gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08"} {
+	for _, model := range []string{"gpt-image-1.5", "gpt-image-2", "gpt-image-2-2026-04-21", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08"} {
 		t.Run(model, func(t *testing.T) {
-			body := []byte(fmt.Sprintf(`{"model":%q,"prompt":"  原样保留 prompt  ","quality":"max","size":"auto","response_format":"url","extra":{"preserve":true}}`, model))
+			quality := "high"
+			if strings.HasPrefix(model, "gpt-image-2.5") {
+				quality = "max"
+			}
+			body := []byte(fmt.Sprintf(`{"model":%q,"prompt":"  原样保留 prompt  ","quality":%q,"size":"auto","response_format":"url","extra":{"preserve":true}}`, model, quality))
 			c, rec := newOpenAIImagesTestContext(t, body)
 			upstream := &httpUpstreamRecorder{resp: openAIImagesJSONResponse()}
 			svc := newOpenAIImagesTestService(upstream)
@@ -50,6 +54,26 @@ func TestCodexDirectImagesRouting(t *testing.T) {
 			require.Equal(t, "data:image/png;base64,aGVsbG8=", gjson.GetBytes(rec.Body.Bytes(), "data.0.url").String())
 		})
 	}
+}
+
+func TestCodexDirectImagesEditSupportsOfficialReferences(t *testing.T) {
+	parsed := &OpenAIImagesRequest{
+		Endpoint:          openAIImagesEditsEndpoint,
+		Model:             "gpt-image-2",
+		Prompt:            "replace the background",
+		InputFidelity:     "high",
+		User:              "user-42",
+		InputImageFileIDs: []string{"file-source"},
+		MaskFileID:        "file-mask",
+		N:                 1,
+	}
+	body, target, err := buildOpenAIImagesOAuthPayload(parsed, parsed.Model)
+	require.NoError(t, err)
+	require.Equal(t, "https://chatgpt.com/backend-api/codex/images/edits", target)
+	require.Equal(t, "file-source", gjson.GetBytes(body, "images.0.file_id").String())
+	require.Equal(t, "file-mask", gjson.GetBytes(body, "mask.file_id").String())
+	require.Equal(t, "high", gjson.GetBytes(body, "input_fidelity").String())
+	require.Equal(t, "user-42", gjson.GetBytes(body, "user").String())
 }
 
 func TestCodexDirectImagesMappingBeforeRouting(t *testing.T) {

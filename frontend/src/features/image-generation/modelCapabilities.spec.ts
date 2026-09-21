@@ -8,7 +8,7 @@ import {
 } from './modelCapabilities'
 
 describe('image model capabilities', () => {
-  it('exposes 4K sizes for gpt-image-2 profiles and later 2.x variants', () => {
+  it('exposes 4K sizes for supported gpt-image-2 profiles', () => {
     for (const model of ['gpt-image-2', 'gpt-image-2.5-flare', 'gpt-image-2-pro']) {
       const sizes = imageModelCapabilities(model).parameters.find(item => item.key === 'size')?.options
       expect(sizes).toContainEqual({ value: '3840x2160', label: '3840 × 2160 · 4K' })
@@ -43,6 +43,27 @@ describe('image model capabilities', () => {
       { value: 'low', label: 'low' },
     ])
     expect(parameters.find(item => item.key === 'n')?.max).toBe(10)
+    expect(imageModelCapabilities('gpt-image-2').maxReferenceImages).toBe(16)
+  })
+
+  it('exposes GPT Image 2.5 quality and transparent background controls', () => {
+    const parameters = imageModelCapabilities('gpt-image-2.5-flare').parameters
+    expect(parameters.find(item => item.key === 'quality')?.options?.map(item => item.value)).toEqual([
+      'auto', 'low', 'medium', 'high', 'xhigh', 'max',
+    ])
+    expect(parameters.find(item => item.key === 'background')?.options?.map(item => item.value)).toContain('transparent')
+    expect(parameters.find(item => item.key === 'input_fidelity')?.editOnly).toBe(true)
+  })
+
+  it('keeps aspect ratio local and omits hidden compression settings', () => {
+    expect(normalizeImageParameters('gpt-image-2', {
+      aspect_ratio: '16:9', output_format: 'png', output_compression: 35,
+    }, false)).toEqual(expect.objectContaining({ output_format: 'png' }))
+    const normalized = normalizeImageParameters('gpt-image-2', {
+      aspect_ratio: '16:9', output_format: 'png', output_compression: 35,
+    }, false)
+    expect(normalized).not.toHaveProperty('aspect_ratio')
+    expect(normalized).not.toHaveProperty('output_compression')
   })
 
   it('maps aspect ratios to the closest compatible size tier', () => {
@@ -55,9 +76,4 @@ describe('image model capabilities', () => {
     ])
   })
 
-  it('recognizes the approximate DALL-E landscape and portrait sizes', () => {
-    const size = imageModelCapabilities('dall-e-3').parameters.find(item => item.key === 'size')!
-    expect(preferredImageSizeForAspectRatio(size, '16:9', '1024x1792')).toBe('1792x1024')
-    expect(preferredImageSizeForAspectRatio(size, '9:16', '1792x1024')).toBe('1024x1792')
-  })
 })
