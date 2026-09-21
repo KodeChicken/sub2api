@@ -152,9 +152,9 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 	failedAccountIDs := make(map[int64]struct{})
 	sameAccountRetryCount := make(map[int64]int)
 	var lastFailoverErr *service.UpstreamFailoverError
-	stopJSONKeepalive := func() {}
-	jsonKeepaliveStarted := false
-	defer func() { stopJSONKeepalive() }()
+	stopResponseKeepalive := func() {}
+	responseKeepaliveStarted := false
+	defer func() { stopResponseKeepalive() }()
 	var oauth429FailoverState service.OpenAIOAuth429FailoverState
 
 	for {
@@ -236,9 +236,13 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		}
 
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
-		if !parsed.Stream && !jsonKeepaliveStarted {
-			stopJSONKeepalive = service.StartOpenAIImagesJSONKeepalive(c, h.openAIImagesJSONKeepaliveInterval())
-			jsonKeepaliveStarted = true
+		if !responseKeepaliveStarted {
+			if parsed.Stream {
+				stopResponseKeepalive = service.StartOpenAIImagesSSEKeepalive(c, h.openAIImagesSSEKeepaliveInterval())
+			} else {
+				stopResponseKeepalive = service.StartOpenAIImagesJSONKeepalive(c, h.openAIImagesJSONKeepaliveInterval())
+			}
+			responseKeepaliveStarted = true
 		}
 		forwardStart := time.Now()
 		writerSizeBeforeForward := service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c)
@@ -433,6 +437,13 @@ func (h *OpenAIGatewayHandler) openAIImagesJSONKeepaliveInterval() time.Duration
 		return 0
 	}
 	return time.Duration(h.cfg.Gateway.ImageNonstreamKeepaliveInterval) * time.Second
+}
+
+func (h *OpenAIGatewayHandler) openAIImagesSSEKeepaliveInterval() time.Duration {
+	if h.cfg == nil || h.cfg.Gateway.ImageStreamKeepaliveInterval <= 0 {
+		return 0
+	}
+	return time.Duration(h.cfg.Gateway.ImageStreamKeepaliveInterval) * time.Second
 }
 
 func isMultipartImagesContentType(contentType string) bool {

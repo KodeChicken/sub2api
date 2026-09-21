@@ -201,10 +201,16 @@ describe('ImageGenerationView clipboard images', () => {
     expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('')
     expect(wrapper.get('article img').attributes('alt')).toContain('reference.png')
     expect(wrapper.get('[data-testid="session-title"]').text()).toBe('生成一张夏日海边宣传海报')
+    expect(wrapper.get('[data-testid="user-message"]').classes()).toEqual(expect.arrayContaining([
+      'w-fit', 'max-w-full', 'bg-gray-100', 'text-gray-900', 'dark:bg-dark-800', 'dark:text-gray-100',
+    ]))
 
     finishGeneration?.({ mode: 'sync', result: { data: [{ url: 'result.png' }] } })
     await flushPromises()
     expect(mocks.showSuccess).toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="user-message"]').classes()).toEqual(expect.arrayContaining([
+      'w-fit', 'max-w-full', 'bg-gray-100', 'text-gray-900', 'dark:bg-dark-800', 'dark:text-gray-100',
+    ]))
     expect(mocks.saveHistory).toHaveBeenCalledWith(expect.objectContaining({
       prompt: '生成一张夏日海边宣传海报',
       referenceImages: [expect.objectContaining({ name: 'reference.png', blob: file })],

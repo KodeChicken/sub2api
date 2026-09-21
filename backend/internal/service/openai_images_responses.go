@@ -1124,6 +1124,19 @@ func writeOpenAIImagesUpstreamErrorResponse(c *gin.Context, err *OpenAIImagesUps
 	if c == nil || c.Writer == nil || err == nil {
 		return false
 	}
+	if StopOpenAICompactSSEKeepaliveCommitted(c) {
+		flusher, ok := c.Writer.(http.Flusher)
+		if !ok {
+			return false
+		}
+		payload := buildOpenAIImagesStreamErrorBodyFromUpstream(err)
+		if _, writeErr := fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", payload); writeErr != nil {
+			_ = c.Error(writeErr)
+			return false
+		}
+		flusher.Flush()
+		return true
+	}
 	if c.Writer.Written() && OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c) >= 0 {
 		return false
 	}

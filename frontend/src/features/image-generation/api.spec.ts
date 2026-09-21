@@ -117,6 +117,23 @@ describe('image generation API helpers', () => {
     expect(result.data).toEqual([{ url: undefined, b64_json: 'ZmluYWw=', revised_prompt: 'revised' }])
   })
 
+  it('surfaces SSE error events committed after a keepalive', async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(': keepalive\n\nevent: error\ndata: {"error":{"type":"upstream_error","message":"upstream timed out"}}\n\n'))
+        controller.close()
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(stream, {
+      status: 200,
+      headers: { 'Content-Type': 'text/event-stream' },
+    })))
+
+    await expect(streamImageGeneration('sk-test', {
+      model: 'gpt-image-2', prompt: 'test', size: '1024x1024', quality: 'auto', n: 1,
+    }, () => undefined)).rejects.toThrow('upstream timed out')
+  })
+
   it('cancels an asynchronous image task', async () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       id: 'task-1', status: 'cancelled',

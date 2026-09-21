@@ -431,6 +431,26 @@ func TestOpenAIEnsureForwardErrorResponse_ImageJSONKeepaliveWritesSingleJSONFall
 	require.Equal(t, "Upstream request failed", gjson.Get(w.Body.String(), "error.message").String())
 }
 
+func TestOpenAIEnsureForwardErrorResponse_ImageSSEKeepaliveWritesStreamError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+
+	stop := service.StartOpenAIImagesSSEKeepalive(c, 5*time.Millisecond)
+	defer stop()
+	before := service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c)
+	require.Eventually(t, c.Writer.Written, time.Second, time.Millisecond)
+	require.Equal(t, before, service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c))
+
+	h := &OpenAIGatewayHandler{}
+	require.True(t, h.ensureForwardErrorResponse(c, false))
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), ": keepalive\n\n")
+	require.Contains(t, w.Body.String(), "event: error\n")
+	require.Contains(t, w.Body.String(), "Upstream request failed")
+}
+
 func TestOpenAIEnsureForwardErrorResponse_ImageJSONKeepalivePreservesCompletedJSON(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

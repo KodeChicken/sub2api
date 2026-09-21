@@ -99,11 +99,11 @@
         </div>
 
         <article v-for="record in activeRecords" :key="record.id" class="space-y-3">
-          <div class="ml-auto max-w-2xl space-y-3 rounded-lg bg-primary-600 p-3 text-sm leading-6 text-white">
-            <div v-if="recordReferenceImages(record).length" class="grid max-w-xl gap-2 sm:grid-cols-2">
-              <button v-for="(reference, index) in recordReferenceImages(record)" :key="reference.id || index" type="button" class="overflow-hidden rounded-md bg-black/10 text-left" @click="openReferencePreview(record, index)">
-                <img :src="displayReferenceURL(record, index)" :alt="t('imageGeneration.create.referenceImage', { name: reference.name })" class="max-h-48 w-full object-contain" />
-                <span class="block truncate px-2.5 py-1.5 text-xs text-white/80">{{ reference.name }}</span>
+          <div data-testid="user-message" class="ml-auto w-fit max-w-full space-y-3 break-words rounded-lg border border-gray-200 bg-gray-100 p-3 text-sm leading-6 text-gray-900 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-100 sm:max-w-2xl">
+            <div v-if="recordReferenceImages(record).length" class="flex flex-wrap gap-2">
+              <button v-for="(reference, index) in recordReferenceImages(record)" :key="reference.id || index" type="button" class="w-40 overflow-hidden rounded-md border border-gray-200 bg-white text-left dark:border-dark-600 dark:bg-dark-900" @click="openReferencePreview(record, index)">
+                <img :src="displayReferenceURL(record, index)" :alt="t('imageGeneration.create.referenceImage', { name: reference.name })" class="h-40 w-full object-contain" />
+                <span class="block truncate px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300">{{ reference.name }}</span>
               </button>
             </div>
             <p>{{ record.prompt }}</p>
@@ -143,11 +143,11 @@
         </article>
 
         <article v-if="generating" class="space-y-3">
-          <div class="ml-auto max-w-2xl space-y-3 rounded-lg bg-primary-600 p-3 text-sm leading-6 text-white">
-            <div v-if="submittedReferences.length" class="grid max-w-xl gap-2 sm:grid-cols-2">
-              <button v-for="(reference, index) in submittedReferences" :key="reference.id" type="button" class="overflow-hidden rounded-md bg-black/10 text-left" @click="openSubmittedReferencePreview(index)">
-                <img :src="reference.url" :alt="t('imageGeneration.create.referenceImage', { name: reference.file.name })" class="max-h-48 w-full object-contain" />
-                <span class="block truncate px-2.5 py-1.5 text-xs text-white/80">{{ reference.file.name }}</span>
+          <div data-testid="user-message" class="ml-auto w-fit max-w-full space-y-3 break-words rounded-lg border border-gray-200 bg-gray-100 p-3 text-sm leading-6 text-gray-900 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-100 sm:max-w-2xl">
+            <div v-if="submittedReferences.length" class="flex flex-wrap gap-2">
+              <button v-for="(reference, index) in submittedReferences" :key="reference.id" type="button" class="w-40 overflow-hidden rounded-md border border-gray-200 bg-white text-left dark:border-dark-600 dark:bg-dark-900" @click="openSubmittedReferencePreview(index)">
+                <img :src="reference.url" :alt="t('imageGeneration.create.referenceImage', { name: reference.file.name })" class="h-40 w-full object-contain" />
+                <span class="block truncate px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300">{{ reference.file.name }}</span>
               </button>
             </div>
             <p>{{ submittedPrompt }}</p>

@@ -117,6 +117,67 @@ func TestOpenAIImagesJSONKeepalive_DoesNotBlockFailoverDetection(t *testing.T) {
 	require.True(t, strings.TrimSpace(rec.Body.String()) == "")
 }
 
+func TestOpenAIImagesSSEKeepalive_FastErrorPreservesStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+
+	stop := StartOpenAIImagesSSEKeepalive(c, time.Hour)
+	defer stop()
+	wrote := writeOpenAIImagesUpstreamErrorResponse(c, &OpenAIImagesUpstreamError{
+		StatusCode: http.StatusBadRequest,
+		ErrorType:  "invalid_request_error",
+		Message:    "invalid size",
+	})
+
+	require.True(t, wrote)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Equal(t, "invalid size", gjson.Get(rec.Body.String(), "error.message").String())
+}
+
+func TestOpenAIImagesSSEKeepalive_LateErrorBecomesSSE(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+
+	stop := StartOpenAIImagesSSEKeepalive(c, 5*time.Millisecond)
+	defer stop()
+	require.Eventually(t, c.Writer.Written, time.Second, time.Millisecond)
+
+	wrote := writeOpenAIImagesUpstreamErrorResponse(c, &OpenAIImagesUpstreamError{
+		StatusCode: http.StatusBadRequest,
+		ErrorType:  "image_generation_user_error",
+		Code:       "moderation_blocked",
+		Message:    "request rejected",
+	})
+
+	require.True(t, wrote)
+	require.Equal(t, http.StatusOK, rec.Code, "heartbeat already committed the status")
+	require.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
+	require.Contains(t, rec.Body.String(), ": keepalive\n\n")
+	require.Contains(t, rec.Body.String(), "event: error\n")
+	require.Contains(t, rec.Body.String(), `"type":"error"`)
+	require.Contains(t, rec.Body.String(), `"code":"moderation_blocked"`)
+}
+
+func TestOpenAIImagesSSEKeepalive_DoesNotBlockFailoverDetection(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/images/generations", nil)
+
+	stop := StartOpenAIImagesSSEKeepalive(c, 5*time.Millisecond)
+	defer stop()
+	require.Eventually(t, c.Writer.Written, time.Second, time.Millisecond)
+
+	before := OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c)
+	require.Equal(t, -1, before)
+	require.True(t, c.Writer.Written())
+	require.Equal(t, before, OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c))
+}
+
 func TestOpenAIImagesJSONKeepalive_KeepsOAuthNonStreamResponseValid(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()

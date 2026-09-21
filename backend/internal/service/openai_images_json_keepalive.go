@@ -13,6 +13,13 @@ import (
 
 const openAIImagesJSONKeepaliveKey = "openai_images_json_keepalive"
 
+// StartOpenAIImagesSSEKeepalive keeps streaming Images requests alive while
+// the upstream has not returned response headers yet. Once the upstream takes
+// over the writer, the shared SSE wrapper stops before forwarding real events.
+func StartOpenAIImagesSSEKeepalive(c *gin.Context, interval time.Duration) func() {
+	return startOpenAISSEKeepalive(c, interval)
+}
+
 // openAIImagesJSONKeepalive keeps non-streaming Images API requests alive while
 // an OAuth upstream is producing SSE internally. JSON permits leading
 // whitespace, so each heartbeat remains compatible with clients expecting one
@@ -133,15 +140,15 @@ func OpenAIImagesJSONKeepalivePresent(c *gin.Context) bool {
 	return openAIImagesJSONKeepaliveFromContext(c) != nil
 }
 
-// OpenAIImagesJSONKeepaliveAdjustedWrittenSize excludes heartbeat whitespace
-// from response-size checks so account retry and failover remain available.
+// OpenAIImagesJSONKeepaliveAdjustedWrittenSize excludes Images JSON padding or
+// SSE comment heartbeats so account retry and failover remain available.
 func OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c *gin.Context) int {
 	if c == nil || c.Writer == nil {
 		return -1
 	}
 	k := openAIImagesJSONKeepaliveFromContext(c)
 	if k == nil {
-		return c.Writer.Size()
+		return OpenAICompactKeepaliveAdjustedWrittenSize(c)
 	}
 	k.mu.Lock()
 	defer k.mu.Unlock()

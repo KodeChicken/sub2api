@@ -188,7 +188,7 @@ function parseImageStreamFrame(
 	if (!data || data === '[DONE]') return
 	const payload = JSON.parse(data)
 	const type = String(payload.type || '')
-	if (type === 'error') throw new Error(payload.error?.message || 'Image generation failed')
+	if (type === 'error' || payload.error) throw new Error(payload.error?.message || 'Image generation failed')
 	const image = payload.url || (payload.b64_json ? `data:image/${payload.output_format || 'png'};base64,${payload.b64_json}` : '')
 	if (type.endsWith('.partial_image') && image) {
 		onEvent({ type, url: image, index: Number(payload.partial_image_index || 0) })
