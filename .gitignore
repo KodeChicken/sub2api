@@ -122,6 +122,9 @@ tests
 CLAUDE.md
 .claude
 scripts
+!skills/sub2api-imagegen/scripts/
+!skills/sub2api-imagegen/scripts/*.py
+skills/sub2api-imagegen/scripts/__pycache__/
 !backend/scripts/
 !backend/scripts/resolve-version.sh
 .code-review-state
@@ -138,6 +141,7 @@ docs/*
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
 !docs/ASYNC_IMAGE_TASKS.md
+!docs/IMAGE_GENERATION_SESSIONS.md
 !docs/BATCH_IMAGE_MVP.md
 !docs/COMPOSITE_GROUPS.md
 !docs/PLUGIN_DEVELOPMENT.md

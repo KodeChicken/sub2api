@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   loadKeys: vi.fn().mockResolvedValue({ items: [] }),
   listModels: vi.fn().mockResolvedValue([]),
   submitGeneration: vi.fn(),
+	submitAsyncGeneration: vi.fn(),
+	getTask: vi.fn(),
+	getHistory: vi.fn(),
   streamGeneration: vi.fn(),
   cancelGeneration: vi.fn(),
   cacheImages: vi.fn(),
@@ -17,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   loadSessions: vi.fn(() => []),
   saveSessions: vi.fn(),
   deleteHistory: vi.fn(),
+	deleteSession: vi.fn(),
   loadDraft: vi.fn(),
   saveDraft: vi.fn(),
   deleteDraft: vi.fn(),
@@ -37,12 +41,14 @@ vi.mock('@/stores', () => ({
 }))
 
 vi.mock('./api', () => ({
-  getImageGenerationTask: vi.fn(),
+  getImageGenerationTask: mocks.getTask,
   cancelImageGenerationTask: mocks.cancelGeneration,
   imageResultURLs: (result?: { data?: Array<{ url?: string }> }) => result?.data?.map((item) => item.url || '').filter(Boolean) || [],
   isLikelyImageModel: (model: { id: string }) => model.id.includes('image'),
   listImageGenerationModels: mocks.listModels,
   submitImageGeneration: mocks.submitGeneration,
+	submitAsyncImageGeneration: mocks.submitAsyncGeneration,
+	isAsyncImageTasksDisabled: (error: { status?: number }) => error?.status === 404,
   streamImageGeneration: mocks.streamGeneration,
 }))
 
@@ -50,10 +56,15 @@ vi.mock('./history', () => ({
   cacheGeneratedImages: mocks.cacheImages,
   createImageSession: vi.fn((title: string) => ({ id: 'session-1', title, createdAt: 1, updatedAt: 1 })),
   deleteImageHistory: mocks.deleteHistory,
+	deleteImageSession: mocks.deleteSession,
   deleteImageSessionDraft: mocks.deleteDraft,
-  displayImageURL: vi.fn(),
+  displayImageURL: vi.fn((image: { url: string }) => image.url),
   listImageHistory: mocks.listHistory,
+	getImageHistory: mocks.getHistory,
   loadImageSessions: mocks.loadSessions,
+	loadLocalImageSessions: vi.fn(() => []),
+	listLocalImageHistory: vi.fn().mockResolvedValue([]),
+	loadLocalImageSessionDraft: vi.fn(),
   loadImageSessionDraft: mocks.loadDraft,
   saveImageHistory: mocks.saveHistory,
   saveImageSessionDraft: mocks.saveDraft,
@@ -80,7 +91,10 @@ describe('ImageGenerationView clipboard images', () => {
     mocks.loadDraft.mockResolvedValue(undefined)
     mocks.saveDraft.mockResolvedValue(undefined)
     mocks.deleteDraft.mockResolvedValue(undefined)
+		mocks.deleteSession.mockResolvedValue(undefined)
     mocks.cancelGeneration.mockResolvedValue({ status: 'cancelled' })
+		mocks.submitAsyncGeneration.mockRejectedValue({ status: 404 })
+		mocks.getHistory.mockResolvedValue(undefined)
     mocks.streamGeneration.mockImplementation(async (key, input, _onEvent, signal) => {
       const submission = await mocks.submitGeneration(key, input, signal)
       return submission.mode === 'sync' ? submission.result : submission.task.result
@@ -167,7 +181,7 @@ describe('ImageGenerationView clipboard images', () => {
     await input.trigger('keydown', { key: 'Enter' })
 
     expect(wrapper.text()).toContain('Product launch')
-    expect(mocks.saveSessions).toHaveBeenCalled()
+		expect(mocks.saveSessions).toHaveBeenCalled()
   })
 
   it('moves the prompt and reference image into the message stream while generating', async () => {
@@ -297,7 +311,7 @@ describe('ImageGenerationView clipboard images', () => {
 
     expect(wrapper.text()).not.toContain('First session')
     expect(wrapper.get('[data-testid="session-title"]').text()).toBe('Second session')
-    expect(mocks.saveSessions).toHaveBeenCalled()
+		expect(mocks.deleteSession).toHaveBeenCalledWith('session-1')
   })
 
   it('restores model parameters and exposes 4K only for gpt-image-2 models', async () => {
@@ -394,4 +408,21 @@ describe('ImageGenerationView clipboard images', () => {
       'auto', '1536x864', '2048x1152', '3840x2160', '__custom_size__',
     ])
   })
+
+	it('uses the persisted async result without overwriting it', async () => {
+		mocks.loadKeys.mockResolvedValue({ items: [{ id: 1, name: 'Image key', key: 'sk-test', status: 'active', group: { name: 'Default', platform: 'openai', allow_image_generation: true } }] })
+		mocks.listModels.mockResolvedValue([{ id: 'gpt-image-2' }])
+		mocks.submitAsyncGeneration.mockResolvedValue({ id: 'task-1' })
+		mocks.getTask.mockResolvedValue({ status: 'completed', result: { data: [{ url: '/v1/images/storage/images/result.png' }] } })
+		mocks.getHistory.mockImplementation(async (id: string) => ({ id, sessionId: 'session-1', prompt: 'Test', status: 'completed', images: [{ url: '/api/v1/image-sessions/assets/test', mimeType: 'image/png' }], createdAt: 1 }))
+		const wrapper = mount(ImageGenerationView, { global: { stubs: { Icon: true, RouterLink: true } } })
+		await flushPromises()
+		await wrapper.get('textarea').setValue('Test')
+		await wrapper.get('form').trigger('submit')
+		await flushPromises()
+		expect(mocks.getHistory).toHaveBeenCalled()
+		expect(mocks.cacheImages).not.toHaveBeenCalled()
+		expect(mocks.saveHistory).toHaveBeenCalledTimes(1)
+		wrapper.unmount()
+	})
 })

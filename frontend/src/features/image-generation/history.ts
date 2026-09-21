@@ -1,8 +1,10 @@
 import type {
   ImageGenerationHistoryRecord,
+	ImageGenerationReferenceImage,
   ImageGenerationSession,
   ImageGenerationSessionDraft,
 } from './types'
+import { apiClient } from '@/api/client'
 
 const DATABASE_NAME = 'sub2api-image-generation'
 const DATABASE_VERSION = 2
@@ -45,21 +47,102 @@ async function withStore<T>(
   })
 }
 
-export async function listImageHistory(): Promise<ImageGenerationHistoryRecord[]> {
+export async function listLocalImageHistory(): Promise<ImageGenerationHistoryRecord[]> {
   const items = await withStore<ImageGenerationHistoryRecord[]>(HISTORY_STORE, 'readonly', (store) => store.getAll())
   return items.sort((a, b) => b.createdAt - a.createdAt)
 }
 
 export async function getImageHistory(id: string): Promise<ImageGenerationHistoryRecord | undefined> {
-	return withStore<ImageGenerationHistoryRecord | undefined>(HISTORY_STORE, 'readonly', store => store.get(id))
+	try {
+		const { data } = await apiClient.get<ImageGenerationHistoryRecord>(`/image-sessions/records/${encodeURIComponent(id)}`)
+		return hydrateRecord(data)
+	} catch (error) {
+		if ((error as { status?: number }).status === 404) return undefined
+		throw error
+	}
 }
 
 export async function saveImageHistory(record: ImageGenerationHistoryRecord): Promise<void> {
-  await withStore<IDBValidKey>(HISTORY_STORE, 'readwrite', (store) => store.put(record))
+	const payload = {
+		...record,
+		images: await Promise.all(record.images.map(image => storeImage(record.sessionId, image))),
+		referenceImages: await Promise.all((record.referenceImages || []).map(image => storeReference(record.sessionId, image))),
+		maskImage: record.maskImage ? await storeReference(record.sessionId, record.maskImage) : undefined,
+		referenceImage: record.referenceImage ? await storeLegacyReference(record.sessionId, record.referenceImage) : undefined,
+	}
+	await apiClient.put(`/image-sessions/records/${encodeURIComponent(record.id)}`, payload)
 }
 
 export async function deleteImageHistory(id: string): Promise<void> {
-  await withStore<undefined>(HISTORY_STORE, 'readwrite', (store) => store.delete(id) as IDBRequest<undefined>)
+	await apiClient.delete(`/image-sessions/records/${encodeURIComponent(id)}`)
+}
+
+export async function listImageHistory(): Promise<ImageGenerationHistoryRecord[]> {
+	const { data } = await apiClient.get<ImageGenerationHistoryRecord[]>('/image-sessions/records')
+	return Promise.all(data.map(hydrateRecord))
+}
+
+const uploadedBlobs = new WeakMap<Blob, string>()
+
+async function uploadImage(sessionId: string, blob: Blob): Promise<string> {
+	const existing = uploadedBlobs.get(blob)
+	if (existing) return existing
+	const form = new FormData()
+	form.append('file', blob, 'image')
+	const { data } = await apiClient.post<{ url: string }>(`/image-sessions/${encodeURIComponent(sessionId)}/assets`, form, {
+		headers: { 'Content-Type': 'multipart/form-data' },
+	})
+	uploadedBlobs.set(blob, data.url)
+	return data.url
+}
+
+async function storeImage(sessionId: string, image: ImageGenerationHistoryRecord['images'][number]) {
+	if (image.url.startsWith('/api/v1/image-sessions/assets/') && image.blob && uploadedBlobs.get(image.blob) === image.url) {
+		const { blob: _blob, ...metadata } = image
+		return metadata
+	}
+	const blob = image.blob || await fetch(image.url).then(response => {
+		if (!response.ok) throw new Error(`Cannot save generated image: HTTP ${response.status}`)
+		return response.blob()
+	})
+	if (!blob) throw new Error('Cannot save generated image without file data')
+	const url = await uploadImage(sessionId, blob)
+	const { blob: _blob, ...metadata } = image
+	return { ...metadata, url }
+}
+
+async function storeReference(sessionId: string, image: ImageGenerationReferenceImage) {
+	const { blob, ...metadata } = image
+	return { ...metadata, assetUrl: await uploadImage(sessionId, blob) }
+}
+
+async function storeLegacyReference(sessionId: string, image: NonNullable<ImageGenerationHistoryRecord['referenceImage']>) {
+	return { name: image.name, mimeType: image.mimeType, assetUrl: await uploadImage(sessionId, image.blob) }
+}
+
+async function readAsset(url: string): Promise<Blob> {
+	const path = new URL(url, window.location.origin).pathname
+	const { data } = await apiClient.get<Blob>(path.replace(/^\/api\/v1/, ''), { responseType: 'blob' })
+	uploadedBlobs.set(data, url)
+	return data
+}
+
+async function hydrateReference(image: ImageGenerationReferenceImage): Promise<ImageGenerationReferenceImage> {
+	return { ...image, blob: await readAsset(image.assetUrl || '') }
+}
+
+async function hydrateRecord(record: ImageGenerationHistoryRecord): Promise<ImageGenerationHistoryRecord> {
+	const imageResults = await Promise.allSettled(record.images.map(image => readAsset(image.url)))
+	const referenceResults = await Promise.allSettled((record.referenceImages || []).map(hydrateReference))
+	const maskResult = record.maskImage ? await Promise.allSettled([hydrateReference(record.maskImage)]) : []
+	const legacyResult = record.referenceImage ? await Promise.allSettled([readAsset(record.referenceImage.assetUrl || '')]) : []
+	return {
+		...record,
+		images: record.images.map((image, index) => imageResults[index].status === 'fulfilled' ? { ...image, blob: imageResults[index].value } : image),
+		referenceImages: referenceResults.filter(result => result.status === 'fulfilled').map(result => result.value),
+		maskImage: maskResult[0]?.status === 'fulfilled' ? maskResult[0].value : undefined,
+		referenceImage: record.referenceImage && legacyResult[0]?.status === 'fulfilled' ? { ...record.referenceImage, blob: legacyResult[0].value } : undefined,
+	}
 }
 
 export async function cacheGeneratedImages(
@@ -102,7 +185,7 @@ export function displayImageURL(image: ImageGenerationHistoryRecord['images'][nu
   return image.blob ? URL.createObjectURL(image.blob) : image.url
 }
 
-export function loadImageSessions(): ImageGenerationSession[] {
+export function loadLocalImageSessions(): ImageGenerationSession[] {
   try {
     const raw = localStorage.getItem(SESSION_STORAGE_KEY)
     const sessions = raw ? JSON.parse(raw) : []
@@ -112,8 +195,17 @@ export function loadImageSessions(): ImageGenerationSession[] {
   }
 }
 
-export function saveImageSessions(sessions: ImageGenerationSession[]): void {
-  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessions))
+export async function loadImageSessions(): Promise<ImageGenerationSession[]> {
+	const { data } = await apiClient.get<ImageGenerationSession[]>('/image-sessions')
+	return data
+}
+
+export async function saveImageSessions(sessions: ImageGenerationSession[]): Promise<void> {
+	await Promise.all(sessions.map(session => apiClient.put('/image-sessions', session)))
+}
+
+export async function deleteImageSession(sessionId: string): Promise<void> {
+	await apiClient.delete(`/image-sessions/${encodeURIComponent(sessionId)}`)
 }
 
 export function createImageSession(title = ''): ImageGenerationSession {
@@ -128,13 +220,20 @@ export function createImageSession(title = ''): ImageGenerationSession {
 }
 
 export async function loadImageSessionDraft(sessionId: string): Promise<ImageGenerationSessionDraft | undefined> {
-	return withStore<ImageGenerationSessionDraft | undefined>(DRAFT_STORE, 'readonly', store => store.get(sessionId))
+	const { data } = await apiClient.get<ImageGenerationSessionDraft | null>(`/image-sessions/${encodeURIComponent(sessionId)}/draft`)
+	if (!data) return undefined
+	return { ...data, referenceImages: await Promise.all((data.referenceImages || []).map(hydrateReference)), maskImage: data.maskImage ? await hydrateReference(data.maskImage) : undefined }
 }
 
 export async function saveImageSessionDraft(draft: ImageGenerationSessionDraft): Promise<void> {
-	await withStore<IDBValidKey>(DRAFT_STORE, 'readwrite', store => store.put(draft))
+	const payload = { ...draft, referenceImages: await Promise.all(draft.referenceImages.map(image => storeReference(draft.sessionId, image))), maskImage: draft.maskImage ? await storeReference(draft.sessionId, draft.maskImage) : undefined }
+	await apiClient.put(`/image-sessions/${encodeURIComponent(draft.sessionId)}/draft`, payload)
 }
 
 export async function deleteImageSessionDraft(sessionId: string): Promise<void> {
-	await withStore<undefined>(DRAFT_STORE, 'readwrite', store => store.delete(sessionId) as IDBRequest<undefined>)
+	await apiClient.delete(`/image-sessions/${encodeURIComponent(sessionId)}/draft`)
+}
+
+export async function loadLocalImageSessionDraft(sessionId: string): Promise<ImageGenerationSessionDraft | undefined> {
+	return withStore<ImageGenerationSessionDraft | undefined>(DRAFT_STORE, 'readonly', store => store.get(sessionId))
 }

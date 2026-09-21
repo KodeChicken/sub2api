@@ -150,6 +150,12 @@ func ProvideBatchImageHandler(
 	return h
 }
 
+func ProvideAsyncImageHandler(tasks *service.ImageTaskService, openAI *OpenAIGatewayHandler, sessions *ImageSessionHandler) *AsyncImageHandler {
+	h := NewAsyncImageHandler(tasks, openAI)
+	h.sessions = sessions
+	return h
+}
+
 // ProvideSystemHandler creates admin.SystemHandler with UpdateService
 func ProvideSystemHandler(updateService *service.UpdateService, lockService *service.SystemOperationLockService) *admin.SystemHandler {
 	return admin.NewSystemHandler(updateService, lockService)
@@ -200,6 +206,7 @@ func ProvideHandlers(
 	modelPlazaHandler *ModelPlazaHandler,
 	asyncImageHandler *AsyncImageHandler,
 	batchImageHandler *BatchImageHandler,
+	imageSessionHandler *ImageSessionHandler,
 	_ *service.IdempotencyCoordinator,
 	_ *service.IdempotencyCleanupService,
 	_ *service.OpenAIQuotaAutoResetService,
@@ -226,6 +233,7 @@ func ProvideHandlers(
 		ModelPlaza:       modelPlazaHandler,
 		AsyncImage:       asyncImageHandler,
 		BatchImage:       batchImageHandler,
+		ImageSession:     imageSessionHandler,
 	}
 }
 
@@ -250,7 +258,8 @@ var ProviderSet = wire.NewSet(
 	NewPaymentWebhookHandler,
 	NewAvailableChannelHandler,
 	NewModelPlazaHandler,
-	NewAsyncImageHandler,
+	ProvideAsyncImageHandler,
+	NewImageSessionHandler,
 	ProvideBatchImageHandler,
 
 	// Admin handlers

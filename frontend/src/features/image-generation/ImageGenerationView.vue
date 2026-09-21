@@ -17,6 +17,12 @@
             :placeholder="t('imageGeneration.sessions.search')"
           />
         </div>
+		<div class="mt-2 flex items-center justify-between gap-2 px-1">
+			<button type="button" class="text-xs text-primary-600 hover:underline dark:text-primary-400" :disabled="generating || importing" @click="importBrowserHistory">
+				<Icon name="upload" size="xs" class="mr-1 inline-block" />导入此浏览器记录
+			</button>
+			<a href="/downloads/sub2api-imagegen.zip" download="sub2api-imagegen.zip" title="下载生图技能 ZIP" class="text-gray-500 hover:text-primary-600 dark:text-gray-400"><Icon name="download" size="sm" /></a>
+		</div>
       </div>
       <div class="max-h-52 min-h-0 flex-1 space-y-1 overflow-y-auto p-2 lg:max-h-none">
         <div
@@ -286,19 +292,25 @@ import {
   cancelImageGenerationTask,
   getImageGenerationTask,
   imageResultURLs,
+	isAsyncImageTasksDisabled,
   isLikelyImageModel,
   listImageGenerationModels,
   submitImageGeneration,
+	submitAsyncImageGeneration,
   streamImageGeneration,
 } from './api'
 import {
   cacheGeneratedImages,
   createImageSession,
-  deleteImageHistory,
+	deleteImageSession,
   deleteImageSessionDraft,
   displayImageURL,
+	getImageHistory,
   listImageHistory,
   loadImageSessions,
+	loadLocalImageSessions,
+	listLocalImageHistory,
+	loadLocalImageSessionDraft,
   loadImageSessionDraft,
   saveImageHistory,
   saveImageSessionDraft,
@@ -355,6 +367,8 @@ const outputCount = computed({ get: () => Number(parameterValues.n || 1), set: v
 const loadingKeys = ref(false)
 const loadingModels = ref(false)
 const generating = ref(false)
+const importing = ref(false)
+const cancelRequested = ref(false)
 const currentTaskId = ref('')
 const submittedPrompt = ref('')
 const generationStatus = ref('')
@@ -376,6 +390,7 @@ const objectURLs = new Map<string, string>()
 const preview = ref<{ url: string; prompt: string } | null>(null)
 const generationPreferences = loadImageGenerationPreferences()
 let pollController: AbortController | null = null
+const pendingControllers: AbortController[] = []
 let elapsedTimer: number | null = null
 let draftTimer: number | null = null
 let pendingDraftSettings: { model: string; size: string; quality: string; outputCount: number | null } | null = null
@@ -452,9 +467,12 @@ async function loadModels() {
   }
 }
 
-async function loadLocalState() {
-  sessions.value = loadImageSessions().sort((a, b) => (b.sortOrder || b.updatedAt) - (a.sortOrder || a.updatedAt))
-  if (sessions.value.length === 0) sessions.value = [createImageSession(t('imageGeneration.sessions.defaultTitle'))]
+async function loadServerState() {
+  sessions.value = (await loadImageSessions()).sort((a, b) => (b.sortOrder || b.updatedAt) - (a.sortOrder || a.updatedAt))
+  if (sessions.value.length === 0) {
+		sessions.value = [createImageSession(t('imageGeneration.sessions.defaultTitle'))]
+		await saveImageSessions(sessions.value)
+	}
   const storedSessionId = localStorage.getItem(ACTIVE_SESSION_STORAGE)
   activeSessionId.value = sessions.value.some((session) => session.id === storedSessionId)
     ? storedSessionId || sessions.value[0].id
@@ -463,17 +481,54 @@ async function loadLocalState() {
 	await migrateLocalBranches()
 }
 
-function newSession() {
+function resumePendingTasks() {
+	for (const record of history.value.filter(item => item.status === 'processing' && item.taskId)) {
+		const key = imageKeys.value.find(item => item.id === record.apiKeyId)
+		if (!key) continue
+		const controller = new AbortController()
+		pendingControllers.push(controller)
+		void (async () => {
+			try {
+				const task = await pollTask(key.key, record.taskId, controller.signal)
+				const persisted = await getImageHistory(record.id)
+				if (persisted?.status === 'completed') {
+					history.value = history.value.map(item => item.id === record.id ? persisted : item)
+					return
+				}
+				if (persisted?.status === 'failed' || persisted?.status === 'cancelled') {
+					history.value = history.value.map(item => item.id === record.id ? persisted : item)
+					return
+				}
+				if (record.taskId) throw new Error('异步任务已完成，但会话图片尚未保存')
+				const urls = imageResultURLs(task.result)
+				if (!urls.length) throw new Error(t('imageGeneration.messages.noImage'))
+				const completed: ImageGenerationHistoryRecord = {
+					...record, status: 'completed', completedAt: Date.now(),
+					images: await cacheGeneratedImages(urls, task.result?.data?.map(item => item.revised_prompt)),
+				}
+				await saveImageHistory(completed)
+				history.value = history.value.map(item => item.id === record.id ? completed : item)
+			} catch (error) {
+				if (controller.signal.aborted) return
+				const failed: ImageGenerationHistoryRecord = { ...record, status: 'failed', error: errorMessage(error, t('imageGeneration.messages.generateFailed')), completedAt: Date.now() }
+				await saveImageHistory(failed)
+				history.value = history.value.map(item => item.id === record.id ? failed : item)
+			}
+		})()
+	}
+}
+
+async function newSession() {
   const session = createImageSession(t('imageGeneration.sessions.defaultTitle'))
+	try { await saveImageSessions([session]) } catch (error) { appStore.showError(errorMessage(error, '创建会话失败')); return }
   sessions.value = [session, ...sessions.value]
   activeSessionId.value = session.id
-  saveImageSessions(sessions.value)
   prompt.value = ''
 	clearReferences()
 	continuationParentId.value = ''
 }
 
-function moveSession(session: ImageGenerationSession, direction: -1 | 1) {
+async function moveSession(session: ImageGenerationSession, direction: -1 | 1) {
   const index = sessions.value.findIndex(item => item.id === session.id)
   const target = index + direction
   if (index < 0 || target < 0 || target >= sessions.value.length) return
@@ -481,7 +536,7 @@ function moveSession(session: ImageGenerationSession, direction: -1 | 1) {
   ;[next[index], next[target]] = [next[target], next[index]]
   next.forEach((item, itemIndex) => { item.sortOrder = next.length - itemIndex })
   sessions.value = next
-  saveImageSessions(next)
+	try { await saveImageSessions(next) } catch (error) { appStore.showError(errorMessage(error, '会话排序失败')) }
 }
 
 function beginSessionTitleEdit(session: ImageGenerationSession) {
@@ -489,12 +544,12 @@ function beginSessionTitleEdit(session: ImageGenerationSession) {
   sessionTitleDraft.value = session.title
 }
 
-function saveSessionTitle(session: ImageGenerationSession) {
+async function saveSessionTitle(session: ImageGenerationSession) {
   if (editingSessionId.value !== session.id) return
   const title = sessionTitleDraft.value.trim().replace(/\s+/g, ' ')
   if (title) {
     session.title = title.slice(0, 80)
-    saveImageSessions(sessions.value)
+		try { await saveImageSessions([session]) } catch (error) { appStore.showError(errorMessage(error, '重命名失败')) }
   }
   editingSessionId.value = ''
 }
@@ -507,25 +562,59 @@ async function deleteSession(session: ImageGenerationSession) {
   if (!window.confirm(t('imageGeneration.sessions.deleteConfirm', { title: session.title }))) return
   try {
     const deletedRecords = history.value.filter((record) => record.sessionId === session.id)
-    await Promise.all(deletedRecords.map((record) => deleteImageHistory(record.id)))
-		await deleteImageSessionDraft(session.id)
+		await deleteImageSession(session.id)
     deletedRecords.forEach(revokeRecordURLs)
     history.value = history.value.filter((record) => record.sessionId !== session.id)
     sessions.value = sessions.value.filter((item) => item.id !== session.id)
-    if (sessions.value.length === 0) sessions.value = [createImageSession(t('imageGeneration.sessions.defaultTitle'))]
+    if (sessions.value.length === 0) {
+		sessions.value = [createImageSession(t('imageGeneration.sessions.defaultTitle'))]
+		await saveImageSessions(sessions.value)
+	}
     if (activeSessionId.value === session.id) activeSessionId.value = sessions.value[0].id
-    saveImageSessions(sessions.value)
   } catch (error) {
     appStore.showError(errorMessage(error, t('imageGeneration.messages.sessionDeleteFailed')))
   }
 }
 
-function updateActiveSessionTitle(value: string) {
+async function updateActiveSessionTitle(value: string) {
   const session = sessions.value.find((item) => item.id === activeSessionId.value)
   if (!session) return
   if (isDefaultSessionTitle(session.title)) session.title = titleFromPrompt(value) || session.title
   session.updatedAt = Date.now()
-  saveImageSessions(sessions.value)
+	await saveImageSessions([session])
+}
+
+async function importBrowserHistory() {
+	const legacySessions = loadLocalImageSessions()
+	const legacyRecords = await listLocalImageHistory()
+	if (!legacySessions.length && !legacyRecords.length) { appStore.showError('此浏览器没有旧生图记录'); return }
+	if (!window.confirm(`将此浏览器的 ${legacySessions.length} 个旧会话和 ${legacyRecords.length} 条记录导入当前账号？请确认旧数据属于当前登录用户。`)) return
+	importing.value = true
+	try {
+		const knownSessions = new Set(sessions.value.map(item => item.id))
+		for (const session of legacySessions) {
+			if (knownSessions.has(session.id)) continue
+			await saveImageSessions([session])
+			knownSessions.add(session.id)
+		}
+		const knownRecords = new Set(history.value.map(item => item.id))
+		for (const record of legacyRecords) {
+			if (knownRecords.has(record.id)) continue
+			if (!knownSessions.has(record.sessionId)) {
+				await saveImageSessions([{ id: record.sessionId, title: '旧生图会话', createdAt: record.createdAt, updatedAt: record.createdAt, sortOrder: record.createdAt }])
+				knownSessions.add(record.sessionId)
+			}
+			await saveImageHistory(record)
+		}
+		for (const session of legacySessions) {
+			const draft = await loadLocalImageSessionDraft(session.id)
+			if (draft) await saveImageSessionDraft(draft)
+		}
+		await loadServerState()
+		appStore.showSuccess('旧生图记录已导入，浏览器原数据仍保留')
+	} catch (error) {
+		appStore.showError(errorMessage(error, '导入中断，已导入部分可再次导入'))
+	} finally { importing.value = false }
 }
 
 function isDefaultSessionTitle(title: string) {
@@ -616,9 +705,11 @@ async function generate() {
   partialPreviewURL.value = ''
   generationStatus.value = t('imageGeneration.create.submitting')
   currentTaskId.value = ''
+	cancelRequested.value = false
   pollController = controller
   startElapsedTimer(startedAt)
-  updateActiveSessionTitle(currentPrompt)
+  const recordId = crypto.randomUUID()
+  try { await updateActiveSessionTitle(currentPrompt) } catch (error) { appStore.showError(errorMessage(error, '保存会话失败')); generating.value = false; stopElapsedTimer(); return }
   try {
     const request = {
       model: model.value,
@@ -630,34 +721,56 @@ async function generate() {
       mask: currentMask ? referenceToFile(currentMask) : undefined,
       parameters: requestParameters,
     }
+		const pending: ImageGenerationHistoryRecord = {
+			id: recordId, sessionId, taskId: '', prompt: currentPrompt,
+			model: model.value, size: requestSize, quality: requestQuality, outputCount: requestCount,
+			parameters: requestParameters, apiKeyId: key.id, apiKeyName: key.name, createdAt: startedAt,
+			status: 'processing', parentId: parentId || undefined,
+			templateId: currentTemplate.value?.id, templateTitle: currentTemplate.value?.title,
+			templatePrompt: currentTemplate.value?.prompt,
+			referenceImages: currentReferences.map(referenceToHistory), maskImage: snapshotReferenceImage(currentMask), images: [],
+		}
+		await saveImageHistory(pending)
+		history.value = [pending, ...history.value]
     let result: ImageGenerationResult | undefined
-    if (modelCapabilities.value.supportsStreaming) {
-      generationStatus.value = '模型正在生成图片'
-      result = await streamImageGeneration(key.key, request, event => {
-        if (event.type.endsWith('.partial_image') && event.url) {
-          partialPreviewURL.value = event.url
-          generationStatus.value = '模型正在细化图片'
-        } else if (event.type.endsWith('.completed')) {
-          generationStatus.value = '正在保存最终图片'
-        }
-      }, controller.signal)
-    } else {
-      const submission = await submitImageGeneration(key.key, request, controller.signal)
-      if (submission.mode === 'async') {
-        currentTaskId.value = submission.task.id || submission.task.task_id || ''
-        if (!currentTaskId.value) throw new Error(t('imageGeneration.messages.invalidTask'))
-        generationStatus.value = t('imageGeneration.create.processing')
-        const completed = await pollTask(key.key, currentTaskId.value, controller.signal)
-        result = completed.result
-      } else {
-        result = submission.result
-      }
-    }
+    try {
+		const task = await submitAsyncImageGeneration(key.key, request, sessionId, recordId, controller.signal)
+		currentTaskId.value = task.id || task.task_id || ''
+		if (!currentTaskId.value) throw new Error(t('imageGeneration.messages.invalidTask'))
+		pending.taskId = currentTaskId.value
+		generationStatus.value = t('imageGeneration.create.processing')
+		result = (await pollTask(key.key, currentTaskId.value, controller.signal)).result
+	} catch (error) {
+		if (!isAsyncImageTasksDisabled(error)) throw error
+		if (modelCapabilities.value.supportsStreaming) {
+			generationStatus.value = '模型正在生成图片'
+			result = await streamImageGeneration(key.key, request, event => {
+				if (event.type.endsWith('.partial_image') && event.url) {
+					partialPreviewURL.value = event.url
+					generationStatus.value = '模型正在细化图片'
+				} else if (event.type.endsWith('.completed')) generationStatus.value = '正在保存最终图片'
+			}, controller.signal)
+		} else {
+			const submission = await submitImageGeneration(key.key, request, controller.signal)
+			result = submission.mode === 'sync' ? submission.result : (await pollTask(key.key, submission.task.id, controller.signal)).result
+		}
+	}
     const urls = imageResultURLs(result)
     if (urls.length === 0) throw new Error(t('imageGeneration.messages.noImage'))
+	if (currentTaskId.value) {
+		const persisted = await getImageHistory(recordId)
+		if (persisted?.status === 'completed') {
+			history.value = [persisted, ...history.value.filter(item => item.id !== persisted.id)]
+			selectRecordBranch(persisted)
+			await deleteImageSessionDraft(sessionId)
+			appStore.showSuccess(t('imageGeneration.messages.generated'))
+			return
+		}
+		throw new Error(persisted?.error || '异步任务已完成，但会话图片尚未保存')
+	}
     const now = Date.now()
     const record: ImageGenerationHistoryRecord = {
-      id: crypto.randomUUID(),
+      id: recordId,
       sessionId,
       taskId: currentTaskId.value,
       prompt: currentPrompt,
@@ -681,7 +794,7 @@ async function generate() {
       images: await cacheGeneratedImages(urls, result?.data?.map(item => item.revised_prompt)),
     }
     await saveImageHistory(record)
-    history.value = [record, ...history.value]
+		history.value = [record, ...history.value.filter(item => item.id !== record.id)]
     selectRecordBranch(record)
     await deleteImageSessionDraft(sessionId)
     appStore.showSuccess(t('imageGeneration.messages.generated'))
@@ -689,7 +802,7 @@ async function generate() {
     const cancelled = isAbortError(error)
     const now = Date.now()
     const record: ImageGenerationHistoryRecord = {
-      id: crypto.randomUUID(), sessionId, taskId: currentTaskId.value, prompt: currentPrompt,
+      id: recordId, sessionId, taskId: currentTaskId.value, prompt: currentPrompt,
       model: model.value, size: requestSize, quality: requestQuality, outputCount: requestCount,
       parameters: requestParameters, apiKeyId: key.id, apiKeyName: key.name, createdAt: startedAt,
       completedAt: now, durationMs: now - startedAt, status: cancelled ? 'cancelled' : 'failed',
@@ -698,8 +811,10 @@ async function generate() {
       templateTitle: currentTemplate.value?.title, templatePrompt: currentTemplate.value?.prompt,
       referenceImages: currentReferences.map(referenceToHistory), maskImage: snapshotReferenceImage(currentMask), images: [],
     }
-    await saveImageHistory(record)
-    history.value = [record, ...history.value]
+		if (!(cancelled && currentTaskId.value && !cancelRequested.value)) {
+			await saveImageHistory(record)
+			history.value = [record, ...history.value.filter(item => item.id !== record.id)]
+		}
     selectRecordBranch(record)
     if (!prompt.value.trim()) prompt.value = currentPrompt
     referenceDrafts.value = currentReferences
@@ -723,6 +838,7 @@ async function generate() {
 }
 
 async function cancelGeneration() {
+	cancelRequested.value = true
   if (currentTaskId.value && selectedKey.value) {
     generationStatus.value = '正在取消任务'
     await cancelImageGenerationTask(selectedKey.value.key, currentTaskId.value).catch(() => undefined)
@@ -1237,11 +1353,12 @@ onMounted(async () => {
   sessionStorage.removeItem('image-generation-draft-quality')
   sessionStorage.removeItem('image-generation-draft-count')
   try {
-    await loadLocalState()
+    await loadServerState()
   } catch (error) {
     appStore.showError(errorMessage(error, t('imageGeneration.messages.historyLoadFailed')))
   }
   await loadKeys()
+	resumePendingTasks()
 	if (draftPrompt) prompt.value = draftPrompt
   if (promptTemplates.value.some(item => item.id === draftTemplateId)) selectedTemplateId.value = draftTemplateId
   await scrollToBottom()
@@ -1249,6 +1366,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   pollController?.abort()
+	pendingControllers.forEach(controller => controller.abort())
 	stopElapsedTimer()
 	if (draftTimer !== null) window.clearTimeout(draftTimer)
 	saveDraftInBackground(activeSessionId.value)

@@ -116,10 +116,20 @@ async function sendImageGenerationRequest(
   return response
 }
 
-function isAsyncImageTasksDisabled(error: unknown): boolean {
+export function isAsyncImageTasksDisabled(error: unknown): boolean {
   const gatewayError = error as Error & { status?: number }
   return gatewayError?.status === 404
     && gatewayError.message.toLowerCase().includes('async image tasks are not enabled')
+}
+
+export async function submitAsyncImageGeneration(apiKey: string, input: SubmitImageGenerationInput, sessionId: string, recordId: string, signal?: AbortSignal): Promise<ImageGenerationTask> {
+	const request = buildImageGenerationRequest(apiKey, input, true)
+	const headers = new Headers(request.headers)
+	headers.set('X-Image-Session-ID', sessionId)
+	headers.set('X-Image-Record-ID', recordId)
+	const response = await fetch(buildGatewayUrl(request.path), { method: 'POST', headers, body: request.body, signal })
+	if (!response.ok) throw await parseGatewayError(response)
+	return response.json()
 }
 
 export async function submitImageGeneration(

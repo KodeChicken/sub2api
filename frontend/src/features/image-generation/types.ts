@@ -28,6 +28,7 @@ export interface ImageGenerationReferenceImage {
   mimeType: string
   blob: Blob
 	sourceRecordId?: string
+	assetUrl?: string
 }
 
 export interface ImageGenerationResult {
@@ -54,7 +55,7 @@ export interface ImageGenerationHistoryRecord {
   createdAt: number
 	completedAt?: number
 	durationMs?: number
-	status?: 'completed' | 'failed' | 'cancelled'
+	status?: 'processing' | 'completed' | 'failed' | 'cancelled'
 	error?: string
 	parentId?: string
 	templateId?: string
@@ -66,6 +67,7 @@ export interface ImageGenerationHistoryRecord {
     name: string
     mimeType: string
     blob: Blob
+		assetUrl?: string
   }
   images: Array<{
     url: string

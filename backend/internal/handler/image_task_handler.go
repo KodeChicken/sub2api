@@ -24,6 +24,7 @@ import (
 type AsyncImageHandler struct {
 	tasks    *service.ImageTaskService
 	openAI   *OpenAIGatewayHandler
+	sessions *ImageSessionHandler
 	execute  func(platform string, c *gin.Context)
 	activeMu sync.Mutex
 	active   map[string]context.CancelFunc
@@ -110,6 +111,14 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		imageTaskError(c, err)
 		return
 	}
+	if h.sessions != nil && c.GetHeader("X-Image-Session-ID") != "" {
+		if !validImageSessionID(c.GetHeader("X-Image-Session-ID")) || !validImageSessionID(c.GetHeader("X-Image-Record-ID")) || h.sessions.AttachTask(c.Request.Context(), apiKey.UserID, c.GetHeader("X-Image-Session-ID"), c.GetHeader("X-Image-Record-ID"), task.ID) != nil {
+			cancel()
+			_ = h.tasks.Fail(context.Background(), task.ID, http.StatusBadRequest, imageTaskErrorPayload("invalid_request_error", "image session record not found"))
+			imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", "image session record not found")
+			return
+		}
+	}
 
 	pollURL := imageTaskPollURL(c.Request.URL.Path, task.ID)
 	c.Header("Cache-Control", "no-store")
@@ -146,6 +155,11 @@ func (h *AsyncImageHandler) Cancel(c *gin.Context) {
 		return
 	}
 	h.cancelActive(task.ID)
+	if h.sessions != nil {
+		if err := h.sessions.FailTask(context.Background(), task.ID, imageTaskErrorPayload("cancelled_error", "image generation task was cancelled")); err != nil {
+			logger.L().Error("image_session.cancel_store_failed", zap.String("task_id", task.ID), zap.Error(err))
+		}
+	}
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, task)
 }
@@ -257,7 +271,7 @@ func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, r
 
 	h.execute(platform, taskCtx)
 	body := bytes.TrimSpace(recorder.Body.Bytes())
-	if err := taskCtx.Request.Context().Err(); err != nil && len(body) == 0 {
+	if err := taskCtx.Request.Context().Err(); err != nil {
 		h.failTask(taskID, http.StatusGatewayTimeout, imageTaskErrorPayload("timeout_error", "image generation task timed out"))
 		return
 	}
@@ -270,8 +284,16 @@ func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, r
 			h.failTask(taskID, http.StatusBadGateway, imageTaskErrorPayload("api_error", "upstream returned an invalid image response"))
 			return
 		}
+		if h.sessions != nil {
+			if err := h.sessions.CompleteTask(context.Background(), taskID, json.RawMessage(body)); err != nil {
+				logger.L().Error("image_session.complete_store_failed", zap.String("task_id", taskID), zap.Error(err))
+				h.failTask(taskID, http.StatusInternalServerError, imageTaskErrorPayload("api_error", "failed to save image session result"))
+				return
+			}
+		}
 		if err := h.tasks.Complete(context.Background(), taskID, statusCode, json.RawMessage(body)); err != nil {
 			logger.L().Error("image_task.complete_store_failed", zap.String("task_id", taskID), zap.Error(err))
+			return
 		}
 		return
 	}
@@ -305,6 +327,11 @@ func (h *AsyncImageHandler) cancelActive(taskID string) {
 func (h *AsyncImageHandler) failTask(taskID string, statusCode int, taskErr json.RawMessage) {
 	if err := h.tasks.Fail(context.Background(), taskID, statusCode, taskErr); err != nil {
 		logger.L().Error("image_task.failure_store_failed", zap.String("task_id", taskID), zap.Error(err))
+	}
+	if h.sessions != nil {
+		if err := h.sessions.FailTask(context.Background(), taskID, taskErr); err != nil {
+			logger.L().Error("image_session.failure_store_failed", zap.String("task_id", taskID), zap.Error(err))
+		}
 	}
 }
 

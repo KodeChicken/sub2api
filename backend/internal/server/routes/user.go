@@ -73,6 +73,23 @@ func RegisterUserRoutes(
 		}
 
 		// API Key管理
+		imageSessions := authenticated.Group("/image-sessions")
+		{
+			imageSessions.GET("", h.ImageSession.List)
+			imageSessions.PUT("", h.ImageSession.Save)
+			imageSessions.DELETE("/:id", h.ImageSession.Delete)
+			imageSessions.PUT("/:id/draft", h.ImageSession.SaveDraft)
+			imageSessions.GET("/:id/draft", h.ImageSession.GetDraft)
+			imageSessions.DELETE("/:id/draft", h.ImageSession.DeleteDraft)
+			imageSessions.GET("/records", h.ImageSession.ListRecords)
+			imageSessions.GET("/records/:record", h.ImageSession.GetRecord)
+			imageSessions.PUT("/records/:record", h.ImageSession.SaveRecord)
+			imageSessions.DELETE("/records/:record", h.ImageSession.DeleteRecord)
+			imageSessions.POST("/:id/assets", h.ImageSession.UploadAsset)
+			imageSessions.GET("/assets/:asset", h.ImageSession.ReadAsset)
+		}
+
+		// API Key管理
 		keys := authenticated.Group("/keys")
 		{
 			keys.GET("", h.APIKey.List)
