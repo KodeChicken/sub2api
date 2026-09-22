@@ -19,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	"go.uber.org/zap"
 )
 
 type openAIResponsesImageResult struct {
@@ -1861,6 +1862,15 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesOAuth(
 		return nil, err
 	}
 	upstreamCtx = withOpenAIImagesSelfBuiltRequest(upstreamCtx)
+	if direct && parsed.IsEdits() {
+		logger.FromContext(c.Request.Context()).Info("openai.images.codex_edit_request",
+			zap.Int64("account_id", account.ID),
+			zap.String("model", upstreamModel),
+			zap.Bool("stream", parsed.Stream),
+			zap.String("requested_size", parsed.Size),
+			zap.String("upstream_size", gjson.GetBytes(responsesBody, "size").String()),
+		)
+	}
 	upstreamReq, err := s.buildUpstreamRequest(upstreamCtx, c, account, responsesBody, token, true, parsed.StickySessionSeed(), false)
 	if err != nil {
 		return nil, err

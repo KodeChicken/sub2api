@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/gin-gonic/gin"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	"go.uber.org/zap"
 )
 
 type openAIImagesForceResponsesContextKey struct{}
@@ -224,6 +226,16 @@ func (s *OpenAIGatewayService) handleCodexDirectImagesNonStreamingResponse(resp 
 	if err != nil {
 		return OpenAIUsage{}, 0, nil, err
 	}
+	if parsed.IsEdits() {
+		for i, item := range gjson.GetBytes(body, "data").Array() {
+			declaredSize := item.Get("size").String()
+			if declaredSize == "" {
+				declaredSize = gjson.GetBytes(body, "size").String()
+			}
+			logCodexEditDimensions(c, resp.Header.Get("x-request-id"), parsed.Size, i,
+				declaredSize, detectOpenAIImageResultSize(item.Get("b64_json").String()))
+		}
+	}
 	usage, _ := codexDirectImagesUsage(body)
 	if observer := upstreamResponseModelObserverFromContext(c); observer != nil {
 		observer.Observe(gjson.GetBytes(body, "model").String(), true)
@@ -266,4 +278,19 @@ func (s *OpenAIGatewayService) handleCodexDirectImagesNonStreamingResponse(resp 
 	}
 	c.Data(resp.StatusCode, contentType, body)
 	return usage, len(results), openAIResponsesImageResultSizes(results), nil
+}
+
+func logCodexEditDimensions(c *gin.Context, upstreamRequestID, requestedSize string, index int, declaredSize, actualSize string) {
+	fields := []zap.Field{
+		zap.String("upstream_request_id", upstreamRequestID),
+		zap.String("requested_size", requestedSize),
+		zap.Int("image_index", index),
+		zap.String("upstream_declared_size", declaredSize),
+		zap.String("actual_size", actualSize),
+	}
+	if requestedSize != "" && actualSize != "" && requestedSize != "auto" && requestedSize != actualSize {
+		logger.FromContext(c.Request.Context()).Warn("openai.images.codex_edit_size_mismatch", fields...)
+		return
+	}
+	logger.FromContext(c.Request.Context()).Info("openai.images.codex_edit_dimensions", fields...)
 }

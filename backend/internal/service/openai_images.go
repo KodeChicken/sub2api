@@ -27,6 +27,7 @@ import (
 	"github.com/imroc/req/v3"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
+	"go.uber.org/zap"
 )
 
 const (
@@ -1084,6 +1085,13 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 			return streamErr
 		}
 		if !seenSSEData || imageCounter.Count() == 0 {
+			if direct.IsEdits() {
+				logger.FromContext(c.Request.Context()).Warn("openai.images.codex_edit_incomplete",
+					zap.String("upstream_request_id", resp.Header.Get("x-request-id")),
+					zap.String("requested_size", direct.Size),
+					zap.Bool("seen_sse_data", seenSSEData),
+				)
+			}
 			return newOpenAIUpstreamStreamReadError(ErrOpenAIUpstreamStreamTruncated)
 		}
 		return nil
@@ -1097,6 +1105,10 @@ func (s *OpenAIGatewayService) handleOpenAIImagesStreamingResponse(
 		fallbackBody.Reset()
 		fallbackBytes = 0
 		if direct != nil && strings.HasSuffix(gjson.GetBytes(dataBytes, "type").String(), ".completed") {
+			if direct.IsEdits() {
+				logCodexEditDimensions(c, resp.Header.Get("x-request-id"), direct.Size, imageCounter.Count(),
+					gjson.GetBytes(dataBytes, "size").String(), detectOpenAIImageResultSize(gjson.GetBytes(dataBytes, "b64_json").String()))
+			}
 			if size := detectOpenAIImageResultSize(gjson.GetBytes(dataBytes, "b64_json").String()); size != "" {
 				dataBytes, _ = sjson.SetBytes(dataBytes, "size", size)
 			}

@@ -18,6 +18,12 @@ import { resolveRouteDocumentTitle } from './title'
  * Route definitions with lazy loading
  */
 const routes: RouteRecordRaw[] = [
+  ...(import.meta.env.DEV ? [{
+    path: '/dev/image-editor',
+    name: 'ImageEditorPreview',
+    component: () => import('@/features/image-generation/ImageEditorView.vue'),
+    meta: { requiresAuth: false, title: 'Image Editor Preview' }
+  }] : []),
   // ==================== Setup Routes ====================
   {
     path: '/setup',
@@ -899,7 +905,7 @@ router.beforeEach(async (to, _from, next) => {
       }
     }
     // Backend mode: block public pages for unauthenticated users (except login, key-usage, setup)
-    if (appStore.backendModeEnabled && !authStore.isAuthenticated) {
+    if (appStore.backendModeEnabled && !authStore.isAuthenticated && !(import.meta.env.DEV && to.path === '/dev/image-editor')) {
       const isAllowed = isBackendModePublicRouteAllowed(to.path, authStore.hasPendingAuthSession)
       if (!isAllowed) {
         next('/login')

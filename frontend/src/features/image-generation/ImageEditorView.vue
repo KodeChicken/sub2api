@@ -1,30 +1,43 @@
 <template>
-  <div class="flex min-h-[calc(100vh-13rem)] flex-col overflow-hidden rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-900">
-    <header class="flex flex-wrap items-center gap-2 border-b border-gray-200 px-3 py-2 dark:border-dark-700">
-      <RouterLink to="/image-generation/history" class="btn btn-secondary btn-sm">
-        <Icon name="arrowLeft" size="sm" class="mr-1.5" />返回
+  <div class="image-editor-shell" :class="{ 'image-editor-shell--preview': previewMode }">
+    <header class="image-editor-header">
+      <RouterLink v-if="!previewMode" to="/image-generation/history" class="editor-icon-button" title="返回历史作品" aria-label="返回历史作品">
+        <Icon name="arrowLeft" size="sm" />
       </RouterLink>
-      <span class="min-w-0 flex-1 truncate text-sm font-medium text-gray-900 dark:text-white">{{ record?.prompt || '图片编辑' }}</span>
-      <button class="btn btn-secondary btn-sm" :disabled="!canUndo" @click="undo">撤销</button>
-      <button class="btn btn-secondary btn-sm" :disabled="!canRedo" @click="redo">重做</button>
-      <button class="btn btn-secondary btn-sm" @click="reset">重置</button>
-      <button class="btn btn-primary btn-sm" :disabled="exporting" @click="download">
-        <Icon name="download" size="sm" class="mr-1.5" />导出
-      </button>
+      <div class="min-w-0 flex-1">
+        <h2 class="truncate text-sm font-semibold text-gray-900 dark:text-white">{{ record?.prompt || '图片编辑' }}</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400">{{ sourceWidth }} × {{ sourceHeight }} 原图 · {{ editorDocument.canvas.width }} × {{ editorDocument.canvas.height }} 画布</p>
+      </div>
+      <div class="flex items-center gap-1">
+        <button class="editor-icon-button" title="撤销" aria-label="撤销" :disabled="!canUndo" @click="undo"><Icon name="arrowLeft" size="sm" /></button>
+        <button class="editor-icon-button" title="重做" aria-label="重做" :disabled="!canRedo" @click="redo"><Icon name="arrowRight" size="sm" /></button>
+        <button class="editor-icon-button" title="重置" aria-label="重置" @click="reset"><Icon name="refresh" size="sm" /></button>
+      </div>
+      <button class="btn btn-primary btn-sm" :disabled="exporting" @click="download"><Icon name="download" size="sm" class="mr-1.5" />导出</button>
     </header>
 
     <div v-if="loading" class="grid min-h-[560px] place-items-center"><LoadingSpinner /></div>
     <div v-else-if="!record || !sourceBlob" class="grid min-h-[560px] place-items-center text-sm text-gray-500">图片记录不存在或原图缓存已失效</div>
-    <div v-else class="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <ImageEditorCanvas ref="canvasRef" :document="editorDocument" :image-url="sourceURL" @commit="commit" @zoom="zoom = $event" />
-      <aside class="max-h-[calc(100vh-16rem)] space-y-5 overflow-y-auto border-t border-gray-200 p-4 dark:border-dark-700 lg:border-l lg:border-t-0">
-        <section>
-          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">画布</h2>
+    <div v-else class="image-editor-body">
+      <nav class="image-editor-tools" aria-label="编辑工具">
+        <button v-for="item in editorTools" :key="item.id" type="button" :title="item.label" :aria-label="item.label" :aria-pressed="activeTool === item.id" :class="{ active: activeTool === item.id }" @click="activeTool = item.id">
+          <Icon :name="item.icon" size="sm" /><span>{{ item.label }}</span>
+        </button>
+      </nav>
+      <div class="image-editor-stage">
+        <ImageEditorCanvas ref="canvasRef" :document="editorDocument" :image-url="sourceURL" @commit="commit" @zoom="zoom = $event" />
+        <div class="image-editor-stage-status">{{ editorDocument.canvas.width }} × {{ editorDocument.canvas.height }} <span>·</span> {{ zoom }}%</div>
+      </div>
+      <aside class="image-editor-inspector">
+        <section v-if="activeTool === 'canvas'">
+          <h2 class="editor-section-title">画布尺寸</h2>
           <div class="mt-3 grid grid-cols-2 gap-2">
             <label class="input-label">宽度<input v-model.number="canvasWidth" type="number" min="16" max="8192" class="input mt-1" /></label>
             <label class="input-label">高度<input v-model.number="canvasHeight" type="number" min="16" max="8192" class="input mt-1" /></label>
           </div>
           <button class="btn btn-secondary btn-sm mt-2 w-full" @click="applyCanvasSize">应用画布尺寸</button>
+          <div class="editor-section-divider" />
+          <h2 class="editor-section-title">背景</h2>
           <label class="input-label mt-3 block">背景
             <Select v-model="background" class="mt-1" :options="backgroundOptions" @change="applyBackground" />
           </label>
@@ -36,8 +49,8 @@
           </label>
         </section>
 
-        <section class="border-t border-gray-200 pt-4 dark:border-dark-700">
-          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">图片变换</h2>
+        <section v-if="activeTool === 'transform'">
+          <h2 class="editor-section-title">图片变换</h2>
           <div class="mt-3 grid grid-cols-2 gap-2">
             <button class="btn btn-secondary btn-sm" @click="fit('contain')">完整适应</button>
             <button class="btn btn-secondary btn-sm" @click="fit('cover')">铺满画布</button>
@@ -48,8 +61,8 @@
           </div>
         </section>
 
-        <section class="border-t border-gray-200 pt-4 dark:border-dark-700">
-          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">裁剪</h2>
+        <section v-if="activeTool === 'crop'">
+          <h2 class="editor-section-title">原图裁剪</h2>
           <div class="mt-3 grid grid-cols-2 gap-2">
             <label class="input-label">X<input v-model.number="crop.x" type="number" min="0" class="input mt-1" /></label>
             <label class="input-label">Y<input v-model.number="crop.y" type="number" min="0" class="input mt-1" /></label>
@@ -62,8 +75,8 @@
           <button class="btn btn-secondary btn-sm mt-2 w-full" @click="applyCrop">应用裁剪</button>
         </section>
 
-        <section class="border-t border-gray-200 pt-4 dark:border-dark-700">
-          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">导出设置</h2>
+        <section v-if="activeTool === 'export'">
+          <h2 class="editor-section-title">导出设置</h2>
           <div class="mt-3 grid grid-cols-2 gap-2">
             <label class="input-label">格式<Select v-model="exportFormat" class="mt-1" :options="exportFormatOptions" /></label>
             <label class="input-label">倍率<Select v-model="exportScale" class="mt-1" :options="exportScaleOptions" /></label>
@@ -74,13 +87,10 @@
           <p class="mt-2 text-xs text-gray-500">导出尺寸 {{ editorDocument.canvas.width * exportScale }} × {{ editorDocument.canvas.height * exportScale }}</p>
         </section>
 
-        <section class="border-t border-gray-200 pt-4 dark:border-dark-700">
-          <h2 class="text-sm font-semibold text-gray-900 dark:text-white">AI 扩图</h2>
-          <p class="mt-1 text-xs leading-5 text-gray-500">扩大画布后，将透明区域和原图作为参考图带回生图工作台。</p>
-          <button class="btn btn-primary btn-sm mt-3 w-full" :disabled="exporting" @click="sendToOutpaint">发送到生图工作台</button>
+        <section v-if="activeTool === 'outpaint'">
+          <h2 class="editor-section-title">AI 扩图</h2>
+          <button class="btn btn-primary btn-sm mt-3 w-full" :disabled="exporting || previewMode" @click="sendToOutpaint">发送到生图工作台</button>
         </section>
-
-        <p class="border-t border-gray-200 pt-3 text-xs text-gray-500 dark:border-dark-700">画布 {{ editorDocument.canvas.width }} × {{ editorDocument.canvas.height }} · 缩放 {{ zoom }}%</p>
       </aside>
     </div>
   </div>
@@ -122,6 +132,15 @@ const zoom = ref(100)
 const exportFormat = ref<'png' | 'jpeg' | 'webp'>('png')
 const exportScale = ref<1 | 2 | 3>(1)
 const exportQuality = ref(95)
+const previewMode = import.meta.env.DEV && route.path === '/dev/image-editor'
+const activeTool = ref<'canvas' | 'transform' | 'crop' | 'export' | 'outpaint'>('canvas')
+const editorTools = [
+  { id: 'canvas', label: '画布', icon: 'grid' },
+  { id: 'transform', label: '变换', icon: 'arrowsUpDown' },
+  { id: 'crop', label: '裁剪', icon: 'edit' },
+  { id: 'export', label: '导出', icon: 'download' },
+  { id: 'outpaint', label: '扩图', icon: 'sparkles' },
+] as const
 const canvasRef = ref<InstanceType<typeof ImageEditorCanvas> | null>(null)
 const canUndo = computed(() => past.value.length > 0)
 const canRedo = computed(() => future.value.length > 0)
@@ -156,6 +175,20 @@ onBeforeUnmount(() => { if (sourceURL.value) URL.revokeObjectURL(sourceURL.value
 
 async function load() {
   try {
+    if (previewMode) {
+      const response = await fetch('/dev-assets/image-editor.webp')
+      if (!response.ok) throw new Error('预览图片不可用')
+      const blob = await response.blob()
+      sourceBlob.value = blob
+      sourceURL.value = URL.createObjectURL(blob)
+      record.value = { id: 'preview', sessionId: 'preview', taskId: 'preview', prompt: '图片编辑预览', model: 'preview', size: '1024x1024', quality: 'auto', outputCount: 1, apiKeyId: 0, apiKeyName: '', createdAt: Date.now(), images: [] }
+      sourceWidth.value = await measure(sourceURL.value, 'width')
+      sourceHeight.value = await measure(sourceURL.value, 'height')
+      editorDocument.value = createEditorDocument(sourceWidth.value, sourceHeight.value)
+      initialDocument.value = cloneEditorDocument(editorDocument.value)
+      syncControls()
+      return
+    }
     const item = await getImageHistory(String(route.params.recordId || ''))
     const index = Math.max(0, Number(route.params.index || 0))
     const image = item?.images[index]
@@ -347,3 +380,44 @@ async function sendToOutpaint() {
 
 function validEdge(value: number) { return Number.isFinite(value) && value >= 16 && value <= 8192 }
 </script>
+
+<style scoped>
+.image-editor-shell { display: flex; flex-direction: column; height: min(900px, calc(100dvh - 12rem)); min-height: 580px; min-width: 0; overflow: hidden; border: 1px solid #e5e7eb; background: #fff; }
+.image-editor-shell--preview { height: 100dvh; min-height: 0; }
+.image-editor-header { display: flex; min-height: 58px; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+.editor-icon-button { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border: 1px solid transparent; border-radius: 6px; color: #525b68; }
+.editor-icon-button:hover:not(:disabled) { border-color: #d1d5db; background: #f3f4f6; }
+.editor-icon-button:disabled { opacity: .35; cursor: not-allowed; }
+.image-editor-body { display: grid; min-height: 0; flex: 1; grid-template-columns: 72px minmax(0, 1fr) 310px; }
+.image-editor-tools { display: flex; flex-direction: column; gap: 4px; padding: 10px 6px; border-right: 1px solid #e5e7eb; background: #f8fafb; }
+.image-editor-tools button { display: flex; min-height: 56px; align-items: center; justify-content: center; flex-direction: column; gap: 5px; border-radius: 6px; color: #64748b; font-size: 11px; }
+.image-editor-tools button:hover { background: #e7f3f1; color: #087f74; }
+.image-editor-tools button.active { background: #d9f1ec; color: #087f74; font-weight: 600; }
+.image-editor-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #e8edf1; }
+.image-editor-stage-status { position: absolute; right: 14px; bottom: 12px; padding: 5px 9px; border: 1px solid #d9e0e6; border-radius: 4px; background: #fff; color: #475569; font-size: 11px; pointer-events: none; }
+.image-editor-stage-status span { padding: 0 5px; color: #9ca3af; }
+.image-editor-inspector { min-width: 0; overflow-y: auto; padding: 20px 18px; border-left: 1px solid #e5e7eb; background: #fff; }
+.editor-section-title { color: #1f2937; font-size: 14px; font-weight: 600; }
+.editor-section-divider { height: 1px; margin: 22px 0; background: #e5e7eb; }
+@media (max-width: 900px) {
+  .image-editor-body { grid-template-columns: 60px minmax(0, 1fr) 265px; }
+  .image-editor-tools { padding-inline: 4px; }
+  .image-editor-inspector { padding: 16px 12px; }
+}
+@media (max-width: 700px) {
+  .image-editor-shell { height: auto; min-height: calc(100dvh - 8rem); overflow: visible; }
+  .image-editor-shell--preview { min-height: 100dvh; }
+  .image-editor-header { flex-wrap: wrap; gap: 6px; }
+  .image-editor-header > div:first-of-type { flex-basis: calc(100% - 54px); }
+  .image-editor-body { display: flex; flex-direction: column; }
+  .image-editor-tools { order: 0; flex-direction: row; overflow-x: auto; padding: 5px; border-right: 0; border-bottom: 1px solid #e5e7eb; }
+  .image-editor-tools button { min-width: 62px; min-height: 50px; }
+  .image-editor-stage { order: 1; height: min(58dvh, 520px); min-height: 330px; }
+  .image-editor-inspector { order: 2; overflow: visible; min-height: 260px; border-left: 0; border-top: 1px solid #e5e7eb; }
+}
+:global(.dark) .image-editor-shell, :global(.dark) .image-editor-header, :global(.dark) .image-editor-inspector { border-color: #374151; background: #1f2937; }
+:global(.dark) .image-editor-tools { border-color: #374151; background: #18212b; }
+:global(.dark) .image-editor-stage { background: #111827; }
+:global(.dark) .editor-section-title { color: #f9fafb; }
+:global(.dark) .image-editor-stage-status { border-color: #374151; background: #1f2937; color: #e5e7eb; }
+</style>
