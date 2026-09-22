@@ -9,6 +9,9 @@ const mockListSystemLogs = vi.fn()
 const mockCleanupSystemLogs = vi.fn()
 const mockGetSystemLogSinkHealth = vi.fn()
 const mockGetRuntimeLogConfig = vi.fn()
+const mockRouteQuery: Record<string, string> = {}
+
+vi.mock('vue-router', () => ({ useRoute: () => ({ query: mockRouteQuery }) }))
 
 vi.mock('@/api/admin/ops', () => ({
   opsAPI: {
@@ -74,6 +77,7 @@ const sinkHealth = {
 describe('OpsSystemLogTable host support', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete mockRouteQuery.request_id
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     mockListSystemLogs.mockResolvedValue({
       items: [
@@ -93,6 +97,14 @@ describe('OpsSystemLogTable host support', () => {
     mockCleanupSystemLogs.mockResolvedValue({ deleted: 1 })
     mockGetSystemLogSinkHealth.mockResolvedValue(sinkHealth)
     mockGetRuntimeLogConfig.mockResolvedValue(runtimeConfig)
+  })
+
+  it('opens system logs filtered by the image request ID', async () => {
+    mockRouteQuery.request_id = 'image-request-123'
+    const wrapper = mount(OpsSystemLogTable, { global: { stubs: { Select: SelectStub, Pagination: PaginationStub } } })
+    await flushPromises()
+    expect(mockListSystemLogs).toHaveBeenCalledWith(expect.objectContaining({ request_id: 'image-request-123', time_range: '30d' }))
+    wrapper.unmount()
   })
 
   it('renders the host and sends it with list and cleanup filters', async () => {

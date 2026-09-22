@@ -31,6 +31,24 @@ func imageSessionTestRouter(h *ImageSessionHandler, userID int64) *gin.Engine {
 	return r
 }
 
+func TestImageSessionAttachTaskStoresRequestID(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	mock.ExpectExec("UPDATE image_generation_records").
+		WithArgs("record-1", "session-1", int64(42), "task-1", "request-1").
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	h := NewImageSessionHandler(db, &config.Config{})
+	if err := h.AttachTask(context.Background(), 42, "session-1", "record-1", "task-1", "request-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestImageSessionUploadRejectsNonImage(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

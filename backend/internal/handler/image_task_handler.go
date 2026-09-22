@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	pkghttputil "github.com/Wei-Shaw/sub2api/internal/pkg/httputil"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
@@ -111,8 +112,9 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		imageTaskError(c, err)
 		return
 	}
+	taskCtx.Writer.Header().Set("X-Request-ID", task.RequestID)
 	if h.sessions != nil && c.GetHeader("X-Image-Session-ID") != "" {
-		if !validImageSessionID(c.GetHeader("X-Image-Session-ID")) || !validImageSessionID(c.GetHeader("X-Image-Record-ID")) || h.sessions.AttachTask(c.Request.Context(), apiKey.UserID, c.GetHeader("X-Image-Session-ID"), c.GetHeader("X-Image-Record-ID"), task.ID) != nil {
+		if !validImageSessionID(c.GetHeader("X-Image-Session-ID")) || !validImageSessionID(c.GetHeader("X-Image-Record-ID")) || h.sessions.AttachTask(c.Request.Context(), apiKey.UserID, c.GetHeader("X-Image-Session-ID"), c.GetHeader("X-Image-Record-ID"), task.ID, task.RequestID) != nil {
 			cancel()
 			_ = h.tasks.Fail(context.Background(), task.ID, http.StatusBadRequest, imageTaskErrorPayload("invalid_request_error", "image session record not found"))
 			imageTaskJSONError(c, http.StatusBadRequest, "invalid_request_error", "image session record not found")
@@ -126,6 +128,7 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 	c.Header("Retry-After", "3")
 	c.JSON(http.StatusAccepted, gin.H{
 		"id":         task.ID,
+		"request_id": task.RequestID,
 		"task_id":    task.TaskID,
 		"object":     task.Object,
 		"status":     task.Status,
@@ -265,14 +268,18 @@ func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, r
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			logger.L().Error("image_task.execution_panicked", zap.String("task_id", taskID), zap.Any("panic", recovered))
-			h.failTask(taskID, http.StatusInternalServerError, imageTaskErrorPayload("api_error", "image generation task panicked"))
+			taskErr := imageTaskErrorPayload("api_error", "image generation task panicked")
+			h.logBackgroundFailure(taskCtx, http.StatusInternalServerError, taskErr)
+			h.failTask(taskID, http.StatusInternalServerError, taskErr)
 		}
 	}()
 
 	h.execute(platform, taskCtx)
 	body := bytes.TrimSpace(recorder.Body.Bytes())
 	if err := taskCtx.Request.Context().Err(); err != nil {
-		h.failTask(taskID, http.StatusGatewayTimeout, imageTaskErrorPayload("timeout_error", "image generation task timed out"))
+		taskErr := imageTaskErrorPayload("timeout_error", "image generation task timed out")
+		h.logBackgroundFailure(taskCtx, http.StatusGatewayTimeout, taskErr)
+		h.failTask(taskID, http.StatusGatewayTimeout, taskErr)
 		return
 	}
 	statusCode := recorder.Code
@@ -297,7 +304,40 @@ func (h *AsyncImageHandler) run(taskID, platform string, taskCtx *gin.Context, r
 		}
 		return
 	}
+	h.logBackgroundFailure(taskCtx, statusCode, body)
 	h.failTask(taskID, statusCode, extractImageTaskError(body))
+}
+
+func (h *AsyncImageHandler) logBackgroundFailure(c *gin.Context, status int, body []byte) {
+	if h.openAI == nil || h.openAI.opsService == nil || !h.openAI.opsService.IsMonitoringEnabled(c.Request.Context()) {
+		return
+	}
+	parsed := parseOpsErrorResponse(body)
+	errorType := normalizeOpsErrorType(parsed.ErrorType, parsed.Code)
+	phase, limited, owner, source := classifyOpsErrorLog(c, errorType, parsed.Message, parsed.Code, status)
+	requestID, _ := c.Request.Context().Value(ctxkey.RequestID).(string)
+	entry := &service.OpsInsertErrorLogInput{
+		RequestID: requestID, RequestPath: c.Request.URL.Path,
+		Platform:   guessPlatformFromPath(c.Request.URL.Path),
+		StatusCode: status, ErrorType: errorType, ErrorPhase: phase,
+		ErrorOwner: owner, ErrorSource: source, IsBusinessLimited: limited,
+		Severity:     classifyOpsSeverity(errorType, status),
+		ErrorMessage: parsed.Message, ErrorBody: sanitizeOpsSSEDataForPersistence(body),
+		CreatedAt: time.Now(),
+	}
+	if apiKey := getOpsAPIKey(c); apiKey != nil {
+		entry.UserID = &apiKey.UserID
+		entry.APIKeyID = &apiKey.ID
+		entry.GroupID = apiKey.GroupID
+		if apiKey.Group != nil {
+			entry.Platform = apiKey.Group.Platform
+		}
+	}
+	if model, ok := c.Get(opsModelKey); ok {
+		entry.Model, _ = model.(string)
+	}
+	applyOpsUpstreamFieldsFromContext(c, entry)
+	enqueueOpsErrorLog(h.openAI.opsService, entry)
 }
 
 func (h *AsyncImageHandler) registerActive(taskID string, cancel context.CancelFunc) {

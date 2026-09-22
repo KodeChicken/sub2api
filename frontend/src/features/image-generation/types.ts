@@ -6,6 +6,7 @@ export interface ImageGenerationModel {
 
 export interface ImageGenerationTask {
   id: string
+  request_id?: string
   task_id?: string
   status: 'processing' | 'completed' | 'failed' | string
   result?: ImageGenerationResult
@@ -44,6 +45,7 @@ export interface ImageGenerationHistoryRecord {
   id: string
   sessionId: string
   taskId: string
+  requestId?: string
   prompt: string
   model: string
   size: string

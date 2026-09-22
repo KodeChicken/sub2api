@@ -38,6 +38,7 @@ vi.mock('@/api', () => ({
 
 vi.mock('@/stores', () => ({
   useAppStore: () => ({ showError: mocks.showError, showSuccess: mocks.showSuccess }),
+  useAuthStore: () => ({ isAdmin: false }),
 }))
 
 vi.mock('./api', () => ({
@@ -218,6 +219,7 @@ describe('ImageGenerationView clipboard images', () => {
     expect(wrapper.get('[data-testid="user-message"]').classes()).toEqual(expect.arrayContaining([
       'w-fit', 'max-w-full', 'bg-gray-100', 'text-gray-900', 'dark:bg-dark-800', 'dark:text-gray-100',
     ]))
+    expect(wrapper.findAll('[data-testid="user-message"]')).toHaveLength(1)
 
     finishGeneration?.({ mode: 'sync', result: { data: [{ url: 'result.png' }] } })
     await flushPromises()
@@ -229,6 +231,32 @@ describe('ImageGenerationView clipboard images', () => {
       prompt: '生成一张夏日海边宣传海报',
       referenceImages: [expect.objectContaining({ name: 'reference.png', blob: file })],
     }))
+  })
+
+  it('allows a new session during generation and keeps failure in the original session', async () => {
+    mocks.loadKeys.mockResolvedValue({ items: [{ id: 1, name: 'Image key', key: 'sk-test', status: 'active', group: { name: 'Default', platform: 'openai', allow_image_generation: true } }] })
+    mocks.listModels.mockResolvedValue([{ id: 'gpt-image-1' }])
+    let failGeneration: ((error: Error) => void) | undefined
+    mocks.submitGeneration.mockReturnValue(new Promise((_resolve, reject) => { failGeneration = reject }))
+    const wrapper = mount(ImageGenerationView, { global: { stubs: { Icon: true, RouterLink: true } } })
+    await flushPromises()
+    await wrapper.get('textarea').setValue('Original prompt')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(wrapper.findAll('[data-testid="user-message"]')).toHaveLength(1)
+
+    const { createImageSession } = await import('./history')
+    vi.mocked(createImageSession).mockReturnValueOnce({ id: 'session-2', title: 'New session', createdAt: 2, updatedAt: 2 })
+    await wrapper.get('aside button[title="imageGeneration.sessions.new"]').trigger('click')
+    await flushPromises()
+    expect(mocks.saveSessions).toHaveBeenCalledWith([expect.objectContaining({ id: 'session-1', title: 'Original prompt' })])
+    await wrapper.get('textarea').setValue('New session draft')
+    failGeneration?.(new Error('upstream failed'))
+    await flushPromises()
+    expect(wrapper.get<HTMLTextAreaElement>('textarea').element.value).toBe('New session draft')
+    expect(wrapper.findAll('[data-testid="user-message"]')).toHaveLength(0)
+    expect(mocks.saveHistory).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-1', status: 'failed' }))
+    wrapper.unmount()
   })
 
   it('sends with Enter and keeps Shift+Enter for line breaks', async () => {

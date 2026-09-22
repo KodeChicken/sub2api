@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/google/uuid"
@@ -34,6 +35,7 @@ var (
 // request. Ownership fields are intentionally omitted from the public view.
 type ImageTaskRecord struct {
 	ID          string          `json:"id"`
+	RequestID   string          `json:"request_id,omitempty"`
 	UserID      int64           `json:"user_id"`
 	APIKeyID    int64           `json:"api_key_id"`
 	Status      string          `json:"status"`
@@ -48,6 +50,7 @@ type ImageTaskRecord struct {
 // ImageTask is the API-safe task representation returned to callers.
 type ImageTask struct {
 	ID          string          `json:"id"`
+	RequestID   string          `json:"request_id,omitempty"`
 	TaskID      string          `json:"task_id"`
 	Object      string          `json:"object"`
 	Status      string          `json:"status"`
@@ -164,6 +167,7 @@ func (s *ImageTaskService) Create(ctx context.Context, owner ImageTaskOwner) (*I
 		CreatedAt: now.Unix(),
 		ExpiresAt: now.Add(s.ttl).Unix(),
 	}
+	task.RequestID, _ = ctx.Value(ctxkey.RequestID).(string)
 	if err := s.store.Save(ctx, task, s.ttl); err != nil {
 		return nil, ErrImageTaskUnavailable.WithCause(err)
 	}
@@ -276,6 +280,7 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 	}
 	return &ImageTask{
 		ID:          task.ID,
+		RequestID:   task.RequestID,
 		TaskID:      task.ID,
 		Object:      "image.generation.task",
 		Status:      task.Status,

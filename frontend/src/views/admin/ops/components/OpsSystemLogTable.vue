@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useMediaQuery } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { opsAPI, type OpsRuntimeLogConfig, type OpsSystemLog, type OpsSystemLogSinkHealth } from '@/api/admin/ops'
 import Pagination from '@/components/common/Pagination.vue'
 import Select from '@/components/common/Select.vue'
@@ -9,6 +10,7 @@ import { useAppStore } from '@/stores'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
 const appStore = useAppStore()
+const route = useRoute()
 const { t } = useI18n()
 
 // 与 DataTable 一致：< 768px 切换为卡片视图，避免宽表在移动端被截断。
@@ -378,6 +380,10 @@ const hasData = computed(() => logs.value.length > 0)
 onMounted(async () => {
   if (props.platformFilter) {
     filters.platform = props.platformFilter
+  }
+  if (typeof route.query.request_id === 'string') {
+    filters.request_id = route.query.request_id
+    filters.time_range = '30d'
   }
   await Promise.all([fetchLogs(), fetchHealth(), loadRuntimeConfig()])
 })

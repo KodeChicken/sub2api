@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,7 +45,8 @@ func TestImageTaskServiceLifecycleAndOwnership(t *testing.T) {
 	svc := NewImageTaskServiceWithOptions(store, time.Hour, 10*time.Minute)
 	owner := ImageTaskOwner{UserID: 7, APIKeyID: 9}
 
-	created, err := svc.Create(context.Background(), owner)
+	ctx := context.WithValue(context.Background(), ctxkey.RequestID, "image-request-123")
+	created, err := svc.Create(ctx, owner)
 	require.NoError(t, err)
 	require.Equal(t, ImageTaskStatusProcessing, created.Status)
 	require.Equal(t, created.ID, created.TaskID)
@@ -52,6 +54,7 @@ func TestImageTaskServiceLifecycleAndOwnership(t *testing.T) {
 	require.Equal(t, time.Hour, store.ttl)
 	require.Equal(t, owner.UserID, store.task.UserID)
 	require.Equal(t, owner.APIKeyID, store.task.APIKeyID)
+	require.Equal(t, "image-request-123", created.RequestID)
 
 	_, err = svc.Get(context.Background(), ImageTaskOwner{UserID: 7, APIKeyID: 10}, created.ID)
 	require.ErrorIs(t, err, ErrImageTaskNotFound)
@@ -62,6 +65,7 @@ func TestImageTaskServiceLifecycleAndOwnership(t *testing.T) {
 	completed, err := svc.Get(context.Background(), owner, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, ImageTaskStatusCompleted, completed.Status)
+	require.Equal(t, created.RequestID, completed.RequestID)
 	require.Equal(t, http.StatusOK, completed.HTTPStatus)
 	require.Equal(t, "https://example.test/image.png", completed.ImageURL)
 	require.JSONEq(t, string(result), string(completed.Result))

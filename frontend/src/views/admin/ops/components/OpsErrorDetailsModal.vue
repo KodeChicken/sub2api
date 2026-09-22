@@ -15,6 +15,7 @@ interface Props {
   platform?: string
   groupId?: number | null
   errorType: 'request' | 'upstream'
+  requestId?: string
   resumeState?: boolean
 }
 
@@ -112,8 +113,14 @@ async function fetchErrorLogs() {
       sort_order: sortOrder.value
     }
     Object.assign(params, buildOpsErrorTimeParams(props.timeRange, props.customStartTime, props.customEndTime))
+    if (props.requestId) {
+      params.request_id = props.requestId
+      params.time_range = '30d'
+      delete params.start_time
+      delete params.end_time
+    }
 
-    if (props.timeRange === 'custom') {
+    if (props.timeRange === 'custom' && !props.requestId) {
       if (props.customStartTime && props.customEndTime) {
         params.start_time = props.customStartTime
         params.end_time = props.customEndTime
@@ -176,7 +183,7 @@ watch(
 )
 
 watch(
-  () => [props.timeRange, props.customStartTime, props.customEndTime, props.platform, props.groupId] as const,
+  () => [props.timeRange, props.customStartTime, props.customEndTime, props.platform, props.groupId, props.requestId] as const,
   () => {
     if (!props.show) return
     page.value = 1
@@ -218,6 +225,7 @@ watch(
 <template>
   <BaseDialog :show="show" :title="modalTitle" width="full" @close="close">
     <div class="flex h-full min-h-0 flex-col">
+      <p v-if="requestId" class="mb-3 break-all font-mono text-xs text-gray-500 dark:text-gray-400">request_id: {{ requestId }}</p>
       <!-- Filters -->
       <div class="mb-4 flex-shrink-0 border-b border-gray-200 pb-4 dark:border-dark-700">
         <div class="grid grid-cols-2 gap-2 md:grid-cols-8">

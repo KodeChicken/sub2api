@@ -3,7 +3,7 @@
     <aside class="flex flex-col border-b border-gray-200 bg-gray-50/70 dark:border-dark-700 dark:bg-dark-900 lg:border-b-0 lg:border-r">
       <div class="flex items-center justify-between border-b border-gray-200 p-3 dark:border-dark-700">
         <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('imageGeneration.sessions.title') }}</span>
-        <button type="button" class="rounded-lg p-2 text-gray-500 hover:bg-gray-200 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-dark-700 dark:hover:text-white" :title="t('imageGeneration.sessions.new')" :disabled="generating" @click="newSession">
+        <button type="button" class="rounded-lg p-2 text-gray-500 hover:bg-gray-200 hover:text-gray-900 dark:hover:bg-dark-700 dark:hover:text-white" :title="t('imageGeneration.sessions.new')" @click="newSession">
           <Icon name="plus" size="sm" />
         </button>
       </div>
@@ -17,12 +17,7 @@
             :placeholder="t('imageGeneration.sessions.search')"
           />
         </div>
-		<div class="mt-2 flex items-center justify-between gap-2 px-1">
-			<button type="button" class="text-xs text-primary-600 hover:underline dark:text-primary-400" :disabled="generating || importing" @click="importBrowserHistory">
-				<Icon name="upload" size="xs" class="mr-1 inline-block" />导入此浏览器记录
-			</button>
-			<a href="/downloads/sub2api-imagegen.zip" download="sub2api-imagegen.zip" title="下载生图技能 ZIP" class="text-gray-500 hover:text-primary-600 dark:text-gray-400"><Icon name="download" size="sm" /></a>
-		</div>
+		<a href="/downloads/sub2api-imagegen.zip" download="sub2api-imagegen.zip" class="mt-2 inline-flex items-center gap-1 px-1 text-xs text-primary-600 hover:underline dark:text-primary-400"><Icon name="download" size="xs" />下载生图技能 ZIP</a>
       </div>
       <div class="max-h-52 min-h-0 flex-1 space-y-1 overflow-y-auto p-2 lg:max-h-none">
         <div
@@ -45,7 +40,7 @@
             @keydown.esc.prevent="cancelSessionTitleEdit"
             @blur="saveSessionTitle(session)"
           />
-          <button v-else type="button" class="min-w-0 flex-1 px-3 py-2.5 text-left disabled:cursor-not-allowed" :disabled="generating" @click="activeSessionId = session.id">
+          <button v-else type="button" class="min-w-0 flex-1 px-3 py-2.5 text-left" @click="activeSessionId = session.id">
             <span data-testid="session-title" class="block truncate text-sm font-medium">{{ session.title }}</span>
             <span class="mt-1 block text-xs text-gray-400 dark:text-gray-500">{{ formatDate(session.updatedAt) }}</span>
           </button>
@@ -94,7 +89,7 @@
 
     <main class="flex min-h-[560px] min-w-0 flex-col bg-gray-50/40 dark:bg-dark-950/30">
       <div ref="messageArea" class="flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
-        <div v-if="activeRecords.length === 0 && !generating" class="grid h-full min-h-72 place-items-center text-center">
+        <div v-if="activeRecords.length === 0" class="grid h-full min-h-72 place-items-center text-center">
           <div class="max-w-sm">
             <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-900/25 dark:text-primary-300">
               <Icon name="sparkles" size="lg" />
@@ -118,6 +113,15 @@
             <p class="font-medium">{{ record.status === 'failed' ? '生成失败' : '已取消生成' }}</p>
             <p v-if="record.error" class="mt-1 text-xs leading-5">{{ record.error }}</p>
           </div>
+          <div v-if="record.status === 'processing'" class="grid min-h-72 place-items-center rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-900">
+            <div class="text-center">
+              <img v-if="record.id === activeGenerationRecordId && partialPreviewURL" :src="partialPreviewURL" alt="生成过程预览" class="mx-auto max-h-80 max-w-full object-contain" />
+              <LoadingSpinner v-else />
+              <p class="mt-4 text-sm font-medium text-gray-700 dark:text-gray-200">{{ record.id === activeGenerationRecordId ? generationStatus : t('imageGeneration.create.processing') }}</p>
+              <p v-if="record.id === activeGenerationRecordId" class="mt-1 text-xs text-gray-400">{{ formatDuration(elapsedMs) }}</p>
+              <p v-if="record.taskId" class="mt-1 font-mono text-xs text-gray-400">{{ record.taskId }}</p>
+            </div>
+          </div>
           <div class="grid gap-3" :class="record.images.length > 1 ? 'sm:grid-cols-2' : 'grid-cols-1'">
             <button
               v-for="(_, index) in record.images"
@@ -135,6 +139,7 @@
             <span>{{ record.size }}</span>
             <span>{{ record.apiKeyName }}</span>
             <span v-if="record.durationMs">{{ formatDuration(record.durationMs) }}</span>
+            <RouterLink v-if="authStore.isAdmin && record.requestId" :to="{ path: '/admin/ops', query: { request_id: record.requestId, open_error_details: '1', error_type: 'upstream' } }" class="text-primary-600 hover:underline dark:text-primary-400">查询日志</RouterLink>
             <div class="ml-auto flex flex-wrap items-center gap-3">
               <button type="button" class="text-primary-600 hover:text-primary-700 dark:text-primary-400" @click="continueFrom(record)">从这里继续</button>
               <button type="button" class="text-primary-600 hover:text-primary-700 dark:text-primary-400" @click="regenerateRecord(record)">重新生成</button>
@@ -148,26 +153,6 @@
           </div>
         </article>
 
-        <article v-if="generating" class="space-y-3">
-          <div data-testid="user-message" class="ml-auto w-fit max-w-full space-y-3 break-words rounded-lg border border-gray-200 bg-gray-100 p-3 text-sm leading-6 text-gray-900 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-100 sm:max-w-2xl">
-            <div v-if="submittedReferences.length" class="flex flex-wrap gap-2">
-              <button v-for="(reference, index) in submittedReferences" :key="reference.id" type="button" class="w-40 overflow-hidden rounded-md border border-gray-200 bg-white text-left dark:border-dark-600 dark:bg-dark-900" @click="openSubmittedReferencePreview(index)">
-                <img :src="reference.url" :alt="t('imageGeneration.create.referenceImage', { name: reference.file.name })" class="h-40 w-full object-contain" />
-                <span class="block truncate px-2.5 py-1.5 text-xs text-gray-600 dark:text-gray-300">{{ reference.file.name }}</span>
-              </button>
-            </div>
-            <p>{{ submittedPrompt }}</p>
-          </div>
-          <div class="grid min-h-72 place-items-center rounded-lg border border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-900">
-            <div class="text-center">
-              <img v-if="partialPreviewURL" :src="partialPreviewURL" alt="生成过程预览" class="mx-auto max-h-80 max-w-full object-contain" />
-              <LoadingSpinner v-else />
-              <p class="mt-4 text-sm font-medium text-gray-700 dark:text-gray-200">{{ generationStatus }}</p>
-              <p class="mt-1 text-xs text-gray-400">{{ formatDuration(elapsedMs) }}</p>
-              <p v-if="currentTaskId" class="mt-1 font-mono text-xs text-gray-400">{{ currentTaskId }}</p>
-            </div>
-          </div>
-        </article>
       </div>
 
       <form class="border-t border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-900 md:p-4" @paste="pasteReference" @submit.prevent="generate">
@@ -185,7 +170,7 @@
         <TextArea
           v-model="prompt"
           :rows="3"
-          :disabled="generating"
+          :disabled="generating && activeSessionId === generationSessionId"
           :placeholder="t('imageGeneration.create.promptPlaceholder')"
           class="w-full"
           @keydown="handlePromptKeydown"
@@ -194,7 +179,7 @@
           <label class="btn btn-secondary btn-sm cursor-pointer" :class="generating ? 'pointer-events-none opacity-60' : ''">
             <Icon name="upload" size="sm" class="mr-1.5" />
             {{ t('imageGeneration.create.addReference') }}
-            <input type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" multiple :disabled="generating || modelCapabilities.maxReferenceImages === 0" @change="selectReference" />
+            <input type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" multiple :disabled="(generating && activeSessionId === generationSessionId) || modelCapabilities.maxReferenceImages === 0" @change="selectReference" />
           </label>
           <button v-if="generating" type="button" data-testid="stop-generation" class="btn btn-secondary min-w-28" @click="cancelGeneration">
             <Icon name="x" size="sm" class="mr-2" />
@@ -287,7 +272,7 @@ import Icon from '@/components/icons/Icon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Select from '@/components/common/Select.vue'
 import TextArea from '@/components/common/TextArea.vue'
-import { useAppStore } from '@/stores'
+import { useAppStore, useAuthStore } from '@/stores'
 import {
   cancelImageGenerationTask,
   getImageGenerationTask,
@@ -308,9 +293,6 @@ import {
 	getImageHistory,
   listImageHistory,
   loadImageSessions,
-	loadLocalImageSessions,
-	listLocalImageHistory,
-	loadLocalImageSessionDraft,
   loadImageSessionDraft,
   saveImageHistory,
   saveImageSessionDraft,
@@ -352,6 +334,7 @@ const COUNT_VALUES = Array.from({ length: 10 }, (_, index) => index + 1)
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 const messageArea = ref<HTMLElement | null>(null)
 const imageKeys = ref<ApiKey[]>([])
 const selectedKeyId = ref<number | null>(null)
@@ -367,10 +350,11 @@ const outputCount = computed({ get: () => Number(parameterValues.n || 1), set: v
 const loadingKeys = ref(false)
 const loadingModels = ref(false)
 const generating = ref(false)
-const importing = ref(false)
 const cancelRequested = ref(false)
 const currentTaskId = ref('')
-const submittedPrompt = ref('')
+const currentRequestId = ref('')
+const activeGenerationRecordId = ref('')
+const generationSessionId = ref('')
 const generationStatus = ref('')
 interface ReferenceDraft { id: string; file: File; url: string; sourceRecordId?: string }
 const referenceDrafts = ref<ReferenceDraft[]>([])
@@ -523,9 +507,6 @@ async function newSession() {
 	try { await saveImageSessions([session]) } catch (error) { appStore.showError(errorMessage(error, '创建会话失败')); return }
   sessions.value = [session, ...sessions.value]
   activeSessionId.value = session.id
-  prompt.value = ''
-	clearReferences()
-	continuationParentId.value = ''
 }
 
 async function moveSession(session: ImageGenerationSession, direction: -1 | 1) {
@@ -576,45 +557,12 @@ async function deleteSession(session: ImageGenerationSession) {
   }
 }
 
-async function updateActiveSessionTitle(value: string) {
-  const session = sessions.value.find((item) => item.id === activeSessionId.value)
+async function updateActiveSessionTitle(value: string, sessionId: string) {
+  const session = sessions.value.find((item) => item.id === sessionId)
   if (!session) return
   if (isDefaultSessionTitle(session.title)) session.title = titleFromPrompt(value) || session.title
   session.updatedAt = Date.now()
 	await saveImageSessions([session])
-}
-
-async function importBrowserHistory() {
-	const legacySessions = loadLocalImageSessions()
-	const legacyRecords = await listLocalImageHistory()
-	if (!legacySessions.length && !legacyRecords.length) { appStore.showError('此浏览器没有旧生图记录'); return }
-	if (!window.confirm(`将此浏览器的 ${legacySessions.length} 个旧会话和 ${legacyRecords.length} 条记录导入当前账号？请确认旧数据属于当前登录用户。`)) return
-	importing.value = true
-	try {
-		const knownSessions = new Set(sessions.value.map(item => item.id))
-		for (const session of legacySessions) {
-			if (knownSessions.has(session.id)) continue
-			await saveImageSessions([session])
-			knownSessions.add(session.id)
-		}
-		const knownRecords = new Set(history.value.map(item => item.id))
-		for (const record of legacyRecords) {
-			if (knownRecords.has(record.id)) continue
-			if (!knownSessions.has(record.sessionId)) {
-				await saveImageSessions([{ id: record.sessionId, title: '旧生图会话', createdAt: record.createdAt, updatedAt: record.createdAt, sortOrder: record.createdAt }])
-				knownSessions.add(record.sessionId)
-			}
-			await saveImageHistory(record)
-		}
-		for (const session of legacySessions) {
-			const draft = await loadLocalImageSessionDraft(session.id)
-			if (draft) await saveImageSessionDraft(draft)
-		}
-		await loadServerState()
-		appStore.showSuccess('旧生图记录已导入，浏览器原数据仍保留')
-	} catch (error) {
-		appStore.showError(errorMessage(error, '导入中断，已导入部分可再次导入'))
-	} finally { importing.value = false }
 }
 
 function isDefaultSessionTitle(title: string) {
@@ -696,7 +644,7 @@ async function generate() {
   const controller = new AbortController()
   const startedAt = Date.now()
   generating.value = true
-  submittedPrompt.value = currentPrompt
+  generationSessionId.value = sessionId
   submittedReferences.value = currentReferences
   prompt.value = ''
   referenceDrafts.value = []
@@ -705,12 +653,14 @@ async function generate() {
   partialPreviewURL.value = ''
   generationStatus.value = t('imageGeneration.create.submitting')
   currentTaskId.value = ''
+	currentRequestId.value = ''
 	cancelRequested.value = false
   pollController = controller
   startElapsedTimer(startedAt)
   const recordId = crypto.randomUUID()
-  try { await updateActiveSessionTitle(currentPrompt) } catch (error) { appStore.showError(errorMessage(error, '保存会话失败')); generating.value = false; stopElapsedTimer(); return }
+  activeGenerationRecordId.value = recordId
   try {
+    await updateActiveSessionTitle(currentPrompt, sessionId)
     const request = {
       model: model.value,
       prompt: requestPrompt,
@@ -732,12 +682,15 @@ async function generate() {
 		}
 		await saveImageHistory(pending)
 		history.value = [pending, ...history.value]
+    await deleteImageSessionDraft(sessionId)
     let result: ImageGenerationResult | undefined
     try {
 		const task = await submitAsyncImageGeneration(key.key, request, sessionId, recordId, controller.signal)
 		currentTaskId.value = task.id || task.task_id || ''
+		currentRequestId.value = task.request_id || ''
 		if (!currentTaskId.value) throw new Error(t('imageGeneration.messages.invalidTask'))
 		pending.taskId = currentTaskId.value
+		pending.requestId = currentRequestId.value
 		generationStatus.value = t('imageGeneration.create.processing')
 		result = (await pollTask(key.key, currentTaskId.value, controller.signal)).result
 	} catch (error) {
@@ -773,6 +726,7 @@ async function generate() {
       id: recordId,
       sessionId,
       taskId: currentTaskId.value,
+      requestId: currentRequestId.value,
       prompt: currentPrompt,
       model: model.value,
       size: requestSize,
@@ -802,7 +756,7 @@ async function generate() {
     const cancelled = isAbortError(error)
     const now = Date.now()
     const record: ImageGenerationHistoryRecord = {
-      id: recordId, sessionId, taskId: currentTaskId.value, prompt: currentPrompt,
+      id: recordId, sessionId, taskId: currentTaskId.value, requestId: currentRequestId.value, prompt: currentPrompt,
       model: model.value, size: requestSize, quality: requestQuality, outputCount: requestCount,
       parameters: requestParameters, apiKeyId: key.id, apiKeyName: key.name, createdAt: startedAt,
       completedAt: now, durationMs: now - startedAt, status: cancelled ? 'cancelled' : 'failed',
@@ -816,9 +770,13 @@ async function generate() {
 			history.value = [record, ...history.value.filter(item => item.id !== record.id)]
 		}
     selectRecordBranch(record)
-    if (!prompt.value.trim()) prompt.value = currentPrompt
-    referenceDrafts.value = currentReferences
-    maskDraft.value = currentMask
+    if (activeSessionId.value === sessionId) {
+      if (!prompt.value.trim()) prompt.value = currentPrompt
+      referenceDrafts.value = currentReferences
+      maskDraft.value = currentMask
+    } else {
+      await saveImageSessionDraft({ sessionId, prompt: currentPrompt, referenceImages: currentReferences.map(referenceToHistory), maskImage: snapshotReferenceImage(currentMask), updatedAt: now })
+    }
     submittedReferences.value = []
     if (!cancelled) {
       appStore.showError(errorMessage(error, t('imageGeneration.messages.generateFailed')))
@@ -829,7 +787,10 @@ async function generate() {
       if (!referenceDrafts.value.some(draft => draft.id === reference.id)) URL.revokeObjectURL(reference.url)
     })
     generating.value = false
+    generationSessionId.value = ''
+    activeGenerationRecordId.value = ''
     currentTaskId.value = ''
+	currentRequestId.value = ''
     pollController = null
     submittedReferences.value = []
     partialPreviewURL.value = ''
@@ -878,7 +839,7 @@ function selectReference(event: Event) {
 }
 
 function pasteReference(event: ClipboardEvent) {
-  if (generating.value || !event.clipboardData) return
+  if ((generating.value && activeSessionId.value === generationSessionId.value) || !event.clipboardData) return
   const files = Array.from(event.clipboardData.files).filter(item => item.type.startsWith('image/'))
   if (files.length === 0) {
     for (const item of Array.from(event.clipboardData.items)) {
@@ -956,15 +917,6 @@ function openReferencePreview(record: ImageGenerationHistoryRecord, index: numbe
   preview.value = {
     url: displayReferenceURL(record, index),
     prompt: t('imageGeneration.create.referenceImage', { name: reference.name }),
-  }
-}
-
-function openSubmittedReferencePreview(index: number) {
-  const reference = submittedReferences.value[index]
-  if (!reference) return
-  preview.value = {
-    url: reference.url,
-    prompt: t('imageGeneration.create.referenceImage', { name: reference.file.name }),
   }
 }
 
@@ -1263,7 +1215,10 @@ function formatDuration(value: number) {
 
 function scheduleDraftSave() {
   if (draftTimer !== null) window.clearTimeout(draftTimer)
-  draftTimer = window.setTimeout(() => saveDraftInBackground(activeSessionId.value), 300)
+  const sessionId = activeSessionId.value
+  draftTimer = window.setTimeout(() => {
+    if (sessionId === activeSessionId.value) saveDraftInBackground(sessionId)
+  }, 300)
 }
 
 function saveDraftInBackground(sessionId: string) {
@@ -1271,7 +1226,7 @@ function saveDraftInBackground(sessionId: string) {
 }
 
 async function persistDraft(sessionId: string) {
-  if (!sessionId || generating.value) return
+  if (!sessionId || (generating.value && sessionId === generationSessionId.value)) return
   await saveImageSessionDraft({
     sessionId,
     prompt: prompt.value,
@@ -1282,10 +1237,11 @@ async function persistDraft(sessionId: string) {
 }
 
 async function loadDraft(sessionId: string) {
+  const draft = await loadImageSessionDraft(sessionId)
+  if (sessionId !== activeSessionId.value) return
   clearReferences()
   prompt.value = ''
   continuationParentId.value = ''
-  const draft = await loadImageSessionDraft(sessionId)
   if (!draft) return
   prompt.value = draft.prompt
   referenceDrafts.value = draft.referenceImages.slice(0, modelCapabilities.value.maxReferenceImages).map(reference => ({
@@ -1326,7 +1282,8 @@ watch(model, (value) => {
 }, { flush: 'sync' })
 watch(parameterValues, saveCurrentModelSettings, { deep: true })
 watch(prompt, scheduleDraftSave)
-watch(activeSessionId, async (value) => {
+watch(activeSessionId, async (value, previous) => {
+  if (previous && sessions.value.some(session => session.id === previous)) await persistDraft(previous)
   if (value) localStorage.setItem(ACTIVE_SESSION_STORAGE, value)
   if (value) await loadDraft(value)
   void scrollToBottom()

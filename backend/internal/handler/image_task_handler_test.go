@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
@@ -71,7 +72,7 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 	router.POST("/v1/images/tasks/:task_id/cancel", h.Cancel)
 
 	requestCtx, cancelRequest := context.WithCancel(context.Background())
-	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", strings.NewReader(`{"model":"gpt-image-1","prompt":"cat"}`)).WithContext(requestCtx)
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", strings.NewReader(`{"model":"gpt-image-1","prompt":"cat"}`)).WithContext(context.WithValue(requestCtx, ctxkey.RequestID, "image-request-123"))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
@@ -80,12 +81,14 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 	require.Equal(t, "3", w.Header().Get("Retry-After"))
 
 	var accepted struct {
-		TaskID  string `json:"task_id"`
-		Status  string `json:"status"`
-		PollURL string `json:"poll_url"`
+		TaskID    string `json:"task_id"`
+		RequestID string `json:"request_id"`
+		Status    string `json:"status"`
+		PollURL   string `json:"poll_url"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &accepted))
 	require.Equal(t, service.ImageTaskStatusProcessing, accepted.Status)
+	require.Equal(t, "image-request-123", accepted.RequestID)
 	require.Equal(t, "/v1/images/tasks/"+accepted.TaskID, accepted.PollURL)
 	require.Equal(t, accepted.PollURL, w.Header().Get("Location"))
 
@@ -105,6 +108,41 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 	require.Equal(t, "no-store", pollWriter.Header().Get("Cache-Control"))
 	require.Empty(t, pollWriter.Header().Get("Retry-After"))
 	require.Contains(t, pollWriter.Body.String(), "https://example.test/image.png")
+}
+
+func TestAsyncImageHandlerFailureEnqueuesCorrelatedOpsError(t *testing.T) {
+	setupOpsErrorLogTestQueue(t, 2)
+	t.Cleanup(func() { resetOpsErrorLoggerStateForTest(t) })
+	gin.SetMode(gin.TestMode)
+	store := &asyncImageMemoryStore{tasks: make(map[string]*service.ImageTaskRecord)}
+	ops := service.NewOpsService(&ingressRejectOpsRepo{}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	h := &AsyncImageHandler{
+		tasks:  service.NewImageTaskServiceWithUploader(store, nil, time.Hour, time.Minute),
+		openAI: &OpenAIGatewayHandler{opsService: ops},
+	}
+	h.execute = func(_ string, c *gin.Context) {
+		c.JSON(http.StatusBadGateway, gin.H{"error": gin.H{"type": "upstream_error", "message": "Upstream service temporarily unavailable"}})
+	}
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		groupID := int64(3)
+		c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 7})
+		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{ID: 9, UserID: 7, GroupID: &groupID, Group: &service.Group{ID: groupID, Platform: service.PlatformOpenAI, AllowImageGeneration: true}})
+		c.Next()
+	})
+	router.POST("/v1/images/generations/async", h.Submit)
+	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations/async", strings.NewReader(`{"model":"gpt-image-1","prompt":"cat"}`))
+	req = req.WithContext(context.WithValue(req.Context(), ctxkey.RequestID, "image-request-456"))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusAccepted, w.Code)
+	require.Eventually(t, func() bool { return OpsErrorLogQueueLength() == 1 }, time.Second, 10*time.Millisecond)
+	job := <-opsErrorLogQueue
+	require.Equal(t, "image-request-456", job.entry.RequestID)
+	require.Equal(t, int64(7), *job.entry.UserID)
+	require.Equal(t, http.StatusBadGateway, job.entry.StatusCode)
+	require.Equal(t, "upstream_error", job.entry.ErrorType)
 }
 
 func TestAsyncImageHandlerCancelsRunningTask(t *testing.T) {

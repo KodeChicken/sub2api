@@ -119,6 +119,7 @@
           :platform="platform"
           :group-id="groupId"
           :error-type="errorDetailsType"
+          :request-id="typeof route.query.request_id === 'string' ? route.query.request_id : ''"
           :resume-state="resumeListState"
           @update:show="showErrorDetails = $event"
           @openErrorDetail="openError"
@@ -466,6 +467,11 @@ function handleOpenRequestDetails(preset?: OpsRequestDetailsPreset) {
 }
 
 function openErrorDetails(kind: 'request' | 'upstream') {
+  if (route.query.request_id) {
+    const nextQuery = { ...route.query }
+    delete nextQuery.request_id
+    void router.replace({ query: nextQuery })
+  }
   errorDetailsType.value = kind
   // Ensure only one modal visible at a time.
   showRequestDetails.value = false

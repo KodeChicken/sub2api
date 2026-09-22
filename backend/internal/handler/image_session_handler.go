@@ -368,8 +368,8 @@ func (h *ImageSessionHandler) storeAsset(ctx context.Context, userID int64, sess
 	return "/api/v1/image-sessions/assets/" + id, mime, nil
 }
 
-func (h *ImageSessionHandler) AttachTask(ctx context.Context, userID int64, sessionID, recordID, taskID string) error {
-	result, err := h.db.ExecContext(ctx, `UPDATE image_generation_records SET payload=jsonb_set(payload,'{taskId}',to_jsonb($4::text)) WHERE id=$1 AND session_id=$2 AND user_id=$3`, recordID, sessionID, userID, taskID)
+func (h *ImageSessionHandler) AttachTask(ctx context.Context, userID int64, sessionID, recordID, taskID, requestID string) error {
+	result, err := h.db.ExecContext(ctx, `UPDATE image_generation_records SET payload=jsonb_set(jsonb_set(payload,'{taskId}',to_jsonb($4::text)),'{requestId}',to_jsonb($5::text)) WHERE id=$1 AND session_id=$2 AND user_id=$3`, recordID, sessionID, userID, taskID, requestID)
 	if err != nil {
 		return err
 	}
