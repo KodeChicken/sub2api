@@ -38,7 +38,6 @@ vi.mock('@/api', () => ({
 
 vi.mock('@/stores', () => ({
   useAppStore: () => ({ showError: mocks.showError, showSuccess: mocks.showSuccess }),
-  useAuthStore: () => ({ isAdmin: false }),
 }))
 
 vi.mock('./api', () => ({
@@ -168,6 +167,22 @@ describe('ImageGenerationView clipboard images', () => {
 
     expect(event.defaultPrevented).toBe(false)
     expect(URL.createObjectURL).not.toHaveBeenCalled()
+  })
+
+  it('does not expose log navigation for a record with a request id', async () => {
+    mocks.listHistory.mockResolvedValue([{
+      id: 'record-1', sessionId: 'session-1', requestId: 'request-1',
+      prompt: 'Test image', status: 'failed', error: 'Generation failed',
+      images: [], model: 'gpt-image-2', size: '1024x1024', apiKeyName: 'Test key', createdAt: 1,
+    }])
+    const wrapper = mount(ImageGenerationView, {
+      global: { stubs: { Icon: true, RouterLink: true } },
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Generation failed')
+    expect(wrapper.text()).not.toContain('查询日志')
+    expect(wrapper.find('router-link[to*="/admin/ops"]').exists()).toBe(false)
   })
 
   it('renames a session inline', async () => {

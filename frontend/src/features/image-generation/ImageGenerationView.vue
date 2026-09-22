@@ -139,7 +139,6 @@
             <span>{{ record.size }}</span>
             <span>{{ record.apiKeyName }}</span>
             <span v-if="record.durationMs">{{ formatDuration(record.durationMs) }}</span>
-            <RouterLink v-if="authStore.isAdmin && record.requestId" :to="{ path: '/admin/ops', query: { request_id: record.requestId, open_error_details: '1', error_type: 'upstream' } }" class="text-primary-600 hover:underline dark:text-primary-400">查询日志</RouterLink>
             <div class="ml-auto flex flex-wrap items-center gap-3">
               <button type="button" class="text-primary-600 hover:text-primary-700 dark:text-primary-400" @click="continueFrom(record)">从这里继续</button>
               <button type="button" class="text-primary-600 hover:text-primary-700 dark:text-primary-400" @click="regenerateRecord(record)">重新生成</button>
@@ -272,7 +271,7 @@ import Icon from '@/components/icons/Icon.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Select from '@/components/common/Select.vue'
 import TextArea from '@/components/common/TextArea.vue'
-import { useAppStore, useAuthStore } from '@/stores'
+import { useAppStore } from '@/stores'
 import {
   cancelImageGenerationTask,
   getImageGenerationTask,
@@ -334,7 +333,6 @@ const COUNT_VALUES = Array.from({ length: 10 }, (_, index) => index + 1)
 
 const { t } = useI18n()
 const appStore = useAppStore()
-const authStore = useAuthStore()
 const messageArea = ref<HTMLElement | null>(null)
 const imageKeys = ref<ApiKey[]>([])
 const selectedKeyId = ref<number | null>(null)
