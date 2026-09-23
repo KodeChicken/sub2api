@@ -22,6 +22,7 @@ type OpenAIOAuthHandler struct {
 	openaiOAuthService         *service.OpenAIOAuthService
 	adminService               service.AdminService
 	quotaService               openAIQuotaService
+	referralService            openAIReferralService
 	rateLimitService           openAIAccountStateRecoverer
 	carpoolSubscriptionService *service.SubscriptionService
 }
@@ -29,6 +30,7 @@ type OpenAIOAuthHandler struct {
 type openAIQuotaService interface {
 	QueryUsage(ctx context.Context, accountID int64) (*service.OpenAIQuotaUsage, error)
 	CacheResetCreditsSnapshot(ctx context.Context, accountID int64, credits *service.OpenAIRateLimitResetCredits) error
+	CacheCreditsSnapshot(ctx context.Context, accountID int64, usage *service.OpenAIQuotaUsage) error
 	CachePostResetSnapshot(ctx context.Context, accountID int64, usage *service.OpenAIQuotaUsage) error
 	ResetCredit(ctx context.Context, accountID int64) (*service.OpenAIQuotaResetResult, error)
 }
@@ -61,9 +63,10 @@ type openAIQuotaResetResponse struct {
 // failed display-cache write must never discard a successful upstream read.
 type openAIQuotaRefreshResponse struct {
 	service.OpenAIQuotaUsage
-	CachePersisted      bool                             `json:"cache_persisted"`
-	CarpoolReset        *service.CarpoolQuotaResetResult `json:"carpool_subscription_reset,omitempty"`
-	CarpoolResetWarning string                           `json:"carpool_subscription_reset_warning,omitempty"`
+	CachePersisted        bool                             `json:"cache_persisted"`
+	CreditsCachePersisted bool                             `json:"credits_cache_persisted"`
+	CarpoolReset          *service.CarpoolQuotaResetResult `json:"carpool_subscription_reset,omitempty"`
+	CarpoolResetWarning   string                           `json:"carpool_subscription_reset_warning,omitempty"`
 }
 
 // openAIQuotaResetPostProcessContext detaches the post-reset bookkeeping from the
@@ -98,6 +101,7 @@ func NewOpenAIOAuthHandler(
 	// `== nil` capability guards below and panic instead of returning 400.
 	if quotaService != nil {
 		h.quotaService = quotaService
+		h.referralService = quotaService
 	}
 	if rateLimitService != nil {
 		h.rateLimitService = rateLimitService
@@ -542,6 +546,11 @@ func (h *OpenAIOAuthHandler) RefreshQuota(c *gin.Context) {
 		return
 	}
 	refreshResponse.CarpoolReset = carpoolReset
+	if err := h.quotaService.CacheCreditsSnapshot(c.Request.Context(), accountID, usage); err != nil {
+		slog.Warn("openai_quota_credits_cache_persist_failed", "account_id", accountID, "error", err)
+	} else {
+		refreshResponse.CreditsCachePersisted = true
+	}
 	// A failed snapshot write leaves the previous cache intact — report it as a
 	// partial success instead of discarding the usage payload we just fetched,
 	// which would leave the card without a credit count at all.

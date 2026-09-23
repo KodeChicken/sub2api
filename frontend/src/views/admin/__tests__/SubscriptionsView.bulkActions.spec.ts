@@ -106,6 +106,23 @@ describe('subscription bulk operations', () => {
     expect(wrapper.getComponent({ name: 'DataTable' }).props('selectedKeys')).toEqual([])
   })
 
+  it('searches subscription group names on Enter and clears the filter', async () => {
+    const search = wrapper.get('[data-test="subscription-group-search"]')
+    await search.setValue(' pro2 ')
+    expect(list).toHaveBeenCalledTimes(1)
+    await search.trigger('keyup.enter')
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(1, expect.any(Number), expect.objectContaining({
+      group_name: 'pro2'
+    }), expect.any(Object))
+    await search.setValue('')
+    await search.trigger('search')
+    await flushPromises()
+    expect(list).toHaveBeenLastCalledWith(1, expect.any(Number), expect.objectContaining({
+      group_name: undefined
+    }), expect.any(Object))
+  })
+
   it('assigns multiple users once and retries only failed users', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     await wrapper.findAll('button').find(button => button.text() === 'admin.subscriptions.assignSubscription')!.trigger('click')

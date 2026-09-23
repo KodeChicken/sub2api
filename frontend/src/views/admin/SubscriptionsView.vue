@@ -73,13 +73,16 @@
                 @change="applyFilters"
               />
             </div>
-            <div class="w-full sm:w-48">
-              <Select
-                v-model="filters.group_id"
-                :options="groupOptions"
-                :placeholder="t('admin.subscriptions.allGroups')"
-                searchable
-                @change="applyFilters"
+            <div class="relative w-full sm:w-48">
+              <Icon name="search" size="sm" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                v-model="groupSearchInput"
+                data-test="subscription-group-search"
+                type="search"
+                class="input pl-9"
+                :placeholder="t('admin.subscriptions.searchGroups')"
+                @keyup.enter="applyGroupSearch"
+                @search="applyGroupSearch"
               />
             </div>
             <div class="w-full sm:w-40">
@@ -1091,10 +1094,11 @@ let userSearchTimeout: ReturnType<typeof setTimeout> | null = null
 
 const filters = reactive({
   status: 'active',
-  group_id: '',
+  group_name: '',
   platform: '',
   user_id: null as number | null
 })
+const groupSearchInput = ref('')
 
 // Sorting state
 const sortState = reactive({
@@ -1131,12 +1135,6 @@ const extendForm = reactive({
   days: 30
 })
 
-// Group options for filter (all groups)
-const groupOptions = computed(() => [
-  { value: '', label: t('admin.subscriptions.allGroups') },
-  ...groups.value.map((g) => ({ value: g.id.toString(), label: g.name }))
-])
-
 const platformFilterOptions = computed(() => [
   { value: '', label: t('admin.subscriptions.allPlatforms') },
   ...GROUP_PLATFORM_OPTIONS
@@ -1162,6 +1160,13 @@ const applyFilters = () => {
   loadSubscriptions()
 }
 
+const applyGroupSearch = () => {
+  const keyword = groupSearchInput.value.trim()
+  if (filters.group_name === keyword) return
+  filters.group_name = keyword
+  applyFilters()
+}
+
 const loadSubscriptions = async () => {
   if (abortController) {
     abortController.abort()
@@ -1177,7 +1182,7 @@ const loadSubscriptions = async () => {
       pagination.page_size,
       {
         status: (filters.status as any) || undefined,
-        group_id: filters.group_id ? parseInt(filters.group_id) : undefined,
+        group_name: filters.group_name || undefined,
         platform: filters.platform || undefined,
         user_id: filters.user_id || undefined,
         sort_by: sortState.sort_by,

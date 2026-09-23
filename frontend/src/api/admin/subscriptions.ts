@@ -56,7 +56,7 @@ export async function bulkAction(
  * List all subscriptions with pagination
  * @param page - Page number (default: 1)
  * @param pageSize - Items per page (default: 20)
- * @param filters - Optional filters (status, user_id, group_id, sort_by, sort_order)
+ * @param filters - Optional filters (status, user_id, group_id, group_name, sort_by, sort_order)
  * @returns Paginated list of subscriptions
  */
 export async function list(
@@ -66,6 +66,7 @@ export async function list(
     status?: 'active' | 'expired' | 'revoked' | 'suspended'
     user_id?: number
     group_id?: number
+    group_name?: string
     platform?: string
     sort_by?: string
     sort_order?: 'asc' | 'desc'

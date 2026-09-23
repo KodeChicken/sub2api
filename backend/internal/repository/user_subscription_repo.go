@@ -237,7 +237,7 @@ func (r *userSubscriptionRepository) ListByGroupID(ctx context.Context, groupID 
 	return userSubscriptionEntitiesToService(subs), paginationResultFromTotal(int64(total), params), nil
 }
 
-func (r *userSubscriptionRepository) List(ctx context.Context, params pagination.PaginationParams, userID, groupID *int64, status, platform, sortBy, sortOrder string) ([]service.UserSubscription, *pagination.PaginationResult, error) {
+func (r *userSubscriptionRepository) List(ctx context.Context, params pagination.PaginationParams, userID, groupID *int64, status, platform, sortBy, sortOrder, groupName string) ([]service.UserSubscription, *pagination.PaginationResult, error) {
 	client := clientFromContext(ctx, r.client)
 	q := client.UserSubscription.Query()
 	includeSoftDeleted := status == "" || status == service.SubscriptionStatusRevoked
@@ -247,8 +247,14 @@ func (r *userSubscriptionRepository) List(ctx context.Context, params pagination
 	if groupID != nil {
 		q = q.Where(usersubscription.GroupIDEQ(*groupID))
 	}
-	if platform != "" {
-		groupPredicates := []predicate.Group{group.PlatformEQ(platform)}
+	if platform != "" || groupName != "" {
+		groupPredicates := make([]predicate.Group, 0, 3)
+		if platform != "" {
+			groupPredicates = append(groupPredicates, group.PlatformEQ(platform))
+		}
+		if groupName != "" {
+			groupPredicates = append(groupPredicates, group.NameContainsFold(groupName))
+		}
 		if includeSoftDeleted {
 			groupPredicates = append(groupPredicates, group.DeletedAtIsNil())
 		}

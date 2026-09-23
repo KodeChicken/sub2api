@@ -306,7 +306,7 @@ func (s *UserSubscriptionRepoSuite) TestList_NoFilters() {
 	group := s.mustCreateGroup("g-list")
 	s.mustCreateSubscription(user.ID, group.ID, nil)
 
-	subs, page, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, "", "", "", "")
+	subs, page, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, "", "", "", "", "")
 	s.Require().NoError(err, "List")
 	s.Require().Len(subs, 1)
 	s.Require().Equal(int64(1), page.Total)
@@ -320,7 +320,7 @@ func (s *UserSubscriptionRepoSuite) TestList_FilterByUserID() {
 	s.mustCreateSubscription(user1.ID, group.ID, nil)
 	s.mustCreateSubscription(user2.ID, group.ID, nil)
 
-	subs, _, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, &user1.ID, nil, "", "", "", "")
+	subs, _, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, &user1.ID, nil, "", "", "", "", "")
 	s.Require().NoError(err)
 	s.Require().Len(subs, 1)
 	s.Require().Equal(user1.ID, subs[0].UserID)
@@ -334,10 +334,26 @@ func (s *UserSubscriptionRepoSuite) TestList_FilterByGroupID() {
 	s.mustCreateSubscription(user.ID, g1.ID, nil)
 	s.mustCreateSubscription(user.ID, g2.ID, nil)
 
-	subs, _, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, &g1.ID, "", "", "", "")
+	subs, _, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, &g1.ID, "", "", "", "", "")
 	s.Require().NoError(err)
 	s.Require().Len(subs, 1)
 	s.Require().Equal(g1.ID, subs[0].GroupID)
+}
+
+func (s *UserSubscriptionRepoSuite) TestList_FilterByGroupName() {
+	user := s.mustCreateUser("groupname@test.com", service.RoleUser)
+	matchingOne := s.mustCreateGroup("Pro2-18")
+	matchingTwo := s.mustCreateGroup("pro2-42")
+	other := s.mustCreateGroup("Basic")
+	for _, groupID := range []int64{matchingOne.ID, matchingTwo.ID, other.ID} {
+		s.mustCreateSubscription(user.ID, groupID, nil)
+	}
+
+	subs, page, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 1}, nil, nil, "", "", "", "", "PRO2")
+	s.Require().NoError(err)
+	s.Require().Len(subs, 1)
+	s.Require().Equal(int64(2), page.Total)
+	s.Require().Contains([]int64{matchingOne.ID, matchingTwo.ID}, subs[0].GroupID)
 }
 
 func (s *UserSubscriptionRepoSuite) TestList_FilterByStatus() {
@@ -355,7 +371,7 @@ func (s *UserSubscriptionRepoSuite) TestList_FilterByStatus() {
 		c.SetExpiresAt(time.Now().Add(-24 * time.Hour))
 	})
 
-	subs, _, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, service.SubscriptionStatusExpired, "", "", "")
+	subs, _, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, service.SubscriptionStatusExpired, "", "", "", "")
 	s.Require().NoError(err)
 	s.Require().Len(subs, 1)
 	s.Require().Equal(service.SubscriptionStatusExpired, subs[0].Status)
@@ -377,7 +393,7 @@ func (s *UserSubscriptionRepoSuite) TestList_IncludesRevokedWhenStatusEmpty() {
 	revoked := s.mustCreateSubscription(user3.ID, group3.ID, nil)
 	s.Require().NoError(s.repo.Delete(s.ctx, revoked.ID))
 
-	subs, pag, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, "", "", "", "")
+	subs, pag, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, "", "", "", "", "")
 	s.Require().NoError(err)
 	s.Require().Len(subs, 3)
 	s.Require().Equal(int64(3), pag.Total)
@@ -406,7 +422,7 @@ func (s *UserSubscriptionRepoSuite) TestList_FilterByRevokedStatus() {
 	revoked := s.mustCreateSubscription(user2.ID, group2.ID, nil)
 	s.Require().NoError(s.repo.Delete(s.ctx, revoked.ID))
 
-	subs, pag, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, service.SubscriptionStatusRevoked, "", "", "")
+	subs, pag, err := s.repo.List(s.ctx, pagination.PaginationParams{Page: 1, PageSize: 10}, nil, nil, service.SubscriptionStatusRevoked, "", "", "", "")
 	s.Require().NoError(err)
 	s.Require().Len(subs, 1)
 	s.Require().Equal(int64(1), pag.Total)
