@@ -26,6 +26,8 @@ describe('image model capabilities', () => {
     const values = { size: '1024x1024', quality: 'high', input_fidelity: 'high' }
     expect(normalizeImageParameters('gpt-image-1.5', values, false)).not.toHaveProperty('input_fidelity')
     expect(normalizeImageParameters('gpt-image-1.5', values, true)).toHaveProperty('input_fidelity', 'high')
+    expect(normalizeImageParameters('gpt-image-1', { input_fidelity: 'low' }, true)).not.toHaveProperty('input_fidelity')
+    expect(normalizeImageParameters('gpt-image-1', { input_fidelity: 'high' }, true)).toHaveProperty('input_fidelity', 'high')
   })
 
   it('accepts valid GPT Image 2 custom sizes and rejects invalid dimensions', () => {

@@ -177,6 +177,9 @@ export function normalizeImageParameters(
     normalized[definition.key] = Boolean(candidate)
   }
   if (normalized.background === 'transparent' && normalized.output_format === 'jpeg') normalized.output_format = 'png'
+  if (editing && model.trim().toLowerCase() === 'gpt-image-1' && normalized.input_fidelity === 'low') {
+    delete normalized.input_fidelity
+  }
   return normalized
 }
 

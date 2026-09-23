@@ -122,6 +122,8 @@
         <UsageProgressBar
           v-if="usageInfo?.five_hour"
           label="5h"
+          :subscription-quota-average="usageInfo.subscription_quota_average"
+          :show-subscription-quota-average="true"
           :utilization="usageInfo.five_hour.utilization"
           :resets-at="usageInfo.five_hour.resets_at"
           :window-stats="usageInfo.five_hour.window_stats"
@@ -131,6 +133,8 @@
         <UsageProgressBar
           v-if="usageInfo?.seven_day"
           label="7d"
+          :subscription-quota-average="usageInfo.subscription_quota_average"
+          :show-subscription-quota-average="true"
           :utilization="usageInfo.seven_day.utilization"
           :resets-at="usageInfo.seven_day.resets_at"
           :window-stats="usageInfo.seven_day.window_stats"

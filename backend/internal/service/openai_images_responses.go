@@ -413,6 +413,9 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 	tool := []byte(`{"type":"image_generation","action":"","model":""}`)
 	tool, _ = sjson.SetBytes(tool, "action", action)
 	tool, _ = sjson.SetBytes(tool, "model", strings.TrimSpace(toolModel))
+	if parsed.IsEdits() && strings.EqualFold(strings.TrimSpace(toolModel), "gpt-image-1") && strings.EqualFold(parsed.InputFidelity, "high") {
+		return nil, fmt.Errorf("gpt-image-1 editing through OAuth Responses does not support input_fidelity=high; use default fidelity or a supported image model")
+	}
 	if shouldPassOpenAIImagesN(toolModel, parsed.N) {
 		tool, _ = sjson.SetBytes(tool, "n", parsed.N)
 	}
@@ -426,10 +429,14 @@ func buildOpenAIImagesResponsesRequest(parsed *OpenAIImagesRequest, toolModel st
 		{path: "background", value: parsed.Background},
 		{path: "output_format", value: parsed.OutputFormat},
 		{path: "moderation", value: parsed.Moderation},
-		{path: "input_fidelity", value: parsed.InputFidelity},
 	} {
 		if trimmed := strings.TrimSpace(field.value); trimmed != "" {
 			tool, _ = sjson.SetBytes(tool, field.path, trimmed)
+		}
+	}
+	if !(parsed.IsEdits() && strings.EqualFold(strings.TrimSpace(toolModel), "gpt-image-1")) {
+		if fidelity := strings.TrimSpace(parsed.InputFidelity); fidelity != "" {
+			tool, _ = sjson.SetBytes(tool, "input_fidelity", fidelity)
 		}
 	}
 	if parsed.OutputCompression != nil {

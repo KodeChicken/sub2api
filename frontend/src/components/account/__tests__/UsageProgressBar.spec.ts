@@ -13,6 +13,20 @@ vi.mock('vue-i18n', async () => {
 })
 
 describe('UsageProgressBar', () => {
+  it('shows subscription quota average only as a progress bar tooltip', () => {
+    const wrapper = mount(UsageProgressBar, {
+      props: {
+        label: '7d',
+        utilization: 40,
+        color: 'emerald',
+        showSubscriptionQuotaAverage: true,
+        subscriptionQuotaAverage: { percentage: 62.5, count: 4 }
+      }
+    })
+    expect(wrapper.text()).not.toContain('62.5')
+    expect(wrapper.find('.h-1\\.5.w-8').attributes('title')).toContain('subscriptionQuotaAverage')
+  })
+
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-03-17T00:00:00Z'))

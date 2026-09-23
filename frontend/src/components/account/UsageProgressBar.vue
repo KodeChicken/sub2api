@@ -41,7 +41,10 @@
       </span>
 
       <!-- Progress bar container -->
-      <div class="h-1.5 w-8 shrink-0 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
+      <div
+        class="h-1.5 w-8 shrink-0 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700"
+        :title="showSubscriptionQuotaAverage ? (subscriptionQuotaAverage ? t('admin.accounts.usageWindow.subscriptionQuotaAverage', { percentage: subscriptionQuotaAverage.percentage.toFixed(1), count: subscriptionQuotaAverage.count }) : t('admin.accounts.usageWindow.noSubscriptionQuotaAverage')) : undefined"
+      >
         <div
           :class="['h-full transition-all duration-300', barClass]"
           :style="{ width: barWidth }"
@@ -76,6 +79,8 @@ const props = withDefaults(
     color: 'indigo' | 'emerald' | 'purple' | 'amber'
     windowStats?: WindowStats | null
     estimatedTotalCost?: number | null
+    subscriptionQuotaAverage?: { percentage: number; count: number } | null
+    showSubscriptionQuotaAverage?: boolean
     showNowWhenIdle?: boolean
     remainingCapacity?: boolean
     /** fixed: 定宽居中徽章（账号页纵向对齐）；auto: 限宽截断左对齐（监控页组合标签） */

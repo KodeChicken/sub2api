@@ -1587,7 +1587,9 @@ export default {
         passiveSampled: 'Passive',
         activeQuery: 'Query',
         estimatedTotalCost: 'Est. total ${cost}',
-        estimatedTotalCostTooltip: 'Estimated total cost at 100% utilization, based on current window cost and utilization'
+        estimatedTotalCostTooltip: 'Estimated total cost at 100% utilization, based on current window cost and utilization',
+        subscriptionQuotaAverage: 'Average subscription quota usage {percentage}% ({count} active subscriptions; not account 5h/7d usage)',
+        noSubscriptionQuotaAverage: 'No active subscription quota data'
       },
       openaiQuotaReset: {
         count: 'Credits',

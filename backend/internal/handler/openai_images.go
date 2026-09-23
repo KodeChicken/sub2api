@@ -221,6 +221,17 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 		sessionHash = ensureOpenAIPoolModeSessionHash(sessionHash, account)
 		reqLog.Debug("openai.images.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
 		setOpsSelectedAccount(c, account.ID, account.Platform)
+		mappedModel := routingModel
+		if channelMapping.MappedModel != "" {
+			mappedModel = channelMapping.MappedModel
+		}
+		if account.IsOpenAIOAuth() && parsed.IsEdits() &&
+			strings.EqualFold(account.GetMappedModel(mappedModel), "gpt-image-1") &&
+			strings.EqualFold(parsed.InputFidelity, "high") {
+			h.handleStreamingAwareError(c, http.StatusBadRequest, "invalid_request_error",
+				"gpt-image-1 editing through OAuth Responses does not support input_fidelity=high; use default fidelity or another image model", streamStarted)
+			return
+		}
 
 		accountReleaseFunc, slotResult := h.acquireResponsesAccountSlot(c, apiKey.GroupID, sessionHash, selection, parsed.Stream, &streamStarted, reqLog)
 		if slotResult == openAISlotAcquireProfitVetoed {

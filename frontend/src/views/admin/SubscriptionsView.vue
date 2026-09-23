@@ -78,6 +78,7 @@
                 v-model="filters.group_id"
                 :options="groupOptions"
                 :placeholder="t('admin.subscriptions.allGroups')"
+                searchable
                 @change="applyFilters"
               />
             </div>

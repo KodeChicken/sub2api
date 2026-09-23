@@ -1826,7 +1826,7 @@ func TestOpenAIGatewayServiceForwardImages_OAuthEditsMultipartUsesResponsesAPI(t
 	writer := multipart.NewWriter(&body)
 	require.NoError(t, writer.WriteField("model", "gpt-image-1"))
 	require.NoError(t, writer.WriteField("prompt", "replace background with aurora"))
-	require.NoError(t, writer.WriteField("input_fidelity", "high"))
+	require.NoError(t, writer.WriteField("input_fidelity", "low"))
 	require.NoError(t, writer.WriteField("output_format", "webp"))
 	require.NoError(t, writer.WriteField("quality", "high"))
 
@@ -1995,6 +1995,27 @@ func TestBuildOpenAIImagesResponsesRequest_PassesThroughNForMultiImageModels(t *
 	require.Equal(t, int64(2), gjson.GetBytes(body, "tools.0.n").Int())
 	require.Equal(t, "gpt-image-2", gjson.GetBytes(body, "tools.0.model").String())
 	require.Equal(t, "draw a cat", gjson.GetBytes(body, "input.0.content.0.text").String())
+}
+
+func TestBuildOpenAIImagesResponsesRequest_GPTImage1EditFidelity(t *testing.T) {
+	parsed := &OpenAIImagesRequest{
+		Endpoint:       openAIImagesEditsEndpoint,
+		Model:          "gpt-image-1",
+		Prompt:         "edit image",
+		InputImageURLs: []string{"https://example.com/image.png"},
+		InputFidelity:  "low",
+	}
+	body, err := buildOpenAIImagesResponsesRequest(parsed, "gpt-image-1")
+	require.NoError(t, err)
+	require.False(t, gjson.GetBytes(body, "tools.0.input_fidelity").Exists())
+
+	parsed.InputFidelity = "high"
+	_, err = buildOpenAIImagesResponsesRequest(parsed, "gpt-image-1")
+	require.ErrorContains(t, err, "does not support input_fidelity=high")
+
+	body, err = buildOpenAIImagesResponsesRequest(parsed, "gpt-image-2")
+	require.NoError(t, err)
+	require.Equal(t, "high", gjson.GetBytes(body, "tools.0.input_fidelity").String())
 }
 
 func TestBuildOpenAIImagesResponsesRequest_ForcesImageToolChoice(t *testing.T) {

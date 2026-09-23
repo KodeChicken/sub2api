@@ -1463,6 +1463,7 @@ export interface GrokBillingSummary {
 }
 
 export interface AccountUsageInfo {
+  subscription_quota_average?: { percentage: number; count: number } | null
   source?: 'passive' | 'active'
   updated_at: string | null
   five_hour: UsageProgress | null

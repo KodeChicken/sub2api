@@ -505,7 +505,9 @@ export default {
         passiveSampled: '被动采样',
         activeQuery: '查询',
         estimatedTotalCost: '预计总费用 ${cost}',
-        estimatedTotalCostTooltip: '根据当前窗口费用和使用率估算达到 100% 使用率时的总费用'
+        estimatedTotalCostTooltip: '根据当前窗口费用和使用率估算达到 100% 使用率时的总费用',
+        subscriptionQuotaAverage: '订阅配额平均使用率 {percentage}%（{count} 个有效订阅；非 5h/7d 账号用量）',
+        noSubscriptionQuotaAverage: '暂无有效订阅配额数据'
       },
       openaiQuotaReset: {
         count: '次数',

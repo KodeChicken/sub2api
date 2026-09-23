@@ -11,6 +11,7 @@ import (
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/ent/usersubscription"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
@@ -824,6 +825,104 @@ func (s *SubscriptionService) List(ctx context.Context, page, pageSize int, user
 	normalizeExpiredWindows(subs)
 	normalizeSubscriptionStatus(subs)
 	return subs, pag, nil
+}
+
+type SubscriptionQuotaAverage struct {
+	Percentage float64 `json:"percentage"`
+	Count      int     `json:"count"`
+}
+
+func (s *SubscriptionService) AverageQuotaByGroups(ctx context.Context, accounts []*Account) (map[int64]*SubscriptionQuotaAverage, error) {
+	result := make(map[int64]*SubscriptionQuotaAverage)
+	if s == nil || s.entClient == nil {
+		return result, nil
+	}
+	groupAccounts := make(map[int64][]int64)
+	for _, account := range accounts {
+		if account == nil || account.Platform != PlatformOpenAI || account.IsShadow() {
+			continue
+		}
+		for _, groupID := range account.GroupIDs {
+			alreadyAdded := false
+			for _, id := range groupAccounts[groupID] {
+				if id == account.ID {
+					alreadyAdded = true
+					break
+				}
+			}
+			if alreadyAdded {
+				continue
+			}
+			groupAccounts[groupID] = append(groupAccounts[groupID], account.ID)
+		}
+	}
+	if len(groupAccounts) == 0 {
+		return result, nil
+	}
+	groupIDs := make([]int64, 0, len(groupAccounts))
+	for id := range groupAccounts {
+		groupIDs = append(groupIDs, id)
+	}
+	now := time.Now()
+	subs, err := s.entClient.UserSubscription.Query().Where(
+		usersubscription.GroupIDIn(groupIDs...),
+		usersubscription.StatusEQ(SubscriptionStatusActive),
+		usersubscription.ExpiresAtGT(now),
+	).WithGroup().All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, sub := range subs {
+		g := sub.Edges.Group
+		if g == nil {
+			continue
+		}
+		current := []UserSubscription{{
+			StartsAt: sub.StartsAt, ExpiresAt: sub.ExpiresAt,
+			DailyWindowStart: sub.DailyWindowStart, WeeklyWindowStart: sub.WeeklyWindowStart,
+			MonthlyWindowStart: sub.MonthlyWindowStart,
+			DailyUsageUSD:      sub.DailyUsageUsd, WeeklyUsageUSD: sub.WeeklyUsageUsd,
+			MonthlyUsageUSD: sub.MonthlyUsageUsd,
+		}}
+		normalizeExpiredWindowsAt(current, now)
+		percentage, ok := subscriptionQuotaPercentage(current[0], g.DailyLimitUsd, g.WeeklyLimitUsd, g.MonthlyLimitUsd)
+		if !ok {
+			continue
+		}
+		for _, accountID := range groupAccounts[sub.GroupID] {
+			average := result[accountID]
+			if average == nil {
+				average = &SubscriptionQuotaAverage{}
+				result[accountID] = average
+			}
+			average.Percentage += percentage
+			average.Count++
+		}
+	}
+	for _, average := range result {
+		average.Percentage /= float64(average.Count)
+	}
+	return result, nil
+}
+
+func subscriptionQuotaPercentage(sub UserSubscription, daily, weekly, monthly *float64) (float64, bool) {
+	var total float64
+	var count int
+	for _, window := range []struct {
+		used  float64
+		limit *float64
+	}{
+		{sub.DailyUsageUSD, daily}, {sub.WeeklyUsageUSD, weekly}, {sub.MonthlyUsageUSD, monthly},
+	} {
+		if window.limit != nil && *window.limit > 0 {
+			total += window.used / *window.limit * 100
+			count++
+		}
+	}
+	if count == 0 {
+		return 0, false
+	}
+	return total / float64(count), true
 }
 
 // normalizeExpiredWindows 将已过期窗口的数据清零（仅影响返回数据，不影响数据库）

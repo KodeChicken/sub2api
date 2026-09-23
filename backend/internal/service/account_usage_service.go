@@ -181,18 +181,19 @@ type AICredit struct {
 
 // UsageInfo 账号使用量信息
 type UsageInfo struct {
-	Source             string         `json:"source,omitempty"`               // "passive" or "active"
-	UpdatedAt          *time.Time     `json:"updated_at,omitempty"`           // 更新时间
-	FiveHour           *UsageProgress `json:"five_hour"`                      // 5小时窗口
-	SevenDay           *UsageProgress `json:"seven_day,omitempty"`            // 7天窗口
-	SevenDaySonnet     *UsageProgress `json:"seven_day_sonnet,omitempty"`     // 7天Sonnet窗口
-	SevenDayFable      *UsageProgress `json:"seven_day_fable,omitempty"`      // 7天Fable窗口（响应头 7d_oi）
-	GeminiSharedDaily  *UsageProgress `json:"gemini_shared_daily,omitempty"`  // Gemini shared pool RPD (Google One / Code Assist)
-	GeminiProDaily     *UsageProgress `json:"gemini_pro_daily,omitempty"`     // Gemini Pro 日配额
-	GeminiFlashDaily   *UsageProgress `json:"gemini_flash_daily,omitempty"`   // Gemini Flash 日配额
-	GeminiSharedMinute *UsageProgress `json:"gemini_shared_minute,omitempty"` // Gemini shared pool RPM (Google One / Code Assist)
-	GeminiProMinute    *UsageProgress `json:"gemini_pro_minute,omitempty"`    // Gemini Pro RPM
-	GeminiFlashMinute  *UsageProgress `json:"gemini_flash_minute,omitempty"`  // Gemini Flash RPM
+	Source                   string                    `json:"source,omitempty"` // "passive" or "active"
+	SubscriptionQuotaAverage *SubscriptionQuotaAverage `json:"subscription_quota_average,omitempty"`
+	UpdatedAt                *time.Time                `json:"updated_at,omitempty"`           // 更新时间
+	FiveHour                 *UsageProgress            `json:"five_hour"`                      // 5小时窗口
+	SevenDay                 *UsageProgress            `json:"seven_day,omitempty"`            // 7天窗口
+	SevenDaySonnet           *UsageProgress            `json:"seven_day_sonnet,omitempty"`     // 7天Sonnet窗口
+	SevenDayFable            *UsageProgress            `json:"seven_day_fable,omitempty"`      // 7天Fable窗口（响应头 7d_oi）
+	GeminiSharedDaily        *UsageProgress            `json:"gemini_shared_daily,omitempty"`  // Gemini shared pool RPD (Google One / Code Assist)
+	GeminiProDaily           *UsageProgress            `json:"gemini_pro_daily,omitempty"`     // Gemini Pro 日配额
+	GeminiFlashDaily         *UsageProgress            `json:"gemini_flash_daily,omitempty"`   // Gemini Flash 日配额
+	GeminiSharedMinute       *UsageProgress            `json:"gemini_shared_minute,omitempty"` // Gemini shared pool RPM (Google One / Code Assist)
+	GeminiProMinute          *UsageProgress            `json:"gemini_pro_minute,omitempty"`    // Gemini Pro RPM
+	GeminiFlashMinute        *UsageProgress            `json:"gemini_flash_minute,omitempty"`  // Gemini Flash RPM
 
 	// Antigravity 多模型配额
 	AntigravityQuota map[string]*AntigravityModelQuota `json:"antigravity_quota,omitempty"`
@@ -507,7 +508,9 @@ func (s *AccountUsageService) GetUsage(ctx context.Context, accountID int64, for
 		return nil, fmt.Errorf("get account failed: %w", err)
 	}
 
-	return s.getUsageForAccount(ctx, account, forceProbe)
+	usage, err := s.getUsageForAccount(ctx, account, forceProbe)
+	s.addSubscriptionQuotaAverages(ctx, []*Account{account}, map[int64]*UsageInfo{accountID: usage})
+	return usage, err
 }
 
 // GetUsageForAccount 已加载账号的使用量直通入口（配额监控 fetcher 复用，
@@ -588,8 +591,25 @@ func (s *AccountUsageService) GetUsageBatch(ctx context.Context, accountIDs []in
 	if err := g.Wait(); err != nil {
 		return nil, nil, err
 	}
+	s.addSubscriptionQuotaAverages(ctx, accounts, usageByAccount)
 
 	return usageByAccount, errorsByAccount, nil
+}
+
+func (s *AccountUsageService) addSubscriptionQuotaAverages(ctx context.Context, accounts []*Account, usageByAccount map[int64]*UsageInfo) {
+	if s.carpoolSubscriptionService == nil {
+		return
+	}
+	averages, err := s.carpoolSubscriptionService.AverageQuotaByGroups(ctx, accounts)
+	if err != nil {
+		slog.Warn("subscription_quota_average_failed", "error", err)
+		return
+	}
+	for accountID, average := range averages {
+		if usage := usageByAccount[accountID]; usage != nil {
+			usage.SubscriptionQuotaAverage = average
+		}
+	}
 }
 
 // GetPassiveUsage 从 Account.Extra 中的被动采样数据构建 UsageInfo，不调用外部 API。
@@ -600,7 +620,9 @@ func (s *AccountUsageService) GetPassiveUsage(ctx context.Context, accountID int
 		return nil, fmt.Errorf("get account failed: %w", err)
 	}
 
-	return s.getPassiveUsageForAccount(ctx, account)
+	usage, err := s.getPassiveUsageForAccount(ctx, account)
+	s.addSubscriptionQuotaAverages(ctx, []*Account{account}, map[int64]*UsageInfo{accountID: usage})
+	return usage, err
 }
 
 func (s *AccountUsageService) getPassiveUsageForAccount(ctx context.Context, account *Account) (*UsageInfo, error) {
