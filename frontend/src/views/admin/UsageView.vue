@@ -1,7 +1,7 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <UsageStatsCards :stats="usageStats" />
+      <UsageStatsCards :stats="usageStats" :billing="billingAnalysis" />
       <!-- Charts Section -->
       <div class="space-y-4">
         <div class="card p-4">
@@ -11,6 +11,7 @@
               <DateRangePicker
                 v-model:start-date="startDate"
                 v-model:end-date="endDate"
+                timezone="Asia/Shanghai"
                 @change="onDateRangeChange"
               />
             </div>
@@ -46,6 +47,7 @@
             :filters="breakdownFilters"
           />
         </div>
+        <UsageBillingAnalysis :analysis="billingAnalysis" :loading="billingLoading" @select-model="selectBillingModel" />
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <EndpointDistributionChart
             v-model:source="endpointDistributionSource"
@@ -65,7 +67,7 @@
         </div>
       </div>
       <!-- 明细区：tab 栏 + 筛选 + 内容收进同一张卡片，消除割裂感 -->
-      <div class="card">
+      <div ref="detailSectionRef" class="card">
         <div class="flex flex-wrap items-center border-b border-gray-200 px-2 dark:border-dark-700 sm:px-4">
           <button
             v-for="tab in detailTabs"
@@ -184,7 +186,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, reactive, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { saveAs } from 'file-saver'
 import { useRoute } from 'vue-router'
@@ -194,6 +196,7 @@ import { formatReasoningEffort } from '@/utils/format'
 import { resolveUsageRequestType, requestTypeToLegacyStream } from '@/utils/usageRequestType'
 import AppLayout from '@/components/layout/AppLayout.vue'; import Pagination from '@/components/common/Pagination.vue'; import Select from '@/components/common/Select.vue'; import DateRangePicker from '@/components/common/DateRangePicker.vue'
 import UsageStatsCards from '@/components/admin/usage/UsageStatsCards.vue'; import UsageFilters from '@/components/admin/usage/UsageFilters.vue'
+import UsageBillingAnalysis from '@/components/admin/usage/UsageBillingAnalysis.vue'
 import UsageTable from '@/components/admin/usage/UsageTable.vue'; import UsageExportProgress from '@/components/admin/usage/UsageExportProgress.vue'
 import UserTokenRanking from '@/components/admin/usage/UserTokenRanking.vue'
 import UsageCleanupDialog from '@/components/admin/usage/UsageCleanupDialog.vue'
@@ -205,7 +208,7 @@ import type { OpsErrorLog } from '@/api/admin/ops'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import Icon from '@/components/icons/Icon.vue'
-import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams } from '@/api/admin/usage'
+import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams, BillingAnalysis } from '@/api/admin/usage'
 
 const { t } = useI18n()
 const appStore = useAppStore()
@@ -214,6 +217,10 @@ type EndpointSource = 'inbound' | 'upstream' | 'path'
 type ModelDistributionSource = 'requested' | 'upstream' | 'mapping'
 const route = useRoute()
 const usageStats = ref<AdminUsageStatsResponse | null>(null); const usageLogs = ref<AdminUsageLog[]>([]); const loading = ref(false); const exporting = ref(false)
+const billingAnalysis = ref<BillingAnalysis | null>(null)
+const billingLoading = ref(false)
+const detailSectionRef = ref<HTMLElement | null>(null)
+let billingReqSeq = 0
 const trendData = ref<TrendDataPoint[]>([]); const requestedModelStats = ref<ModelStat[]>([]); const upstreamModelStats = ref<ModelStat[]>([]); const mappingModelStats = ref<ModelStat[]>([]); const groupStats = ref<GroupStat[]>([]); const chartsLoading = ref(false); const modelStatsLoading = ref(false); const granularity = ref<'day' | 'hour'>('hour')
 const modelDistributionMetric = ref<DistributionMetric>('tokens')
 const modelDistributionSource = ref<ModelDistributionSource>('requested')
@@ -275,12 +282,13 @@ const handleRankingSelectUser = (userId: number, email: string) => {
 }
 
 const granularityOptions = computed(() => [{ value: 'day', label: t('admin.dashboard.day') }, { value: 'hour', label: t('admin.dashboard.hour') }])
-// Use local timezone to avoid UTC timezone issues
+// Keep this page's date boundaries in the same zone as billing analysis.
 const formatLD = (d: Date) => {
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(d)
+  const field = (type: string) => parts.find((part) => part.type === type)?.value || ''
+  return `${field('year')}-${field('month')}-${field('day')}`
 }
 const getLast24HoursRangeDates = (): { start: string; end: string } => {
   const end = new Date()
@@ -298,7 +306,8 @@ const getGranularityForRange = (start: string, end: string): 'day' | 'hour' => {
 }
 const defaultRange = getLast24HoursRangeDates()
 const startDate = ref(defaultRange.start); const endDate = ref(defaultRange.end)
-const filters = ref<AdminUsageQueryParams>({ user_id: undefined, model: undefined, group_id: undefined, request_type: undefined, native_compaction_v2: null, billing_type: null, start_date: startDate.value, end_date: endDate.value })
+const rangePreset = ref<string | null>('last24Hours')
+const filters = ref<AdminUsageQueryParams>({ user_id: undefined, model: undefined, group_id: undefined, request_type: undefined, native_compaction_v2: null, billing_type: null, start_date: startDate.value, end_date: endDate.value, timezone: 'Asia/Shanghai' })
 const pagination = reactive({ page: 1, page_size: getPersistedPageSize(), total: 0 })
 const sortState = reactive({
   sort_by: 'created_at',
@@ -324,6 +333,7 @@ const applyRouteQueryFilters = () => {
 
   if (queryStartDate) {
     startDate.value = queryStartDate
+    rangePreset.value = null
   }
   if (queryEndDate) {
     endDate.value = queryEndDate
@@ -331,6 +341,7 @@ const applyRouteQueryFilters = () => {
 
   filters.value = {
     ...filters.value,
+    timezone: 'Asia/Shanghai',
     user_id: queryUserId,
     start_date: startDate.value,
     end_date: endDate.value
@@ -359,6 +370,7 @@ const loadRouteUserFilterLabel = async () => {
 }
 
 const onDateRangeChange = (range: { startDate: string; endDate: string; preset: string | null }) => {
+  rangePreset.value = range.preset
   startDate.value = range.startDate
   endDate.value = range.endDate
   filters.value = {
@@ -382,6 +394,7 @@ const buildUsageListParams = (
     page_size: pageSize,
     exact_total: exactTotal,
     ...filters.value,
+    timezone: 'Asia/Shanghai',
     stream: legacyStream === null ? undefined : legacyStream,
     sort_by: sortState.sort_by,
     sort_order: sortState.sort_order
@@ -406,6 +419,7 @@ const loadStats = async (force = false) => {
     const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
     const s = await adminAPI.usage.getStats({
       ...filters.value,
+      timezone: 'Asia/Shanghai',
       stream: legacyStream === null ? undefined : legacyStream,
       ...(force ? { nocache: 1 } : {}),
     })
@@ -423,6 +437,38 @@ const loadStats = async (force = false) => {
   } finally {
     if (seq === statsReqSeq) endpointStatsLoading.value = false
   }
+}
+
+const loadBillingAnalysis = async () => {
+  const seq = ++billingReqSeq
+  billingLoading.value = true
+  try {
+    const requestType = filters.value.request_type
+    const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
+    const result = await adminUsageAPI.getBillingAnalysis({
+      ...filters.value,
+      timezone: 'Asia/Shanghai',
+      start_date: startDate.value,
+      end_date: endDate.value,
+      stream: legacyStream === null ? undefined : legacyStream
+    })
+    if (seq === billingReqSeq) billingAnalysis.value = result
+  } catch (error) {
+    if (seq === billingReqSeq) {
+      billingAnalysis.value = null
+      console.error('Failed to load billing analysis:', error)
+    }
+  } finally {
+    if (seq === billingReqSeq) billingLoading.value = false
+  }
+}
+
+const selectBillingModel = (model: string) => {
+  if (!model) return
+  filters.value = { ...filters.value, model }
+  activeTab.value = 'usage'
+  applyFilters()
+  void nextTick(() => detailSectionRef.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }))
 }
 
 // 失效模型统计缓存:仅标记需要重取,保留旧数据直到新数据到达(避免刷新时图表闪空)。
@@ -445,6 +491,7 @@ const loadModelStats = async (source: ModelDistributionSource, force = false) =>
     const baseParams = {
       start_date: filters.value.start_date || startDate.value,
       end_date: filters.value.end_date || endDate.value,
+      timezone: 'Asia/Shanghai',
       user_id: filters.value.user_id,
       model: filters.value.model,
       api_key_id: filters.value.api_key_id,
@@ -495,6 +542,7 @@ const loadChartData = async () => {
     const snapshot = await adminAPI.dashboard.getSnapshotV2({
       start_date: filters.value.start_date || startDate.value,
       end_date: filters.value.end_date || endDate.value,
+      timezone: 'Asia/Shanghai',
       granularity: granularity.value,
       user_id: filters.value.user_id,
       model: filters.value.model,
@@ -522,6 +570,7 @@ const applyFilters = () => {
   invalidateModelStatsCache()
   loadLogs()
   loadStats()
+  loadBillingAnalysis()
   loadModelStats(modelDistributionSource.value, true)
   loadChartData()
   errPage.value = 1
@@ -535,6 +584,7 @@ const refreshData = () => {
   invalidateModelStatsCache()
   loadLogs()
   loadStats(true)
+  loadBillingAnalysis()
   loadModelStats(modelDistributionSource.value, true)
   loadChartData()
   if (activeTab.value === 'errors') loadAdminErrors()
@@ -544,9 +594,39 @@ const resetFilters = () => {
   const range = getLast24HoursRangeDates()
   startDate.value = range.start
   endDate.value = range.end
-  filters.value = { start_date: startDate.value, end_date: endDate.value, request_type: undefined, native_compaction_v2: null, billing_type: null, billing_mode: undefined }
+  rangePreset.value = 'last24Hours'
+  filters.value = { start_date: startDate.value, end_date: endDate.value, timezone: 'Asia/Shanghai', request_type: undefined, native_compaction_v2: null, billing_type: null, billing_mode: undefined }
   granularity.value = getGranularityForRange(startDate.value, endDate.value)
   applyFilters()
+}
+
+let refreshTimer = 0
+let observedDay = formatLD(new Date())
+let observedHour = Math.floor(Date.now() / 3_600_000)
+const refreshCurrentRange = () => {
+  const now = new Date()
+  const day = formatLD(now)
+  const hour = Math.floor(now.getTime() / 3_600_000)
+  const dayChanged = day !== observedDay
+  const hourChanged = hour !== observedHour
+  observedDay = day
+  observedHour = hour
+  if (!dayChanged && !hourChanged) return
+
+  if (dayChanged && ['today', 'last24Hours', '3days', '7days'].includes(rangePreset.value || '')) {
+    const previousEnd = endDate.value
+    const offset = rangePreset.value === '3days' ? 2 : rangePreset.value === '7days' ? 6 : 0
+    startDate.value = rangePreset.value === 'last24Hours'
+      ? getLast24HoursRangeDates().start
+      : new Date(Date.parse(`${day}T00:00:00Z`) - offset * 86_400_000).toISOString().slice(0, 10)
+    endDate.value = day
+    filters.value = { ...filters.value, start_date: startDate.value, end_date: endDate.value }
+    if (previousEnd !== day) {
+      applyFilters()
+      return
+    }
+  }
+  if (endDate.value >= day) refreshData()
 }
 const handlePageChange = (p: number) => { pagination.page = p; loadLogs() }
 const handlePageSizeChange = (s: number) => { pagination.page_size = s; pagination.page = 1; loadLogs() }
@@ -869,6 +949,7 @@ onMounted(() => {
   void loadRouteUserFilterLabel()
   loadLogs()
   loadStats()
+  loadBillingAnalysis()
   loadModelStats(modelDistributionSource.value, true)
   window.setTimeout(() => {
     void loadChartData()
@@ -876,8 +957,14 @@ onMounted(() => {
   loadSavedColumns()
   loadSavedErrColumns()
   document.addEventListener('click', handleColumnClickOutside)
+  refreshTimer = window.setInterval(refreshCurrentRange, 60_000)
 })
-onUnmounted(() => { abortController?.abort(); exportAbortController?.abort(); document.removeEventListener('click', handleColumnClickOutside) })
+onUnmounted(() => {
+  abortController?.abort()
+  exportAbortController?.abort()
+  window.clearInterval(refreshTimer)
+  document.removeEventListener('click', handleColumnClickOutside)
+})
 
 watch(modelDistributionSource, (source) => {
   void loadModelStats(source)

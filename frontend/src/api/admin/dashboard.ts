@@ -45,6 +45,7 @@ export async function getRealtimeMetrics(): Promise<{
 }
 
 export interface TrendParams {
+  timezone?: string
   start_date?: string
   end_date?: string
   granularity?: 'day' | 'hour'

@@ -330,6 +330,38 @@ describe('EditAccountModal', () => {
 
   afterEach(() => vi.useRealTimers())
 
+  it('sets monthly cost through its dedicated update field', async () => {
+    const account = buildAccount()
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+
+    await wrapper.get('#monthly-account-cost').setValue('17.50')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.monthly_cost_usd).toBe(17.5)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.monthly_cost_usd).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('clears monthly cost through its dedicated update field', async () => {
+    const account = buildAccount()
+    account.extra = { monthly_cost_usd: 17 }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+
+    expect(wrapper.get<HTMLInputElement>('#monthly-account-cost').element.value).toBe('17')
+    await wrapper.get('#monthly-account-cost').setValue('')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.monthly_cost_usd).toBe(0)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra?.monthly_cost_usd).toBe(17)
+    wrapper.unmount()
+  })
+
   it('sets expiry presets from now instead of extending the saved expiry', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date('2028-02-29T12:34:00'))

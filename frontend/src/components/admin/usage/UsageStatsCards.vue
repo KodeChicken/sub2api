@@ -1,5 +1,5 @@
 <template>
-  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+  <div class="grid grid-cols-2 gap-4" :class="billing !== undefined ? 'lg:grid-cols-5' : 'lg:grid-cols-4'">
     <div class="card p-4 flex items-center gap-3">
       <div class="rounded-lg bg-blue-100 p-2 dark:bg-blue-900/30 text-blue-600">
         <Icon name="document" size="md" />
@@ -79,6 +79,20 @@
         </p>
       </div>
     </div>
+    <div v-if="billing !== undefined" class="card flex items-center gap-3 p-4">
+      <div class="rounded-lg bg-teal-100 p-2 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300">
+        <Icon name="chart" size="md" />
+      </div>
+      <div class="min-w-0">
+        <p class="text-xs font-medium text-gray-500">{{ t('usage.billingRatio') }}</p>
+        <p class="text-xl font-bold tabular-nums">{{ billing && billing.total.account_cost > 0 ? `${(billing.total.user_cost / billing.total.account_cost).toFixed(4)}x` : t('usage.unavailable') }}</p>
+        <p class="break-words text-xs text-gray-500">
+          {{ billing?.total.requests?.toLocaleString() || 0 }} ·
+          U ${{ billing?.total.user_cost?.toFixed(4) || '0.0000' }} /
+          A ${{ billing?.total.account_cost?.toFixed(4) || '0.0000' }}
+        </p>
+      </div>
+    </div>
     <div class="card p-4 flex items-center gap-3">
       <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30 text-purple-600">
         <Icon name="clock" size="md" />
@@ -92,11 +106,13 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { AdminUsageStatsResponse } from '@/api/admin/usage'
+import type { BillingAnalysis } from '@/api/admin/usage'
 import type { UsageStatsResponse } from '@/types'
 import Icon from '@/components/icons/Icon.vue'
 
 const props = withDefaults(defineProps<{
   stats: (AdminUsageStatsResponse | UsageStatsResponse) | null
+  billing?: BillingAnalysis | null
   showAccountCost?: boolean
   strikeStandardCost?: boolean
 }>(), {

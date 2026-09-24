@@ -89,6 +89,7 @@ interface DatePreset {
 interface Props {
   startDate: string
   endDate: string
+  timezone?: string
 }
 
 interface Emits {
@@ -113,17 +114,30 @@ const today = () => formatDateToString(new Date())
 // Tomorrow's date - used for max date to handle timezone differences
 // When user is in a timezone behind the server, "today" on server might be "tomorrow" locally
 const tomorrow = () => {
-  const d = new Date()
-  d.setDate(d.getDate() + 1)
-  return formatDateToString(d)
+  return daysBefore(-1)
 }
 
 // Helper function to format date to YYYY-MM-DD using local timezone
 const formatDateToString = (date: Date): string => {
+  if (props.timezone) {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: props.timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).formatToParts(date)
+    const field = (type: string) => parts.find((part) => part.type === type)?.value || ''
+    return `${field('year')}-${field('month')}-${field('day')}`
+  }
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+const daysBefore = (days: number) => {
+  const d = new Date(`${today()}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - days)
+  return d.toISOString().slice(0, 10)
 }
 
 const presets: DatePreset[] = [
@@ -139,9 +153,7 @@ const presets: DatePreset[] = [
     labelKey: 'dates.yesterday',
     value: 'yesterday',
     getRange: () => {
-      const d = new Date()
-      d.setDate(d.getDate() - 1)
-      const yesterday = formatDateToString(d)
+      const yesterday = daysBefore(1)
       return { start: yesterday, end: yesterday }
     }
   },
@@ -158,13 +170,16 @@ const presets: DatePreset[] = [
     }
   },
   {
+    labelKey: 'dates.last3Days',
+    value: '3days',
+    getRange: () => ({ start: daysBefore(2), end: today() })
+  },
+  {
     labelKey: 'dates.last7Days',
     value: '7days',
     getRange: () => {
       const end = today()
-      const d = new Date()
-      d.setDate(d.getDate() - 6)
-      const start = formatDateToString(d)
+      const start = daysBefore(6)
       return { start, end }
     }
   },
@@ -173,9 +188,7 @@ const presets: DatePreset[] = [
     value: '14days',
     getRange: () => {
       const end = today()
-      const d = new Date()
-      d.setDate(d.getDate() - 13)
-      const start = formatDateToString(d)
+      const start = daysBefore(13)
       return { start, end }
     }
   },
@@ -184,9 +197,7 @@ const presets: DatePreset[] = [
     value: '30days',
     getRange: () => {
       const end = today()
-      const d = new Date()
-      d.setDate(d.getDate() - 29)
-      const start = formatDateToString(d)
+      const start = daysBefore(29)
       return { start, end }
     }
   },
@@ -194,8 +205,7 @@ const presets: DatePreset[] = [
     labelKey: 'dates.thisMonth',
     value: 'thisMonth',
     getRange: () => {
-      const now = new Date()
-      const start = formatDateToString(new Date(now.getFullYear(), now.getMonth(), 1))
+      const start = `${today().slice(0, 7)}-01`
       return { start, end: today() }
     }
   },
@@ -203,9 +213,9 @@ const presets: DatePreset[] = [
     labelKey: 'dates.lastMonth',
     value: 'lastMonth',
     getRange: () => {
-      const now = new Date()
-      const start = formatDateToString(new Date(now.getFullYear(), now.getMonth() - 1, 1))
-      const end = formatDateToString(new Date(now.getFullYear(), now.getMonth(), 0))
+      const first = new Date(`${today().slice(0, 7)}-01T00:00:00Z`)
+      const end = new Date(first.getTime() - 86_400_000).toISOString().slice(0, 10)
+      const start = `${end.slice(0, 7)}-01`
       return { start, end }
     }
   }

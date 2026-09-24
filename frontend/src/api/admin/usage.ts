@@ -26,6 +26,22 @@ export interface AdminUsageStatsResponse {
   endpoint_paths?: EndpointStat[]
 }
 
+export interface BillingAnalysisRow {
+  model?: string
+  account_id?: number
+  requests: number
+  user_cost: number
+  account_cost: number
+  monthly_cost?: number
+  seven_day_estimate?: number
+}
+
+export interface BillingAnalysis {
+  total: BillingAnalysisRow
+  models: BillingAnalysisRow[]
+  accounts: BillingAnalysisRow[]
+}
+
 export interface SimpleUser {
   id: number
   email: string
@@ -138,6 +154,11 @@ export async function getStats(params: {
   return data
 }
 
+export async function getBillingAnalysis(params: AdminUsageQueryParams): Promise<BillingAnalysis> {
+  const { data } = await apiClient.get<BillingAnalysis>('/admin/usage/billing-analysis', { params })
+  return data
+}
+
 /**
  * Search users by email keyword (admin only)
  * @param keyword - Email keyword to search
@@ -210,6 +231,7 @@ export async function cancelCleanupTask(taskId: number): Promise<{ id: number; s
 export const adminUsageAPI = {
   list,
   getStats,
+  getBillingAnalysis,
   searchUsers,
   searchApiKeys,
   listCleanupTasks,

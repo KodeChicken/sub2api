@@ -1722,6 +1722,22 @@
           </div>
         </div>
       </div>
+      <div>
+        <label class="input-label" for="monthly-account-cost">{{ t('admin.accounts.monthlyCost') }}</label>
+        <div class="relative max-w-xs">
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">$</span>
+          <input
+            id="monthly-account-cost"
+            v-model="monthlyCostInput"
+            type="number"
+            min="0"
+            step="0.01"
+            class="input pl-7"
+            :placeholder="t('admin.accounts.monthlyCostPlaceholder')"
+          />
+        </div>
+        <p class="input-hint">{{ t('admin.accounts.monthlyCostHint') }}</p>
+      </div>
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
         <label class="input-label">{{ t('admin.accounts.expiresAt') }}</label>
         <input v-model="expiresAtInput" type="datetime-local" class="input" />
@@ -4023,6 +4039,7 @@ const form = reactive({
   group_ids: [] as number[],
   expires_at: null as number | null
 })
+const monthlyCostInput = ref('')
 
 const handleUpstreamBillingRateSyncChange = (enabled: boolean) => {
   upstreamBillingRateSyncEnabled.value = enabled
@@ -4132,6 +4149,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     : 'active'
   form.group_ids = newAccount.group_ids || []
   form.expires_at = newAccount.expires_at ?? null
+  const monthlyCost = newAccount.extra?.monthly_cost_usd
+  monthlyCostInput.value = typeof monthlyCost === 'number' && monthlyCost > 0 ? String(monthlyCost) : ''
 
   // Load intercept warmup requests setting (applies to all account types)
   const credentials = newAccount.credentials as Record<string, unknown> | undefined
@@ -5132,6 +5151,12 @@ const handleSubmit = async () => {
     appStore.showError(t('admin.accounts.pleaseSelectStatus'))
     return
   }
+  const monthlyCostRaw = String(monthlyCostInput.value).trim()
+  const monthlyCost = monthlyCostRaw ? Number(monthlyCostRaw) : null
+  if (monthlyCostRaw && (monthlyCost == null || !Number.isFinite(monthlyCost) || monthlyCost <= 0)) {
+    appStore.showError(t('admin.accounts.monthlyCostInvalid'))
+    return
+  }
 	if (autoResetCreditEnabled.value) {
 		const thresholds = [autoResetCredit5hThreshold.value, autoResetCredit7dThreshold.value]
 		if (thresholds.some((value) => !Number.isFinite(value) || value < 0.1 || value > 100)) {
@@ -5851,6 +5876,11 @@ const handleSubmit = async () => {
         delete newExtra.upstream_request_id_header
       }
       updatePayload.extra = newExtra
+    }
+
+    const previousMonthlyCost = props.account.extra?.monthly_cost_usd
+    if (monthlyCost !== (typeof previousMonthlyCost === 'number' ? previousMonthlyCost : null)) {
+      updatePayload.monthly_cost_usd = monthlyCost ?? 0
     }
 
     const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {

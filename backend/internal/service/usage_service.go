@@ -461,3 +461,7 @@ func (s *UsageService) GetStatsWithFilters(ctx context.Context, filters usagesta
 	}
 	return stats, nil
 }
+
+func (s *UsageService) GetBillingAnalysis(ctx context.Context, filters usagestats.UsageLogFilters) (*usagestats.BillingAnalysis, error) {
+	return s.usageRepo.GetBillingAnalysis(ctx, filters)
+}

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -145,6 +146,7 @@ type UpdateAccountRequest struct {
 	Type                    string         `json:"type" binding:"omitempty,oneof=oauth setup-token apikey upstream bedrock service_account"`
 	Credentials             map[string]any `json:"credentials"`
 	Extra                   map[string]any `json:"extra"`
+	MonthlyCostUSD          *float64       `json:"monthly_cost_usd"`
 	ProxyID                 *int64         `json:"proxy_id"`
 	Concurrency             *int           `json:"concurrency"`
 	Priority                *int           `json:"priority"`
@@ -1025,6 +1027,13 @@ func (h *AccountHandler) Create(c *gin.Context) {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
 	}
+	if raw, exists := req.Extra["monthly_cost_usd"]; exists {
+		value, ok := raw.(float64)
+		if !ok || value <= 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+			response.BadRequest(c, "monthly_cost_usd must be a positive finite number")
+			return
+		}
+	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
 	sanitizeExtraBaseRPM(req.Extra)
 	if err := service.ValidateUpstreamRequestIDHeaderExtra(req.Extra); err != nil {
@@ -1162,6 +1171,17 @@ func (h *AccountHandler) Update(c *gin.Context) {
 		response.BadRequest(c, "rate_multiplier must be >= 0")
 		return
 	}
+	if req.MonthlyCostUSD != nil && (*req.MonthlyCostUSD < 0 || math.IsNaN(*req.MonthlyCostUSD) || math.IsInf(*req.MonthlyCostUSD, 0)) {
+		response.BadRequest(c, "monthly_cost_usd must be a non-negative finite number")
+		return
+	}
+	if raw, exists := req.Extra["monthly_cost_usd"]; exists {
+		value, ok := raw.(float64)
+		if !ok || value <= 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+			response.BadRequest(c, "monthly_cost_usd must be a positive finite number")
+			return
+		}
+	}
 	// base_rpm 输入校验：负值归零，超过 10000 截断
 	sanitizeExtraBaseRPM(req.Extra)
 	if err := service.ValidateUpstreamRequestIDHeaderExtra(req.Extra); err != nil {
@@ -1178,6 +1198,7 @@ func (h *AccountHandler) Update(c *gin.Context) {
 		Type:                  req.Type,
 		Credentials:           req.Credentials,
 		Extra:                 req.Extra,
+		MonthlyCostUSD:        req.MonthlyCostUSD,
 		ProxyID:               req.ProxyID,
 		Concurrency:           req.Concurrency, // 指针类型，nil 表示未提供
 		Priority:              req.Priority,    // 指针类型，nil 表示未提供

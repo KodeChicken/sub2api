@@ -9,6 +9,7 @@ const messages: Record<string, string> = {
   'dates.yesterday': 'Yesterday',
   'dates.last24Hours': 'Last 24 Hours',
   'dates.last7Days': 'Last 7 Days',
+  'dates.last3Days': 'Last 3 Days',
   'dates.last14Days': 'Last 14 Days',
   'dates.last30Days': 'Last 30 Days',
   'dates.thisMonth': 'This Month',
@@ -92,5 +93,26 @@ describe('DateRangePicker', () => {
         preset: 'last24Hours'
       }
     ])
+  })
+
+  it('uses Shanghai calendar days for the last 3 days', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-23T16:30:00Z'))
+    try {
+      const wrapper = mount(DateRangePicker, {
+        props: { startDate: '2026-09-24', endDate: '2026-09-24', timezone: 'Asia/Shanghai' },
+        global: { stubs: { Icon: true } }
+      })
+      await wrapper.find('.date-picker-trigger').trigger('click')
+      const preset = wrapper.findAll('.date-picker-preset').find((node) => node.text() === 'Last 3 Days')
+      await preset!.trigger('click')
+      await wrapper.find('.date-picker-apply').trigger('click')
+      expect(wrapper.emitted('change')?.[0]).toEqual([{
+        startDate: '2026-09-22', endDate: '2026-09-24', preset: '3days'
+      }])
+      wrapper.unmount()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -4,7 +4,7 @@ import { defineComponent, ref } from 'vue'
 
 import UsageView from '../UsageView.vue'
 
-const { list, exportList, getStats, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery, aoaToSheet, sheetAddAoa, saveAs, xlsxWrite } = vi.hoisted(() => {
+const { list, exportList, getStats, getBillingAnalysis, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery, aoaToSheet, sheetAddAoa, saveAs, xlsxWrite } = vi.hoisted(() => {
   vi.stubGlobal('localStorage', {
     getItem: vi.fn(() => null),
     setItem: vi.fn(),
@@ -15,6 +15,11 @@ const { list, exportList, getStats, getSnapshotV2, getById, getModelStats, listE
     list: vi.fn(),
 		exportList: vi.fn(),
     getStats: vi.fn(),
+    getBillingAnalysis: vi.fn().mockResolvedValue({
+      total: { requests: 0, user_cost: 0, account_cost: 0 },
+      models: [],
+      accounts: []
+    }),
     getSnapshotV2: vi.fn(),
     getById: vi.fn(),
     getModelStats: vi.fn(),
@@ -68,6 +73,7 @@ vi.mock('@/api/admin', () => ({
 vi.mock('@/api/admin/usage', () => ({
   adminUsageAPI: {
 		list: exportList,
+    getBillingAnalysis,
   },
 }))
 
@@ -192,6 +198,11 @@ describe('admin UsageView route filters', () => {
     })
     getSnapshotV2.mockReset().mockResolvedValue({ trend: [], models: [], groups: [] })
     getModelStats.mockReset().mockResolvedValue({ models: [] })
+    getBillingAnalysis.mockReset().mockResolvedValue({
+      total: { requests: 0, user_cost: 0, account_cost: 0 },
+      models: [],
+      accounts: []
+    })
     getById.mockReset()
   })
 
@@ -269,6 +280,25 @@ describe('admin UsageView route filters', () => {
 
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ user_id: 42 }), expect.anything())
     expect(wrapper.find('[data-test="user-filter-label"]').text()).toBe('42')
+  })
+
+  it('opens usage details with the selected billing model', async () => {
+    getBillingAnalysis.mockResolvedValueOnce({
+      total: { requests: 1, user_cost: 1, account_cost: 2 },
+      models: [{ model: 'gpt-6-astra', requests: 1, user_cost: 1, account_cost: 2 }],
+      accounts: []
+    })
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    list.mockClear()
+
+    await wrapper.get('tbody button').trigger('click')
+    await flushPromises()
+
+    expect((wrapper.vm as any).filters.model).toBe('gpt-6-astra')
+    expect((wrapper.vm as any).activeTab).toBe('usage')
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-6-astra' }), expect.anything())
+    wrapper.unmount()
   })
 })
 

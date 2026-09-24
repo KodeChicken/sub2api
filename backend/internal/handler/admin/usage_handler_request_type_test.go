@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
@@ -15,9 +16,10 @@ import (
 
 type adminUsageRepoCapture struct {
 	service.UsageLogRepository
-	listParams   pagination.PaginationParams
-	listFilters  usagestats.UsageLogFilters
-	statsFilters usagestats.UsageLogFilters
+	listParams     pagination.PaginationParams
+	listFilters    usagestats.UsageLogFilters
+	statsFilters   usagestats.UsageLogFilters
+	billingFilters usagestats.UsageLogFilters
 }
 
 func (s *adminUsageRepoCapture) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters usagestats.UsageLogFilters) ([]service.UsageLog, *pagination.PaginationResult, error) {
@@ -36,6 +38,11 @@ func (s *adminUsageRepoCapture) GetStatsWithFilters(ctx context.Context, filters
 	return &usagestats.UsageStats{}, nil
 }
 
+func (s *adminUsageRepoCapture) GetBillingAnalysis(ctx context.Context, filters usagestats.UsageLogFilters) (*usagestats.BillingAnalysis, error) {
+	s.billingFilters = filters
+	return &usagestats.BillingAnalysis{Models: []usagestats.BillingAnalysisRow{}, Accounts: []usagestats.BillingAnalysisRow{}}, nil
+}
+
 func newAdminUsageRequestTypeTestRouter(repo *adminUsageRepoCapture) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	usageSvc := service.NewUsageService(repo, nil, nil, nil)
@@ -43,7 +50,39 @@ func newAdminUsageRequestTypeTestRouter(repo *adminUsageRepoCapture) *gin.Engine
 	router := gin.New()
 	router.GET("/admin/usage", handler.List)
 	router.GET("/admin/usage/stats", handler.Stats)
+	router.GET("/admin/usage/billing-analysis", handler.BillingAnalysis)
 	return router
+}
+
+func TestAdminBillingAnalysisUsesRequestedModelAndShanghaiDates(t *testing.T) {
+	repo := &adminUsageRepoCapture{}
+	router := newAdminUsageRequestTypeTestRouter(repo)
+	req := httptest.NewRequest(http.MethodGet,
+		"/admin/usage/billing-analysis?account_id=42&model=gpt-6-astra&request_type=stream&stream=false&start_date=2025-01-02&end_date=2025-01-03", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, int64(42), repo.billingFilters.AccountID)
+	require.Equal(t, usagestats.ModelSourceRequested, repo.billingFilters.ModelFilterSource)
+	require.Equal(t, "gpt-6-astra", repo.billingFilters.Model)
+	require.NotNil(t, repo.billingFilters.RequestType)
+	require.Nil(t, repo.billingFilters.Stream)
+	require.Equal(t, "2025-01-02T00:00:00+08:00", repo.billingFilters.StartTime.Format(time.RFC3339))
+	require.Equal(t, "2025-01-04T00:00:00+08:00", repo.billingFilters.EndTime.Format(time.RFC3339))
+}
+
+func TestAdminBillingAnalysisRejectsInvalidFilters(t *testing.T) {
+	repo := &adminUsageRepoCapture{}
+	router := newAdminUsageRequestTypeTestRouter(repo)
+	for _, query := range []string{
+		"account_id=bad", "request_type=oops", "billing_type=bad",
+		"start_date=2025-01-02", "start_date=2025-01-03&end_date=2025-01-02",
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/usage/billing-analysis?"+query, nil))
+		require.Equal(t, http.StatusBadRequest, rec.Code, query)
+	}
 }
 
 func TestAdminUsageListRequestTypePriority(t *testing.T) {

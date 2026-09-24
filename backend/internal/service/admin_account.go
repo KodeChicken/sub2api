@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"math"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -686,6 +687,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			"quota_daily_start",
 			"quota_weekly_used",
 			"quota_weekly_start",
+			"monthly_cost_usd",
 			grokBillingExtraKey,
 			UpstreamBillingProbeEnabledExtraKey,
 			UpstreamBillingRateSyncEnabledExtraKey,
@@ -720,6 +722,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 		ComputeQuotaResetAt(account.Extra)
 		NormalizeFixedQuotaWindows(account.Extra)
+	}
+	if err := applyMonthlyCostUSD(account, input.MonthlyCostUSD); err != nil {
+		return nil, err
 	}
 	if input.Extra == nil {
 		account.Extra = prepareCodexFingerprintExtraForUpdate(account, account.Extra)
@@ -915,6 +920,24 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		return nil, err
 	}
 	return updated, nil
+}
+
+func applyMonthlyCostUSD(account *Account, monthlyCost *float64) error {
+	if monthlyCost == nil {
+		return nil
+	}
+	if *monthlyCost < 0 || math.IsNaN(*monthlyCost) || math.IsInf(*monthlyCost, 0) {
+		return infraerrors.BadRequest("INVALID_MONTHLY_COST", "monthly_cost_usd must be a non-negative finite number")
+	}
+	if account.Extra == nil {
+		account.Extra = make(map[string]any)
+	}
+	if *monthlyCost == 0 {
+		delete(account.Extra, "monthly_cost_usd")
+	} else {
+		account.Extra["monthly_cost_usd"] = *monthlyCost
+	}
+	return nil
 }
 
 // UpdateAccountExtra 仅对 Extra JSONB 做 key 级合并，避免覆盖其它运行态键
