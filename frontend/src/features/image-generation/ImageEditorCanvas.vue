@@ -1,9 +1,14 @@
 <template>
-  <div ref="container" class="relative h-full min-h-[460px] overflow-hidden bg-gray-200 dark:bg-dark-950">
-    <div ref="stageHost" class="absolute inset-0" />
-    <div v-if="loading" class="absolute inset-0 grid place-items-center bg-white/70 dark:bg-dark-900/70">
+  <div ref="container" class="image-editor-canvas" :class="{ 'is-loading': loading }">
+    <div ref="stageHost" class="image-editor-canvas-stage" aria-hidden="true" />
+    <div v-if="loading" class="image-editor-canvas-overlay">
       <LoadingSpinner />
     </div>
+    <div v-else-if="imageError" class="image-editor-canvas-overlay image-editor-canvas-error" role="alert">
+      <span>{{ imageError }}</span>
+      <button type="button" @click="loadImage">重新加载</button>
+    </div>
+    <div class="image-editor-canvas-tip">滚轮缩放 · Alt/中键拖动画布</div>
   </div>
 </template>
 
@@ -13,24 +18,46 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import { cloneEditorDocument, type LocalImageEditorDocument } from './editor'
 
-const props = defineProps<{ document: LocalImageEditorDocument; imageUrl: string }>()
-const emit = defineEmits<{ commit: [document: LocalImageEditorDocument]; zoom: [value: number] }>()
+export type ImageEditorTool = 'canvas' | 'transform' | 'crop' | 'export' | 'outpaint'
+
+const props = defineProps<{
+  document: LocalImageEditorDocument
+  imageUrl: string
+  sourceWidth: number
+  sourceHeight: number
+  activeTool: ImageEditorTool
+  cropAspectLocked: boolean
+}>()
+
+const emit = defineEmits<{
+  commit: [document: LocalImageEditorDocument]
+  zoom: [value: number]
+}>()
+
 const container = ref<HTMLDivElement | null>(null)
 const stageHost = ref<HTMLDivElement | null>(null)
 const loading = ref(true)
+const imageError = ref('')
 let stage: Konva.Stage | null = null
 let layer: Konva.Layer | null = null
-let image: HTMLImageElement | null = null
+let sourceImage: HTMLImageElement | null = null
 let observer: ResizeObserver | null = null
-let frame = 0
-let zoom = 1
+let renderFrame = 0
+let zoomMultiplier = 1
+let panX = 0
+let panY = 0
+let panning = false
+let panPointer = { x: 0, y: 0 }
 
 onMounted(() => {
-  if (!stageHost.value || !container.value) return
+  if (!container.value || !stageHost.value) return
   stage = new Konva.Stage({ container: stageHost.value, width: 1, height: 1 })
   layer = new Konva.Layer()
   stage.add(layer)
   stage.on('wheel', handleWheel)
+  stage.on('pointerdown', beginPan)
+  stage.on('pointermove', movePan)
+  stage.on('pointerup pointercancel', endPan)
   observer = new ResizeObserver(resize)
   observer.observe(container.value)
   resize()
@@ -38,133 +65,428 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  cancelAnimationFrame(renderFrame)
   observer?.disconnect()
-  cancelAnimationFrame(frame)
   stage?.destroy()
 })
 
 watch(() => props.imageUrl, loadImage)
-watch(() => props.document, renderSoon, { deep: true })
+watch(
+  () => [props.document, props.activeTool, props.sourceWidth, props.sourceHeight, props.cropAspectLocked],
+  scheduleRender,
+  { deep: true },
+)
 
 function loadImage() {
   loading.value = true
+  imageError.value = ''
+  sourceImage = null
+  if (!props.imageUrl) {
+    loading.value = false
+    imageError.value = '原图地址无效'
+    return
+  }
   const next = new Image()
   next.onload = () => {
-    image = next
+    sourceImage = next
     loading.value = false
-    renderSoon()
+    scheduleRender()
   }
-  next.onerror = () => { loading.value = false }
+  next.onerror = () => {
+    loading.value = false
+    imageError.value = '原图加载失败，请检查网络后重试'
+    scheduleRender()
+  }
   next.src = props.imageUrl
 }
 
 function resize() {
   if (!stage || !container.value) return
   stage.size({ width: container.value.clientWidth, height: container.value.clientHeight })
-  renderSoon()
+  scheduleRender()
 }
 
-function renderSoon() {
-  cancelAnimationFrame(frame)
-  frame = requestAnimationFrame(render)
+function scheduleRender() {
+  cancelAnimationFrame(renderFrame)
+  renderFrame = requestAnimationFrame(renderScene)
 }
 
-function render() {
+function renderScene() {
   if (!stage || !layer) return
   layer.destroyChildren()
-  const canvas = props.document.canvas
+  const cropMode = props.activeTool === 'crop'
+  const workspaceWidth = cropMode ? props.sourceWidth : props.document.canvas.width
+  const workspaceHeight = cropMode ? props.sourceHeight : props.document.canvas.height
+  if (workspaceWidth <= 0 || workspaceHeight <= 0) return
+
   const margin = stage.width() < 700 ? 24 : 72
-  const fit = Math.min((stage.width() - margin * 2) / canvas.width, (stage.height() - margin * 2) / canvas.height)
-  const scale = Math.max(0.02, Math.min(8, fit * zoom))
+  const fitScale = Math.min(
+    Math.max(0.01, (stage.width() - margin * 2) / workspaceWidth),
+    Math.max(0.01, (stage.height() - margin * 2) / workspaceHeight),
+  )
+  const scale = Math.max(0.01, Math.min(8, fitScale * zoomMultiplier))
   emit('zoom', Math.round(scale * 100))
   const workspace = new Konva.Group({
-    x: (stage.width() - canvas.width * scale) / 2,
-    y: (stage.height() - canvas.height * scale) / 2,
+    x: (stage.width() - workspaceWidth * scale) / 2 + panX,
+    y: (stage.height() - workspaceHeight * scale) / 2 + panY,
     scaleX: scale,
     scaleY: scale,
   })
   layer.add(workspace)
+
+  if (cropMode) renderCropScene(workspace)
+  else renderCanvasScene(workspace)
+  layer.draw()
+}
+
+function renderCropScene(workspace: Konva.Group) {
+  workspace.add(new Konva.Rect({
+    width: props.sourceWidth,
+    height: props.sourceHeight,
+    fill: '#11131a',
+    shadowColor: '#000',
+    shadowBlur: 24,
+    shadowOpacity: 0.32,
+    listening: false,
+  }))
+  if (sourceImage) {
+    workspace.add(new Konva.Image({
+      image: sourceImage,
+      width: props.sourceWidth,
+      height: props.sourceHeight,
+      listening: false,
+    }))
+  }
+
+  const crop = props.document.image.crop
+  const selection = new Konva.Rect({
+    x: crop.x,
+    y: crop.y,
+    width: crop.width,
+    height: crop.height,
+    fill: 'rgba(255,255,255,0.02)',
+    stroke: '#a78bfa',
+    strokeWidth: 2 / workspace.scaleX(),
+    draggable: true,
+  })
+  selection.dragBoundFunc((position) => {
+    const local = absoluteToLocal(workspace, position)
+    return localToAbsolute(workspace, {
+      x: clamp(local.x, 0, props.sourceWidth - selection.width()),
+      y: clamp(local.y, 0, props.sourceHeight - selection.height()),
+    })
+  })
+  selection.on('dragend transformend', () => commitCrop(selection))
+  workspace.add(selection)
+
+  workspace.add(new Konva.Transformer({
+    nodes: [selection],
+    rotateEnabled: false,
+    keepRatio: props.cropAspectLocked,
+    shiftBehavior: props.cropAspectLocked ? 'inverted' : 'default',
+    flipEnabled: false,
+    borderStroke: '#a78bfa',
+    anchorFill: '#fff',
+    anchorStroke: '#7c3aed',
+    anchorSize: Math.max(7, 10 / workspace.scaleX()),
+    boundBoxFunc: (oldBox, nextBox) => {
+      const scale = workspace.getAbsoluteScale().x
+      const topLeft = absoluteToLocal(workspace, { x: nextBox.x, y: nextBox.y })
+      const bottomRight = absoluteToLocal(workspace, {
+        x: nextBox.x + nextBox.width,
+        y: nextBox.y + nextBox.height,
+      })
+      let width = clamp(bottomRight.x - topLeft.x, 16, props.sourceWidth)
+      let height = clamp(bottomRight.y - topLeft.y, 16, props.sourceHeight)
+      if (props.cropAspectLocked) {
+        const ratio = crop.width / crop.height
+        if (width / height > ratio) width = height * ratio
+        else height = width / ratio
+        const fit = Math.min(1, props.sourceWidth / width, props.sourceHeight / height)
+        width *= fit
+        height *= fit
+        if (width < 16 || height < 16) return oldBox
+      }
+      const bounded = {
+        x: clamp(topLeft.x, 0, props.sourceWidth - width),
+        y: clamp(topLeft.y, 0, props.sourceHeight - height),
+      }
+      const absolute = localToAbsolute(workspace, bounded)
+      return {
+        ...nextBox,
+        x: absolute.x,
+        y: absolute.y,
+        width: width * scale,
+        height: height * scale,
+      }
+    },
+  }))
+}
+
+function commitCrop(selection: Konva.Rect) {
+  const width = clamp(Math.round(selection.width() * Math.abs(selection.scaleX())), 16, props.sourceWidth)
+  const height = clamp(Math.round(selection.height() * Math.abs(selection.scaleY())), 16, props.sourceHeight)
+  const x = clamp(Math.round(selection.x()), 0, props.sourceWidth - width)
+  const y = clamp(Math.round(selection.y()), 0, props.sourceHeight - height)
+  const next = cloneEditorDocument(props.document)
+  next.image.crop = { x, y, width, height }
+  emit('commit', next)
+}
+
+function renderCanvasScene(workspace: Konva.Group) {
+  const { canvas, image } = props.document
   workspace.add(new Konva.Rect({
     width: canvas.width,
     height: canvas.height,
-    fill: canvas.background.type === 'color' ? canvas.background.color : '#ffffff',
-    stroke: '#9ca3af',
-    strokeWidth: 1 / scale,
+    fill: canvas.background.type === 'color' ? canvas.background.color : '#ffffff00',
+    stroke: '#ffffff55',
+    strokeWidth: 1 / workspace.scaleX(),
     shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowBlur: 18,
+    shadowBlur: 28,
+    shadowOpacity: 0.36,
+    listening: false,
   }))
-  if (image) {
-    const state = props.document.image
-    const crop = state.crop
-    if (canvas.background.type === 'blurred-image') {
-      const backgroundScale = Math.max(canvas.width / image.width, canvas.height / image.height)
-      const background = new Konva.Image({
-        image,
-        x: (canvas.width - image.width * backgroundScale) / 2,
-        y: (canvas.height - image.height * backgroundScale) / 2,
-        width: image.width,
-        height: image.height,
-        scaleX: backgroundScale,
-        scaleY: backgroundScale,
-        listening: false,
-      })
-      background.cache()
-      background.filters([Konva.Filters.Blur])
-      background.blurRadius(canvas.background.blurRadius)
-      workspace.add(background)
-    }
-    const node = new Konva.Image({
-      image,
-      x: state.x,
-      y: state.y,
-      width: crop.width,
-      height: crop.height,
+
+  const clipped = new Konva.Group({
+    clipX: 0,
+    clipY: 0,
+    clipWidth: canvas.width,
+    clipHeight: canvas.height,
+  })
+  workspace.add(clipped)
+
+  if (sourceImage && canvas.background.type === 'blurred-image') {
+    const crop = coverSourceCrop(props.sourceWidth, props.sourceHeight, canvas.width, canvas.height)
+    const background = new Konva.Image({
+      image: sourceImage,
+      width: canvas.width,
+      height: canvas.height,
       crop,
-      rotation: state.rotation,
-      scaleX: state.flipX ? -state.scaleX : state.scaleX,
-      scaleY: state.flipY ? -state.scaleY : state.scaleY,
-      offsetX: state.flipX ? crop.width : 0,
-      offsetY: state.flipY ? crop.height : 0,
-      draggable: true,
+      listening: false,
     })
-    node.on('dragend transformend', () => {
-      const next = cloneEditorDocument(props.document)
-      next.image.x = node.x()
-      next.image.y = node.y()
-      next.image.rotation = normalizeRotation(node.rotation())
-      next.image.scaleX = Math.abs(node.scaleX())
-      next.image.scaleY = Math.abs(node.scaleY())
-      emit('commit', next)
+    background.cache({ pixelRatio: Math.min(1, 1024 / Math.max(canvas.width, canvas.height)) })
+    background.filters([Konva.Filters.Blur])
+    background.blurRadius(canvas.background.blurRadius)
+    clipped.add(background)
+  }
+
+  let imageNode: Konva.Image | null = null
+  if (sourceImage) {
+    imageNode = new Konva.Image({
+      image: sourceImage,
+      x: image.x,
+      y: image.y,
+      width: image.crop.width,
+      height: image.crop.height,
+      crop: image.crop,
+      scaleX: image.flipX ? -image.scaleX : image.scaleX,
+      scaleY: image.flipY ? -image.scaleY : image.scaleY,
+      offsetX: image.flipX ? image.crop.width : 0,
+      offsetY: image.flipY ? image.crop.height : 0,
+      rotation: image.rotation,
+      draggable: ['canvas', 'transform'].includes(props.activeTool),
     })
-    workspace.add(node)
+    imageNode.dragBoundFunc((position) => {
+      const local = absoluteToLocal(workspace, position)
+      return localToAbsolute(workspace, snapImagePosition(local, image, canvas, workspace.scaleX()))
+    })
+    imageNode.on('dragend transformend', () => commitImageTransform(imageNode!))
+    clipped.add(imageNode)
+  }
+
+  workspace.add(new Konva.Line({
+    points: [canvas.width / 2, 0, canvas.width / 2, canvas.height],
+    stroke: 'rgba(167,139,250,.35)',
+    dash: [5 / workspace.scaleX(), 5 / workspace.scaleX()],
+    strokeWidth: 1 / workspace.scaleX(),
+    listening: false,
+  }))
+  workspace.add(new Konva.Line({
+    points: [0, canvas.height / 2, canvas.width, canvas.height / 2],
+    stroke: 'rgba(167,139,250,.35)',
+    dash: [5 / workspace.scaleX(), 5 / workspace.scaleX()],
+    strokeWidth: 1 / workspace.scaleX(),
+    listening: false,
+  }))
+  const safeInsetX = canvas.width * 0.05
+  const safeInsetY = canvas.height * 0.05
+  workspace.add(new Konva.Rect({
+    x: safeInsetX,
+    y: safeInsetY,
+    width: canvas.width - safeInsetX * 2,
+    height: canvas.height - safeInsetY * 2,
+    stroke: 'rgba(255,255,255,.45)',
+    dash: [8 / workspace.scaleX(), 6 / workspace.scaleX()],
+    strokeWidth: 1 / workspace.scaleX(),
+    listening: false,
+  }))
+  if (imageNode && ['canvas', 'transform'].includes(props.activeTool)) {
     workspace.add(new Konva.Transformer({
-      nodes: [node],
+      nodes: [imageNode],
       keepRatio: true,
+      shiftBehavior: 'inverted',
       flipEnabled: false,
       borderStroke: '#2563eb',
       anchorFill: '#fff',
       anchorStroke: '#2563eb',
-      anchorSize: Math.max(7, 10 / scale),
+      anchorSize: Math.max(7, 10 / workspace.scaleX()),
     }))
   }
-  layer.draw()
+}
+
+function commitImageTransform(node: Konva.Image) {
+  const next = cloneEditorDocument(props.document)
+  next.image.x = round(node.x())
+  next.image.y = round(node.y())
+  next.image.scaleX = round(Math.abs(node.scaleX()))
+  next.image.scaleY = round(Math.abs(node.scaleY()))
+  next.image.rotation = normalizeRotation(node.rotation())
+  emit('commit', next)
 }
 
 function handleWheel(event: Konva.KonvaEventObject<WheelEvent>) {
   event.evt.preventDefault()
-  zoom = Math.min(8, Math.max(0.2, zoom * (event.evt.deltaY > 0 ? 0.9 : 1.1)))
-  renderSoon()
+  zoomMultiplier = clamp(zoomMultiplier * (event.evt.deltaY > 0 ? 0.9 : 1.1), 0.2, 8)
+  scheduleRender()
+}
+
+function beginPan(event: Konva.KonvaEventObject<PointerEvent>) {
+  if (!(event.evt.altKey || event.evt.button === 1)) return
+  event.evt.preventDefault()
+  panning = true
+  panPointer = { x: event.evt.clientX, y: event.evt.clientY }
+}
+
+function movePan(event: Konva.KonvaEventObject<PointerEvent>) {
+  if (!panning) return
+  panX += event.evt.clientX - panPointer.x
+  panY += event.evt.clientY - panPointer.y
+  panPointer = { x: event.evt.clientX, y: event.evt.clientY }
+  scheduleRender()
+}
+
+function endPan() {
+  panning = false
 }
 
 function fitViewport() {
-  zoom = 1
-  renderSoon()
+  zoomMultiplier = 1
+  panX = 0
+  panY = 0
+  scheduleRender()
+}
+
+function actualPixels() {
+  if (!stage) return
+  const cropMode = props.activeTool === 'crop'
+  const width = cropMode ? props.sourceWidth : props.document.canvas.width
+  const height = cropMode ? props.sourceHeight : props.document.canvas.height
+  const margin = stage.width() < 700 ? 24 : 72
+  const fitScale = Math.min(
+    Math.max(0.01, (stage.width() - margin * 2) / width),
+    Math.max(0.01, (stage.height() - margin * 2) / height),
+  )
+  zoomMultiplier = 1 / fitScale
+  panX = 0
+  panY = 0
+  scheduleRender()
+}
+
+function snapImagePosition(
+  position: { x: number; y: number },
+  image: LocalImageEditorDocument['image'],
+  canvas: LocalImageEditorDocument['canvas'],
+  viewportScale: number,
+) {
+  if (normalizeRotation(image.rotation) !== 0) return position
+  const threshold = 8 / viewportScale
+  const width = image.crop.width * image.scaleX
+  const height = image.crop.height * image.scaleY
+  return {
+    x: snapTo(position.x, [0, (canvas.width - width) / 2, canvas.width - width], threshold),
+    y: snapTo(position.y, [0, (canvas.height - height) / 2, canvas.height - height], threshold),
+  }
+}
+
+function snapTo(value: number, targets: number[], threshold: number) {
+  return targets.find(target => Math.abs(target - value) <= threshold) ?? value
+}
+
+function absoluteToLocal(workspace: Konva.Group, point: { x: number; y: number }) {
+  return workspace.getAbsoluteTransform().copy().invert().point(point)
+}
+
+function localToAbsolute(workspace: Konva.Group, point: { x: number; y: number }) {
+  return workspace.getAbsoluteTransform().point(point)
+}
+
+function coverSourceCrop(sourceWidth: number, sourceHeight: number, width: number, height: number) {
+  const sourceRatio = sourceWidth / sourceHeight
+  const targetRatio = width / height
+  if (sourceRatio > targetRatio) {
+    const cropWidth = sourceHeight * targetRatio
+    return { x: (sourceWidth - cropWidth) / 2, y: 0, width: cropWidth, height: sourceHeight }
+  }
+  const cropHeight = sourceWidth / targetRatio
+  return { x: 0, y: (sourceHeight - cropHeight) / 2, width: sourceWidth, height: cropHeight }
 }
 
 function normalizeRotation(value: number) {
   return ((value % 360) + 360) % 360
 }
 
-defineExpose({ fitViewport })
+function round(value: number) {
+  return Math.round(value * 10_000) / 10_000
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
+
+defineExpose({ actualPixels, fitViewport })
 </script>
+
+<style scoped>
+.image-editor-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 460px;
+  overflow: hidden;
+  background-color: #202127;
+  background-image:
+    linear-gradient(45deg, #292a31 25%, transparent 25%),
+    linear-gradient(-45deg, #292a31 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #292a31 75%),
+    linear-gradient(-45deg, transparent 75%, #292a31 75%);
+  background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+  background-size: 24px 24px;
+}
+.image-editor-canvas-stage { position: absolute; inset: 0; }
+.image-editor-canvas-overlay {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #d6d3e4;
+  background: rgba(22, 23, 29, .72);
+  backdrop-filter: blur(6px);
+}
+.image-editor-canvas-error { align-content: center; justify-items: center; gap: 12px; color: #fca5a5; font-size: 13px; }
+.image-editor-canvas-error button { padding: 7px 12px; border: 1px solid #ffffff24; border-radius: 8px; cursor: pointer; color: #fff; background: #7c3aed; }
+.image-editor-canvas-tip {
+  position: absolute;
+  z-index: 1;
+  bottom: 12px;
+  left: 50%;
+  padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 999px;
+  color: rgba(255,255,255,.62);
+  background: rgba(12,13,18,.68);
+  font-size: 10px;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+</style>

@@ -25,8 +25,24 @@
         </button>
       </nav>
       <div class="image-editor-stage">
-        <ImageEditorCanvas ref="canvasRef" :document="editorDocument" :image-url="sourceURL" @commit="commit" @zoom="zoom = $event" />
-        <div class="image-editor-stage-status">{{ editorDocument.canvas.width }} × {{ editorDocument.canvas.height }} <span>·</span> {{ zoom }}%</div>
+        <ImageEditorCanvas
+          ref="canvasRef"
+          :document="editorDocument"
+          :image-url="sourceURL"
+          :source-width="sourceWidth"
+          :source-height="sourceHeight"
+          :active-tool="activeTool"
+          :crop-aspect-locked="cropAspectLocked"
+          @commit="commit"
+          @zoom="zoom = $event"
+        />
+        <div class="image-editor-stage-status">
+          <button type="button" title="适应窗口" aria-label="适应窗口" @click="canvasRef?.fitViewport()">适应窗口</button>
+          <button type="button" title="实际像素" aria-label="实际像素" @click="canvasRef?.actualPixels()">1:1</button>
+          <span>{{ editorDocument.canvas.width }} × {{ editorDocument.canvas.height }}</span>
+          <span>·</span>
+          <span>{{ zoom }}%</span>
+        </div>
       </div>
       <aside class="image-editor-inspector">
         <section v-if="activeTool === 'canvas'">
@@ -63,6 +79,11 @@
 
         <section v-if="activeTool === 'crop'">
           <h2 class="editor-section-title">原图裁剪</h2>
+          <p class="editor-help-text">拖动紫色选区移动，拖动边角调整范围。导出尺寸会严格等于选区尺寸。</p>
+          <label class="editor-check-row">
+            <input v-model="cropAspectLocked" type="checkbox" />
+            <span>锁定裁剪比例</span>
+          </label>
           <div class="mt-3 grid grid-cols-2 gap-2">
             <label class="input-label">X<input v-model.number="crop.x" type="number" min="0" class="input mt-1" /></label>
             <label class="input-label">Y<input v-model.number="crop.y" type="number" min="0" class="input mt-1" /></label>
@@ -71,6 +92,16 @@
           </div>
           <div class="mt-3 grid grid-cols-3 gap-2">
             <button v-for="preset in cropPresets" :key="preset.label" class="btn btn-secondary btn-sm" @click="applyCropPreset(preset.width, preset.height)">{{ preset.label }}</button>
+          </div>
+          <div class="mt-3 grid grid-cols-[1fr_auto_1fr_auto] items-end gap-2">
+            <label class="input-label">比例宽<input v-model.number="customCropRatioWidth" type="number" min="1" class="input mt-1" /></label>
+            <span class="pb-2 text-gray-400">:</span>
+            <label class="input-label">比例高<input v-model.number="customCropRatioHeight" type="number" min="1" class="input mt-1" /></label>
+            <button class="btn btn-secondary btn-sm" @click="applyCustomCropRatio">应用</button>
+          </div>
+          <div class="mt-2 grid grid-cols-2 gap-2">
+            <button class="btn btn-secondary btn-sm" @click="centerCurrentCrop">居中选区</button>
+            <button class="btn btn-secondary btn-sm" @click="restoreFullCrop">恢复完整原图</button>
           </div>
           <button class="btn btn-secondary btn-sm mt-2 w-full" @click="applyCrop">应用裁剪</button>
         </section>
@@ -105,8 +136,20 @@ import Select from '@/components/common/Select.vue'
 import { useAppStore } from '@/stores'
 import { getImageHistory, loadImageSessionDraft, saveImageSessionDraft } from './history'
 import type { ImageGenerationHistoryRecord } from './types'
-import ImageEditorCanvas from './ImageEditorCanvas.vue'
-import { cloneEditorDocument, createEditorDocument, cropToAspectRatio, exportEditorImage, exportOutpaintInputs, fitEditorImage, type LocalImageEditorDocument } from './editor'
+import ImageEditorCanvas, { type ImageEditorTool } from './ImageEditorCanvas.vue'
+import {
+  assertCanvasSize,
+  assertCropRect,
+  centerCrop,
+  cloneEditorDocument,
+  createEditorDocument,
+  cropAsCanvas,
+  exportEditorImage,
+  exportOutpaintInputs,
+  fitCropToRatio,
+  fitEditorImage,
+  type LocalImageEditorDocument,
+} from './editor'
 
 const route = useRoute()
 const router = useRouter()
@@ -133,7 +176,10 @@ const exportFormat = ref<'png' | 'jpeg' | 'webp'>('png')
 const exportScale = ref<1 | 2 | 3>(1)
 const exportQuality = ref(95)
 const previewMode = import.meta.env.DEV && route.path === '/dev/image-editor'
-const activeTool = ref<'canvas' | 'transform' | 'crop' | 'export' | 'outpaint'>('canvas')
+const activeTool = ref<ImageEditorTool>('canvas')
+const cropAspectLocked = ref(false)
+const customCropRatioWidth = ref('16')
+const customCropRatioHeight = ref('9')
 const editorTools = [
   { id: 'canvas', label: '画布', icon: 'grid' },
   { id: 'transform', label: '变换', icon: 'arrowsUpDown' },
@@ -221,10 +267,12 @@ function measure(url: string, key: 'width' | 'height'): Promise<number> {
 }
 
 function commit(next: LocalImageEditorDocument) {
+  const committed = activeTool.value === 'crop' ? cropAsCanvas(next) : next
+  if (JSON.stringify(committed) === JSON.stringify(editorDocument.value)) return
   past.value.push(cloneEditorDocument(editorDocument.value))
   if (past.value.length > 100) past.value.shift()
   future.value = []
-  editorDocument.value = cloneEditorDocument(next)
+  editorDocument.value = cloneEditorDocument(committed)
   syncControls()
 }
 
@@ -268,7 +316,12 @@ function syncControls() {
 }
 
 function applyCanvasSize() {
-  if (!validEdge(canvasWidth.value) || !validEdge(canvasHeight.value)) return appStore.showError('画布宽高必须在 16 到 8192 之间')
+  try {
+    assertCanvasSize(Math.round(canvasWidth.value), Math.round(canvasHeight.value))
+  } catch (error) {
+    appStore.showError(error instanceof Error ? error.message : '画布尺寸无效')
+    return
+  }
   const next = cloneEditorDocument(editorDocument.value)
   next.canvas.width = Math.round(canvasWidth.value)
   next.canvas.height = Math.round(canvasHeight.value)
@@ -303,22 +356,48 @@ function applyCrop() {
   if (!sourceBlob.value) return
   const next = cloneEditorDocument(editorDocument.value)
   next.image.crop = {
-    x: Math.max(0, Math.round(crop.x)),
-    y: Math.max(0, Math.round(crop.y)),
-    width: Math.max(16, Math.round(crop.width)),
-    height: Math.max(16, Math.round(crop.height)),
+    x: Math.round(crop.x),
+    y: Math.round(crop.y),
+    width: Math.round(crop.width),
+    height: Math.round(crop.height),
   }
-  if (next.image.crop.x + next.image.crop.width > sourceWidth.value || next.image.crop.y + next.image.crop.height > sourceHeight.value) {
-    return appStore.showError('裁剪区域不能超出原图')
+  try {
+    assertCropRect(next.image.crop, sourceWidth.value, sourceHeight.value)
+  } catch (error) {
+    appStore.showError(error instanceof Error ? error.message : '裁剪区域无效')
+    return
   }
-  commit(next)
+  commit(cropAsCanvas(next))
 }
 
 function applyCropPreset(width: number, height: number) {
   const nextCrop = width && height
-    ? cropToAspectRatio(sourceWidth.value, sourceHeight.value, width, height)
+    ? fitCropToRatio(sourceWidth.value, sourceHeight.value, width, height, {
+      x: crop.x + crop.width / 2,
+      y: crop.y + crop.height / 2,
+    })
     : { x: 0, y: 0, width: sourceWidth.value, height: sourceHeight.value }
   Object.assign(crop, nextCrop)
+  applyCrop()
+}
+
+function applyCustomCropRatio() {
+  const width = Number(customCropRatioWidth.value)
+  const height = Number(customCropRatioHeight.value)
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    appStore.showError('裁剪比例必须是正数')
+    return
+  }
+  applyCropPreset(width, height)
+}
+
+function centerCurrentCrop() {
+  Object.assign(crop, centerCrop(crop, sourceWidth.value, sourceHeight.value))
+  applyCrop()
+}
+
+function restoreFullCrop() {
+  Object.assign(crop, { x: 0, y: 0, width: sourceWidth.value, height: sourceHeight.value })
   applyCrop()
 }
 
@@ -378,7 +457,6 @@ async function sendToOutpaint() {
   }
 }
 
-function validEdge(value: number) { return Number.isFinite(value) && value >= 16 && value <= 8192 }
 </script>
 
 <style scoped>
@@ -394,7 +472,11 @@ function validEdge(value: number) { return Number.isFinite(value) && value >= 16
 .image-editor-tools button:hover { background: #e7f3f1; color: #087f74; }
 .image-editor-tools button.active { background: #d9f1ec; color: #087f74; font-weight: 600; }
 .image-editor-stage { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #e8edf1; }
-.image-editor-stage-status { position: absolute; right: 14px; bottom: 12px; padding: 5px 9px; border: 1px solid #d9e0e6; border-radius: 4px; background: #fff; color: #475569; font-size: 11px; pointer-events: none; }
+.image-editor-stage-status { position: absolute; right: 14px; bottom: 12px; display: flex; align-items: center; gap: 4px; padding: 5px 9px; border: 1px solid #d9e0e6; border-radius: 4px; background: #fff; color: #475569; font-size: 11px; }
+.image-editor-stage-status button { padding: 1px 4px; border: 0; border-radius: 3px; cursor: pointer; color: #087f74; background: #e7f3f1; font-size: 10px; }
+.image-editor-stage-status button:hover { background: #d9f1ec; }
+.editor-help-text { margin-top: 8px; color: #64748b; font-size: 11px; line-height: 1.5; }
+.editor-check-row { display: flex; align-items: center; gap: 7px; margin-top: 10px; color: #475569; font-size: 12px; }
 .image-editor-stage-status span { padding: 0 5px; color: #9ca3af; }
 .image-editor-inspector { min-width: 0; overflow-y: auto; padding: 20px 18px; border-left: 1px solid #e5e7eb; background: #fff; }
 .editor-section-title { color: #1f2937; font-size: 14px; font-weight: 600; }

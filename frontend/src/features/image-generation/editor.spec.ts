@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createEditorDocument, cropToAspectRatio, fitEditorImage } from './editor'
+import { createEditorDocument, cropAsCanvas, cropToAspectRatio, fitEditorImage } from './editor'
 
 describe('local image editor geometry', () => {
   it('creates centered crop rectangles for common aspect ratios', () => {
@@ -20,5 +20,21 @@ describe('local image editor geometry', () => {
     expect(covered.image.scaleX).toBeCloseTo(2 / 3)
     expect(covered.image.x).toBeCloseTo(-133.333, 2)
     expect(contained.image.crop).toEqual(document.image.crop)
+  })
+
+  it('turns an applied crop into an exact output canvas', () => {
+    const document = createEditorDocument(1600, 1200)
+    document.image.crop = { x: 200, y: 100, width: 960, height: 128 }
+    document.image.x = 32
+    document.image.scaleX = 2
+
+    const cropped = cropAsCanvas(document)
+
+    expect(cropped.canvas.background).toEqual(document.canvas.background)
+    expect(cropped.canvas.width).toBe(960)
+    expect(cropped.canvas.height).toBe(128)
+    expect(cropped.image.crop).toEqual(document.image.crop)
+    expect(cropped.image.x).toBe(0)
+    expect(cropped.image.scaleX).toBe(1)
   })
 })
