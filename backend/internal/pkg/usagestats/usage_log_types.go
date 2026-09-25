@@ -309,19 +309,15 @@ type UsageStats struct {
 
 // BillingAnalysis keeps user charges and account-side estimates separate.
 type BillingAnalysisRow struct {
-	Model            string   `json:"model,omitempty"`
-	AccountID        int64    `json:"account_id,omitempty"`
-	Requests         int64    `json:"requests"`
-	UserCost         float64  `json:"user_cost"`
-	AccountCost      float64  `json:"account_cost"`
-	MonthlyCost      *float64 `json:"monthly_cost,omitempty"`
-	SevenDayEstimate *float64 `json:"seven_day_estimate,omitempty"`
+	Model       string  `json:"model,omitempty"`
+	Requests    int64   `json:"requests"`
+	UserCost    float64 `json:"user_cost"`
+	AccountCost float64 `json:"account_cost"`
 }
 
 type BillingAnalysis struct {
-	Total    BillingAnalysisRow   `json:"total"`
-	Models   []BillingAnalysisRow `json:"models"`
-	Accounts []BillingAnalysisRow `json:"accounts"`
+	Total  BillingAnalysisRow   `json:"total"`
+	Models []BillingAnalysisRow `json:"models"`
 }
 
 // PlatformUsage 表示某用户/某 API key 在单个"有效平台"维度的用量明细。

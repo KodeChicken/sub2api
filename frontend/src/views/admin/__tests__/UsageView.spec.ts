@@ -4,7 +4,7 @@ import { defineComponent, ref } from 'vue'
 
 import UsageView from '../UsageView.vue'
 
-const { list, exportList, getStats, getBillingAnalysis, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery, aoaToSheet, sheetAddAoa, saveAs, xlsxWrite } = vi.hoisted(() => {
+const { list, exportList, getStats, getBillingAnalysis, getUsageCostEstimate, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery, aoaToSheet, sheetAddAoa, saveAs, xlsxWrite } = vi.hoisted(() => {
   vi.stubGlobal('localStorage', {
     getItem: vi.fn(() => null),
     setItem: vi.fn(),
@@ -17,9 +17,9 @@ const { list, exportList, getStats, getBillingAnalysis, getSnapshotV2, getById, 
     getStats: vi.fn(),
     getBillingAnalysis: vi.fn().mockResolvedValue({
       total: { requests: 0, user_cost: 0, account_cost: 0 },
-      models: [],
-      accounts: []
+      models: []
     }),
+    getUsageCostEstimate: vi.fn().mockResolvedValue({ weekly_cost_usd: 0, weekly_quota_usd: 0 }),
     getSnapshotV2: vi.fn(),
     getById: vi.fn(),
     getModelStats: vi.fn(),
@@ -74,6 +74,7 @@ vi.mock('@/api/admin/usage', () => ({
   adminUsageAPI: {
 		list: exportList,
     getBillingAnalysis,
+    getUsageCostEstimate,
   },
 }))
 
@@ -200,8 +201,7 @@ describe('admin UsageView route filters', () => {
     getModelStats.mockReset().mockResolvedValue({ models: [] })
     getBillingAnalysis.mockReset().mockResolvedValue({
       total: { requests: 0, user_cost: 0, account_cost: 0 },
-      models: [],
-      accounts: []
+      models: []
     })
     getById.mockReset()
   })
@@ -285,8 +285,7 @@ describe('admin UsageView route filters', () => {
   it('opens usage details with the selected billing model', async () => {
     getBillingAnalysis.mockResolvedValueOnce({
       total: { requests: 1, user_cost: 1, account_cost: 2 },
-      models: [{ model: 'gpt-6-astra', requests: 1, user_cost: 1, account_cost: 2 }],
-      accounts: []
+      models: [{ model: 'gpt-6-astra', requests: 1, user_cost: 1, account_cost: 2 }]
     })
     const wrapper = mountRouteFilteredUsageView()
     await flushPromises()

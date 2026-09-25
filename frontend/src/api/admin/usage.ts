@@ -28,18 +28,19 @@ export interface AdminUsageStatsResponse {
 
 export interface BillingAnalysisRow {
   model?: string
-  account_id?: number
   requests: number
   user_cost: number
   account_cost: number
-  monthly_cost?: number
-  seven_day_estimate?: number
 }
 
 export interface BillingAnalysis {
   total: BillingAnalysisRow
   models: BillingAnalysisRow[]
-  accounts: BillingAnalysisRow[]
+}
+
+export interface UsageCostEstimate {
+  weekly_cost_usd: number
+  weekly_quota_usd: number
 }
 
 export interface SimpleUser {
@@ -159,6 +160,16 @@ export async function getBillingAnalysis(params: AdminUsageQueryParams): Promise
   return data
 }
 
+export async function getUsageCostEstimate(): Promise<UsageCostEstimate> {
+  const { data } = await apiClient.get<UsageCostEstimate>('/admin/settings/usage-cost-estimate')
+  return data
+}
+
+export async function updateUsageCostEstimate(settings: UsageCostEstimate): Promise<UsageCostEstimate> {
+  const { data } = await apiClient.put<UsageCostEstimate>('/admin/settings/usage-cost-estimate', settings)
+  return data
+}
+
 /**
  * Search users by email keyword (admin only)
  * @param keyword - Email keyword to search
@@ -232,6 +243,8 @@ export const adminUsageAPI = {
   list,
   getStats,
   getBillingAnalysis,
+  getUsageCostEstimate,
+  updateUsageCostEstimate,
   searchUsers,
   searchApiKeys,
   listCleanupTasks,

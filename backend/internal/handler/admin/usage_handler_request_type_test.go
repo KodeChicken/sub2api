@@ -40,7 +40,7 @@ func (s *adminUsageRepoCapture) GetStatsWithFilters(ctx context.Context, filters
 
 func (s *adminUsageRepoCapture) GetBillingAnalysis(ctx context.Context, filters usagestats.UsageLogFilters) (*usagestats.BillingAnalysis, error) {
 	s.billingFilters = filters
-	return &usagestats.BillingAnalysis{Models: []usagestats.BillingAnalysisRow{}, Accounts: []usagestats.BillingAnalysisRow{}}, nil
+	return &usagestats.BillingAnalysis{Models: []usagestats.BillingAnalysisRow{}}, nil
 }
 
 func newAdminUsageRequestTypeTestRouter(repo *adminUsageRepoCapture) *gin.Engine {
