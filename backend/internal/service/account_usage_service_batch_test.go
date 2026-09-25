@@ -112,6 +112,9 @@ func (r *usageBatchLogRepoStub) GetStatsWithFilters(context.Context, usagestats.
 func (r *usageBatchLogRepoStub) GetBillingAnalysis(context.Context, usagestats.UsageLogFilters) (*usagestats.BillingAnalysis, error) {
 	return nil, nil
 }
+func (r *usageBatchLogRepoStub) GetBillingAnalysisUsers(context.Context, usagestats.UsageLogFilters, int, int) (*usagestats.BillingAnalysisUsers, error) {
+	return nil, nil
+}
 func (r *usageBatchLogRepoStub) GetAccountUsageStats(context.Context, int64, time.Time, time.Time) (*usagestats.AccountUsageStatsResponse, error) {
 	return nil, nil
 }

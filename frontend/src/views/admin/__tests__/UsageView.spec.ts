@@ -80,6 +80,10 @@ vi.mock('@/api/admin/usage', () => ({
   },
 }))
 
+vi.mock('vue-chartjs', () => ({
+  Doughnut: { template: '<div data-testid="billing-doughnut" />' }
+}))
+
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ user: { id: 7 } })
 }))
@@ -191,6 +195,7 @@ const mountRouteFilteredUsageView = () => mount(UsageView, {
     UsageTable: true, UsageExportProgress: true, UsageCleanupDialog: true,
     UserBalanceHistoryModal: true, Pagination: true, Select: true,
     BaseDialog: { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' },
+    Doughnut: true, LoadingSpinner: true,
     DateRangePicker: true, Icon: true, TokenUsageTrend: true,
     ModelDistributionChart: true, GroupDistributionChart: true,
     EndpointDistributionChart: true, UserTokenRanking: true,
@@ -311,7 +316,7 @@ describe('admin UsageView route filters', () => {
     await flushPromises()
     list.mockClear()
 
-    await wrapper.get('tbody button').trigger('click')
+    await wrapper.get('[aria-label="usage.viewModelRecords"]').trigger('click')
     await flushPromises()
 
     expect((wrapper.vm as any).filters.model).toBe('gpt-6-astra')

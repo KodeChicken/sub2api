@@ -20,6 +20,8 @@ type adminUsageRepoCapture struct {
 	listFilters    usagestats.UsageLogFilters
 	statsFilters   usagestats.UsageLogFilters
 	billingFilters usagestats.UsageLogFilters
+	billingPage    int
+	billingSize    int
 }
 
 func (s *adminUsageRepoCapture) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters usagestats.UsageLogFilters) ([]service.UsageLog, *pagination.PaginationResult, error) {
@@ -43,6 +45,13 @@ func (s *adminUsageRepoCapture) GetBillingAnalysis(ctx context.Context, filters 
 	return &usagestats.BillingAnalysis{Models: []usagestats.BillingAnalysisRow{}}, nil
 }
 
+func (s *adminUsageRepoCapture) GetBillingAnalysisUsers(ctx context.Context, filters usagestats.UsageLogFilters, page, pageSize int) (*usagestats.BillingAnalysisUsers, error) {
+	s.billingFilters = filters
+	s.billingPage = page
+	s.billingSize = pageSize
+	return &usagestats.BillingAnalysisUsers{Users: []usagestats.BillingAnalysisUserRow{}}, nil
+}
+
 func newAdminUsageRequestTypeTestRouter(repo *adminUsageRepoCapture) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	usageSvc := service.NewUsageService(repo, nil, nil, nil)
@@ -51,6 +60,7 @@ func newAdminUsageRequestTypeTestRouter(repo *adminUsageRepoCapture) *gin.Engine
 	router.GET("/admin/usage", handler.List)
 	router.GET("/admin/usage/stats", handler.Stats)
 	router.GET("/admin/usage/billing-analysis", handler.BillingAnalysis)
+	router.GET("/admin/usage/billing-analysis/users", handler.BillingAnalysisUsers)
 	return router
 }
 
@@ -83,6 +93,36 @@ func TestAdminBillingAnalysisRejectsInvalidFilters(t *testing.T) {
 		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/admin/usage/billing-analysis?"+query, nil))
 		require.Equal(t, http.StatusBadRequest, rec.Code, query)
 	}
+}
+
+func TestAdminBillingAnalysisUsersUsesSameFiltersAndValidatesPagination(t *testing.T) {
+	repo := &adminUsageRepoCapture{}
+	router := newAdminUsageRequestTypeTestRouter(repo)
+	path := "/admin/usage/billing-analysis/users"
+	for _, query := range []string{
+		"", "?page=0&model=gpt", "?page_size=101&model=gpt",
+		"?model=gpt&account_id=bad", "?model=gpt&request_type=invalid",
+	} {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path+query, nil))
+		require.Equal(t, http.StatusBadRequest, rec.Code, query)
+	}
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet,
+		path+"?model=gpt-6-astra&group_id=7&request_type=stream&start_date=2025-01-02&end_date=2025-01-03&page=2&page_size=25", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "gpt-6-astra", repo.billingFilters.Model)
+	require.Equal(t, int64(7), repo.billingFilters.GroupID)
+	require.NotNil(t, repo.billingFilters.RequestType)
+	require.Equal(t, "2025-01-02T00:00:00+08:00", repo.billingFilters.StartTime.Format(time.RFC3339))
+	require.Equal(t, "2025-01-04T00:00:00+08:00", repo.billingFilters.EndTime.Format(time.RFC3339))
+	require.Equal(t, 2, repo.billingPage)
+	require.Equal(t, 25, repo.billingSize)
+
+	rec = httptest.NewRecorder()
+	router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path+"?model=", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Empty(t, repo.billingFilters.Model)
 }
 
 func TestAdminUsageListRequestTypePriority(t *testing.T) {

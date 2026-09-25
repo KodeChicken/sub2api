@@ -53,6 +53,7 @@
           :settings="costSettings"
           :settings-state="costSettingsState"
           :coefficient="costFactor"
+          :filters="billingFilters"
           @select-model="selectBillingModel"
           @retry-settings="loadCostSettings"
           @update-settings="updateCostSettings"
@@ -244,6 +245,17 @@ const route = useRoute()
 const usageStats = ref<AdminUsageStatsResponse | null>(null); const usageLogs = ref<AdminUsageLog[]>([]); const loading = ref(false); const exporting = ref(false)
 const billingAnalysis = ref<BillingAnalysis | null>(null)
 const billingLoading = ref(false)
+const billingFilters = computed<AdminUsageQueryParams>(() => {
+  const requestType = filters.value.request_type
+  const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
+  return {
+    ...filters.value,
+    timezone: 'Asia/Shanghai',
+    start_date: startDate.value,
+    end_date: endDate.value,
+    stream: legacyStream === null ? undefined : legacyStream
+  }
+})
 const costSettings = ref<UsageCostEstimate | null>(null)
 const costSettingsState = ref<'loading' | 'error' | 'ready'>('loading')
 const costFactor = computed(() => {
@@ -572,15 +584,7 @@ const loadBillingAnalysis = async () => {
   const seq = ++billingReqSeq
   billingLoading.value = true
   try {
-    const requestType = filters.value.request_type
-    const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
-    const result = await adminUsageAPI.getBillingAnalysis({
-      ...filters.value,
-      timezone: 'Asia/Shanghai',
-      start_date: startDate.value,
-      end_date: endDate.value,
-      stream: legacyStream === null ? undefined : legacyStream
-    })
+    const result = await adminUsageAPI.getBillingAnalysis(billingFilters.value)
     if (seq === billingReqSeq) billingAnalysis.value = result
   } catch (error) {
     if (seq === billingReqSeq) {

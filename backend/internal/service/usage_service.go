@@ -465,3 +465,7 @@ func (s *UsageService) GetStatsWithFilters(ctx context.Context, filters usagesta
 func (s *UsageService) GetBillingAnalysis(ctx context.Context, filters usagestats.UsageLogFilters) (*usagestats.BillingAnalysis, error) {
 	return s.usageRepo.GetBillingAnalysis(ctx, filters)
 }
+
+func (s *UsageService) GetBillingAnalysisUsers(ctx context.Context, filters usagestats.UsageLogFilters, page, pageSize int) (*usagestats.BillingAnalysisUsers, error) {
+	return s.usageRepo.GetBillingAnalysisUsers(ctx, filters, page, pageSize)
+}

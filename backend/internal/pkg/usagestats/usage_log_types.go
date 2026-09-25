@@ -320,6 +320,19 @@ type BillingAnalysis struct {
 	Models []BillingAnalysisRow `json:"models"`
 }
 
+type BillingAnalysisUserRow struct {
+	UserID      int64   `json:"user_id"`
+	Username    string  `json:"username"`
+	Requests    int64   `json:"requests"`
+	UserCost    float64 `json:"user_cost"`
+	AccountCost float64 `json:"account_cost"`
+}
+
+type BillingAnalysisUsers struct {
+	Users   []BillingAnalysisUserRow `json:"users"`
+	HasMore bool                     `json:"has_more"`
+}
+
 // PlatformUsage 表示某用户/某 API key 在单个"有效平台"维度的用量明细。
 // Platform 取值与 ops 路径口径一致：优先 groups.platform，否则 accounts.platform。
 type PlatformUsage struct {

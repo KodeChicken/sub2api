@@ -38,6 +38,19 @@ export interface BillingAnalysis {
   models: BillingAnalysisRow[]
 }
 
+export interface BillingAnalysisUserRow {
+  user_id: number
+  username: string
+  requests: number
+  user_cost: number
+  account_cost: number
+}
+
+export interface BillingAnalysisUsers {
+  users: BillingAnalysisUserRow[]
+  has_more: boolean
+}
+
 export interface UsageCostEstimate {
   weekly_cost_usd: number
   weekly_quota_usd: number
@@ -160,6 +173,11 @@ export async function getBillingAnalysis(params: AdminUsageQueryParams): Promise
   return data
 }
 
+export async function getBillingAnalysisUsers(params: AdminUsageQueryParams & { model: string; page: number; page_size?: number }): Promise<BillingAnalysisUsers> {
+  const { data } = await apiClient.get<BillingAnalysisUsers>('/admin/usage/billing-analysis/users', { params })
+  return data
+}
+
 export async function getUsageCostEstimate(): Promise<UsageCostEstimate> {
   const { data } = await apiClient.get<UsageCostEstimate>('/admin/settings/usage-cost-estimate')
   return data
@@ -243,6 +261,7 @@ export const adminUsageAPI = {
   list,
   getStats,
   getBillingAnalysis,
+  getBillingAnalysisUsers,
   getUsageCostEstimate,
   updateUsageCostEstimate,
   searchUsers,

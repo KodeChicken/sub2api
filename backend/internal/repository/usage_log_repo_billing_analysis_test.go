@@ -48,3 +48,41 @@ func TestBillingAnalysisEmptyRange(t *testing.T) {
 	require.Empty(t, result.Models)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestBillingAnalysisUsersUsesPersistedCostsAndUsername(t *testing.T) {
+	db, mock := newSQLMock(t)
+	repo := &usageLogRepository{sql: db}
+	start := time.Now().Add(-time.Hour)
+	end := time.Now()
+	filters := usagestats.UsageLogFilters{
+		GroupID: 7, Model: "gpt-6-astra", ModelFilterSource: usagestats.ModelSourceRequested,
+		StartTime: &start, EndTime: &end,
+	}
+	mock.ExpectQuery("LEFT JOIN users u ON u.id = g.user_id").
+		WithArgs(int64(7), "gpt-6-astra", start, end, 3, 2).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "username", "requests", "user_cost", "account_cost"}).
+			AddRow(10, "alice", 2, 5.25, 20.5).
+			AddRow(11, "", 1, 0.75, 4.5).
+			AddRow(12, "bob", 1, 0.25, 1.5))
+	result, err := repo.GetBillingAnalysisUsers(context.Background(), filters, 2, 2)
+	require.NoError(t, err)
+	require.Equal(t, []usagestats.BillingAnalysisUserRow{
+		{UserID: 10, Username: "alice", Requests: 2, UserCost: 5.25, AccountCost: 20.5},
+		{UserID: 11, Username: "", Requests: 1, UserCost: 0.75, AccountCost: 4.5},
+	}, result.Users)
+	require.True(t, result.HasMore)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBillingAnalysisUsersFiltersUnknownModel(t *testing.T) {
+	db, mock := newSQLMock(t)
+	repo := &usageLogRepository{sql: db}
+	mock.ExpectQuery("COALESCE\\(NULLIF\\(TRIM\\(requested_model\\), ''\\), model\\) = ''").
+		WithArgs(51, 0).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "username", "requests", "user_cost", "account_cost"}))
+	result, err := repo.GetBillingAnalysisUsers(context.Background(), usagestats.UsageLogFilters{}, 1, 50)
+	require.NoError(t, err)
+	require.Empty(t, result.Users)
+	require.False(t, result.HasMore)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
