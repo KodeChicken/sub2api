@@ -79,18 +79,35 @@
         </p>
       </div>
     </div>
-    <div v-if="billing !== undefined" class="card flex items-center gap-3 p-4">
-      <div class="rounded-lg bg-teal-100 p-2 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300">
+    <div v-if="billing !== undefined" class="card flex min-w-0 items-start gap-3 p-4">
+      <div class="shrink-0 rounded-lg bg-teal-100 p-2 text-teal-700 dark:bg-teal-900/30 dark:text-teal-300">
         <Icon name="chart" size="md" />
       </div>
-      <div class="min-w-0">
+      <div class="min-w-0 flex-1">
         <p class="text-xs font-medium text-gray-500">{{ t('usage.billingRatio') }}</p>
         <p class="text-xl font-bold tabular-nums">{{ billing && billing.total.account_cost > 0 ? `${(billing.total.user_cost / billing.total.account_cost).toFixed(4)}x` : t('usage.unavailable') }}</p>
-        <p class="break-words text-xs text-gray-500">
-          {{ billing?.total.requests?.toLocaleString() || 0 }} ·
-          U ${{ billing?.total.user_cost?.toFixed(4) || '0.0000' }} /
-          A ${{ billing?.total.account_cost?.toFixed(4) || '0.0000' }}
-        </p>
+        <div class="mt-1 space-y-0.5 text-xs tabular-nums">
+          <p class="text-gray-500">
+            {{ t('usage.costCoefficient') }}
+            <span class="font-semibold text-gray-800 dark:text-gray-200">
+              {{ costSettingsState === 'loading' ? t('common.loading') : costSettingsState === 'error' ? t('usage.costEstimateLoadFailed') : costFactor == null ? t('usage.notConfigured') : `${formatMultiplier(costFactor)}x` }}
+            </span>
+          </p>
+          <p>
+            {{ t('usage.estimatedProfit') }}
+            <span v-if="billing && costFactor != null" class="font-semibold" :class="billing.total.user_cost - billing.total.account_cost * costFactor < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'">
+              {{ formatAmount(billing.total.user_cost - billing.total.account_cost * costFactor) }}
+            </span>
+            <span v-else class="text-gray-500">{{ costSettingsState === 'ready' ? t('usage.notConfigured') : t('usage.unavailable') }}</span>
+          </p>
+          <p class="break-words text-gray-500">
+            U ${{ billing?.total.user_cost?.toFixed(4) || '0.0000' }} ·
+            A ${{ billing?.total.account_cost?.toFixed(4) || '0.0000' }}
+            <template v-if="billing && costFactor != null">
+              · {{ t('usage.estimatedCost') }} ${{ (billing.total.account_cost * costFactor).toFixed(4) }}
+            </template>
+          </p>
+        </div>
       </div>
     </div>
     <div class="card p-4 flex items-center gap-3">
@@ -109,15 +126,20 @@ import type { AdminUsageStatsResponse } from '@/api/admin/usage'
 import type { BillingAnalysis } from '@/api/admin/usage'
 import type { UsageStatsResponse } from '@/types'
 import Icon from '@/components/icons/Icon.vue'
+import { formatMultiplier } from '@/utils/formatters'
 
 const props = withDefaults(defineProps<{
   stats: (AdminUsageStatsResponse | UsageStatsResponse) | null
   billing?: BillingAnalysis | null
+  costFactor?: number | null
+  costSettingsState?: 'loading' | 'error' | 'ready'
   showAccountCost?: boolean
   strikeStandardCost?: boolean
 }>(), {
   showAccountCost: true,
   strikeStandardCost: false,
+  costFactor: null,
+  costSettingsState: 'ready',
 })
 
 const { t } = useI18n()
@@ -131,6 +153,7 @@ const strikeStandardCost = computed(() => props.strikeStandardCost)
 
 const formatDuration = (ms: number) =>
   ms < 1000 ? `${ms.toFixed(0)}ms` : `${(ms / 1000).toFixed(2)}s`
+const formatAmount = (value: number) => value < 0 ? `-$${Math.abs(value).toFixed(4)}` : `$${value.toFixed(4)}`
 
 const formatTokens = (value: number) => {
   if (value >= 1e9) return (value / 1e9).toFixed(2) + 'B'

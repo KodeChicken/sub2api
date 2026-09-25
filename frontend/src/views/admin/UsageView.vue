@@ -1,7 +1,7 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <UsageStatsCards :stats="usageStats" :billing="billingAnalysis" />
+      <UsageStatsCards :stats="usageStats" :billing="billingAnalysis" :cost-factor="costFactor" :cost-settings-state="costSettingsState" />
       <!-- Charts Section -->
       <div class="space-y-4">
         <div class="card p-4">
@@ -47,7 +47,16 @@
             :filters="breakdownFilters"
           />
         </div>
-        <UsageBillingAnalysis :analysis="billingAnalysis" :loading="billingLoading" @select-model="selectBillingModel" />
+        <UsageBillingAnalysis
+          :analysis="billingAnalysis"
+          :loading="billingLoading"
+          :settings="costSettings"
+          :settings-state="costSettingsState"
+          :coefficient="costFactor"
+          @select-model="selectBillingModel"
+          @retry-settings="loadCostSettings"
+          @update-settings="updateCostSettings"
+        />
         <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <EndpointDistributionChart
             v-model:source="endpointDistributionSource"
@@ -87,6 +96,20 @@
 
         <UsageFilters v-model="filters" ref="usageFiltersRef" flat :mode="activeTab" class="border-b border-gray-100 dark:border-dark-700/50" :start-date="startDate" :end-date="endDate" :exporting="exporting" :model-options="modelNameOptions" @change="applyFilters" @refresh="refreshData" @reset="resetFilters" @cleanup="openCleanupDialog" @export="exportToExcel">
           <template #after-reset>
+            <button type="button" class="btn btn-secondary" data-testid="usage-save-default" @click="saveDefaultFilters">
+              <Icon name="check" size="sm" class="mr-1.5" />
+              {{ t('usage.saveDefaultFilters') }}
+            </button>
+            <button
+              v-if="hasDefaultFilters"
+              type="button"
+              class="btn btn-secondary"
+              data-testid="usage-clear-default"
+              @click="clearDefaultFilters"
+            >
+              <Icon name="trash" size="sm" class="mr-1.5" />
+              {{ t('usage.clearDefaultFilters') }}
+            </button>
             <div v-if="activeTab !== 'ranking'" class="relative" ref="columnDropdownRef">
               <button
                 data-testid="usage-column-settings"
@@ -208,10 +231,12 @@ import type { OpsErrorLog } from '@/api/admin/ops'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'; import GroupDistributionChart from '@/components/charts/GroupDistributionChart.vue'; import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import EndpointDistributionChart from '@/components/charts/EndpointDistributionChart.vue'
 import Icon from '@/components/icons/Icon.vue'
-import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams, BillingAnalysis } from '@/api/admin/usage'
+import { useAuthStore } from '@/stores/auth'
+import type { AdminUsageLog, TrendDataPoint, ModelStat, GroupStat, EndpointStat, AdminUser } from '@/types'; import type { AdminUsageStatsResponse, AdminUsageQueryParams, BillingAnalysis, UsageCostEstimate } from '@/api/admin/usage'
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const authStore = useAuthStore()
 type DistributionMetric = 'tokens' | 'actual_cost'
 type EndpointSource = 'inbound' | 'upstream' | 'path'
 type ModelDistributionSource = 'requested' | 'upstream' | 'mapping'
@@ -219,6 +244,15 @@ const route = useRoute()
 const usageStats = ref<AdminUsageStatsResponse | null>(null); const usageLogs = ref<AdminUsageLog[]>([]); const loading = ref(false); const exporting = ref(false)
 const billingAnalysis = ref<BillingAnalysis | null>(null)
 const billingLoading = ref(false)
+const costSettings = ref<UsageCostEstimate | null>(null)
+const costSettingsState = ref<'loading' | 'error' | 'ready'>('loading')
+const costFactor = computed(() => {
+  if (costSettingsState.value !== 'ready' || !costSettings.value) return null
+  const { weekly_cost_usd: cost, weekly_quota_usd: quota } = costSettings.value
+  if (cost <= 0 || quota <= 0) return null
+  const factor = cost / quota
+  return Number.isFinite(factor) && factor > 0 ? factor : null
+})
 const detailSectionRef = ref<HTMLElement | null>(null)
 let billingReqSeq = 0
 const trendData = ref<TrendDataPoint[]>([]); const requestedModelStats = ref<ModelStat[]>([]); const upstreamModelStats = ref<ModelStat[]>([]); const mappingModelStats = ref<ModelStat[]>([]); const groupStats = ref<GroupStat[]>([]); const chartsLoading = ref(false); const modelStatsLoading = ref(false); const granularity = ref<'day' | 'hour'>('hour')
@@ -292,9 +326,8 @@ const formatLD = (d: Date) => {
 }
 const getLast24HoursRangeDates = (): { start: string; end: string } => {
   const end = new Date()
-  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000)
   return {
-    start: formatLD(start),
+    start: formatLD(new Date(end.getTime() - 24 * 60 * 60 * 1000)),
     end: formatLD(end)
   }
 }
@@ -304,10 +337,106 @@ const getGranularityForRange = (start: string, end: string): 'day' | 'hour' => {
   const daysDiff = Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24))
   return daysDiff <= 1 ? 'hour' : 'day'
 }
-const defaultRange = getLast24HoursRangeDates()
-const startDate = ref(defaultRange.start); const endDate = ref(defaultRange.end)
-const rangePreset = ref<string | null>('last24Hours')
+const defaultDate = formatLD(new Date())
+const startDate = ref(defaultDate); const endDate = ref(defaultDate)
+const rangePreset = ref<string | null>('today')
 const filters = ref<AdminUsageQueryParams>({ user_id: undefined, model: undefined, group_id: undefined, request_type: undefined, native_compaction_v2: null, billing_type: null, start_date: startDate.value, end_date: endDate.value, timezone: 'Asia/Shanghai' })
+type DefaultUsageFilters = Pick<AdminUsageQueryParams,
+  'user_id' | 'api_key_id' | 'account_id' | 'group_id' | 'model' |
+  'request_type' | 'native_compaction_v2' | 'billing_type' | 'billing_mode' |
+  'upstream_model_mismatch' | 'error_phase' | 'error_category' | 'status_code'>
+type DefaultFilterLabels = { user?: string; apiKey?: string; account?: string }
+const hasDefaultFilters = ref(false)
+const savedDefaultLabels = ref<DefaultFilterLabels | null>(null)
+const defaultFiltersKey = () => authStore.user?.id ? `admin-usage-default-filters:${authStore.user.id}` : null
+const currentDefaultFilters = (): DefaultUsageFilters => ({
+  user_id: filters.value.user_id || undefined,
+  api_key_id: filters.value.api_key_id || undefined,
+  account_id: filters.value.account_id || undefined,
+  group_id: filters.value.group_id || undefined,
+  model: filters.value.model || undefined,
+  request_type: filters.value.request_type || undefined,
+  native_compaction_v2: filters.value.native_compaction_v2 === true ? true : undefined,
+  billing_type: filters.value.billing_type ?? undefined,
+  billing_mode: filters.value.billing_mode || undefined,
+  upstream_model_mismatch: filters.value.upstream_model_mismatch ?? undefined,
+  error_phase: filters.value.error_phase || undefined,
+  error_category: filters.value.error_category || undefined,
+  status_code: filters.value.status_code ?? undefined
+})
+const loadDefaultFilters = () => {
+  const key = defaultFiltersKey()
+  if (!key) return
+  try {
+    const stored = localStorage.getItem(key)
+    if (!stored) return
+    const raw: unknown = JSON.parse(stored)
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return
+    const envelope = raw as Record<string, unknown>
+    if (!envelope.filters || typeof envelope.filters !== 'object' || Array.isArray(envelope.filters)) return
+    const value = envelope.filters as Record<string, unknown>
+    const saved: DefaultUsageFilters = {}
+    for (const key of ['user_id', 'api_key_id', 'account_id', 'group_id'] as const) {
+      const id = value[key]
+      if (typeof id === 'number' && Number.isSafeInteger(id) && id > 0) saved[key] = id
+    }
+    if (typeof value.model === 'string' && value.model) saved.model = value.model
+    if (typeof value.request_type === 'string' && ['ws_v2', 'live', 'stream', 'sync', 'cyber'].includes(value.request_type)) saved.request_type = value.request_type as DefaultUsageFilters['request_type']
+    if (value.native_compaction_v2 === true) saved.native_compaction_v2 = true
+    if (value.billing_type === 0 || value.billing_type === 1) saved.billing_type = value.billing_type
+    if (typeof value.billing_mode === 'string' && ['token', 'per_request', 'image', 'video'].includes(value.billing_mode)) saved.billing_mode = value.billing_mode
+    if (typeof value.upstream_model_mismatch === 'boolean') saved.upstream_model_mismatch = value.upstream_model_mismatch
+    if (typeof value.error_phase === 'string' && ['upstream', 'account_auth', 'request', 'auth', 'routing', 'internal'].includes(value.error_phase)) saved.error_phase = value.error_phase
+    if (typeof value.error_category === 'string' && ['auth', 'rate_limit', 'quota', 'invalid_request', 'service_unavailable', 'upstream', 'internal', 'cyber'].includes(value.error_category)) saved.error_category = value.error_category
+    if (typeof value.status_code === 'number' && Number.isSafeInteger(value.status_code) && value.status_code >= 100 && value.status_code <= 599) saved.status_code = value.status_code
+    if (Object.keys(saved).length === 0) return
+    hasDefaultFilters.value = true
+    if (Object.keys(route.query).length === 0) {
+      filters.value = { ...filters.value, ...saved }
+      savedDefaultLabels.value = {}
+      const labels = envelope.labels
+      if (labels && typeof labels === 'object' && !Array.isArray(labels)) {
+        const item = labels as Record<string, unknown>
+        savedDefaultLabels.value = {
+          user: typeof item.user === 'string' ? item.user : undefined,
+          apiKey: typeof item.apiKey === 'string' ? item.apiKey : undefined,
+          account: typeof item.account === 'string' ? item.account : undefined
+        }
+      }
+    }
+  } catch {
+    // Corrupt or unavailable browser storage should not block usage queries.
+  }
+}
+const saveDefaultFilters = () => {
+  const key = defaultFiltersKey()
+  if (!key) return
+  const saved = currentDefaultFilters()
+  const selected = Object.fromEntries(Object.entries(saved).filter(([, value]) => value != null))
+  if (Object.keys(selected).length === 0) {
+    appStore.showError(t('usage.defaultFiltersEmpty'))
+    return
+  }
+  try {
+    const labels = usageFiltersRef.value?.getFilterLabels?.() || {}
+    localStorage.setItem(key, JSON.stringify({ filters: selected, labels }))
+    hasDefaultFilters.value = true
+    appStore.showSuccess(t('usage.defaultFiltersSaved'))
+  } catch {
+    appStore.showError(t('usage.defaultFiltersSaveFailed'))
+  }
+}
+const clearDefaultFilters = () => {
+  const key = defaultFiltersKey()
+  if (!key) return
+  try {
+    localStorage.removeItem(key)
+    hasDefaultFilters.value = false
+    appStore.showSuccess(t('usage.defaultFiltersCleared'))
+  } catch {
+    appStore.showError(t('usage.defaultFiltersSaveFailed'))
+  }
+}
 const pagination = reactive({ page: 1, page_size: getPersistedPageSize(), total: 0 })
 const sortState = reactive({
   sort_by: 'created_at',
@@ -342,7 +471,7 @@ const applyRouteQueryFilters = () => {
   filters.value = {
     ...filters.value,
     timezone: 'Asia/Shanghai',
-    user_id: queryUserId,
+    user_id: queryUserId ?? filters.value.user_id,
     start_date: startDate.value,
     end_date: endDate.value
   }
@@ -460,6 +589,28 @@ const loadBillingAnalysis = async () => {
     }
   } finally {
     if (seq === billingReqSeq) billingLoading.value = false
+  }
+}
+
+const loadCostSettings = async () => {
+  costSettingsState.value = 'loading'
+  try {
+    costSettings.value = await adminUsageAPI.getUsageCostEstimate()
+    costSettingsState.value = 'ready'
+  } catch {
+    costSettings.value = null
+    costSettingsState.value = 'error'
+  }
+}
+
+const updateCostSettings = async (value: UsageCostEstimate, done: (saved: boolean) => void) => {
+  try {
+    costSettings.value = await adminUsageAPI.updateUsageCostEstimate(value)
+    appStore.showSuccess(t('usage.costEstimateSaved'))
+    done(true)
+  } catch {
+    appStore.showError(t('usage.costEstimateSaveFailed'))
+    done(false)
   }
 }
 
@@ -591,10 +742,10 @@ const refreshData = () => {
   if (rankingMounted.value) rankingRef.value?.reload()
 }
 const resetFilters = () => {
-  const range = getLast24HoursRangeDates()
-  startDate.value = range.start
-  endDate.value = range.end
-  rangePreset.value = 'last24Hours'
+  const today = formatLD(new Date())
+  startDate.value = today
+  endDate.value = today
+  rangePreset.value = 'today'
   filters.value = { start_date: startDate.value, end_date: endDate.value, timezone: 'Asia/Shanghai', request_type: undefined, native_compaction_v2: null, billing_type: null, billing_mode: undefined }
   granularity.value = getGranularityForRange(startDate.value, endDate.value)
   applyFilters()
@@ -945,7 +1096,10 @@ const handleColumnClickOutside = (event: MouseEvent) => {
 }
 
 onMounted(() => {
+  loadDefaultFilters()
   applyRouteQueryFilters()
+  if (savedDefaultLabels.value) usageFiltersRef.value?.restoreFilterLabels?.(savedDefaultLabels.value)
+  void loadCostSettings()
   void loadRouteUserFilterLabel()
   loadLogs()
   loadStats()

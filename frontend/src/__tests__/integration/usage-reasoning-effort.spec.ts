@@ -112,7 +112,16 @@ vi.mock('@/api/admin', () => ({
 vi.mock('@/api/admin/usage', () => ({
   adminUsageAPI: {
     list: adminList,
+    getUsageCostEstimate: vi.fn().mockResolvedValue({ weekly_cost_usd: 0, weekly_quota_usd: 0 }),
+    getBillingAnalysis: vi.fn().mockResolvedValue({
+      total: { requests: 0, user_cost: 0, account_cost: 0 },
+      models: []
+    }),
   },
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ user: { id: 7 } })
 }))
 
 vi.mock('@/api/admin/ops', () => ({

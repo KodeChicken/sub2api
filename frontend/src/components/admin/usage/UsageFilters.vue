@@ -547,5 +547,16 @@ const setUserKeyword = (email: string) => {
 
 const getUserSearchRevision = () => userSearchSequence
 
-defineExpose({ getUserSearchRevision, setUserKeyword })
+const getFilterLabels = () => ({
+  user: userKeyword.value,
+  apiKey: apiKeyKeyword.value,
+  account: accountKeyword.value
+})
+const restoreFilterLabels = (labels: { user?: string; apiKey?: string; account?: string }) => {
+  if (filters.value.user_id) setUserKeyword(labels.user || String(filters.value.user_id))
+  if (filters.value.api_key_id) apiKeyKeyword.value = labels.apiKey || String(filters.value.api_key_id)
+  if (filters.value.account_id) accountKeyword.value = labels.account || String(filters.value.account_id)
+}
+
+defineExpose({ getUserSearchRevision, setUserKeyword, getFilterLabels, restoreFilterLabels })
 </script>

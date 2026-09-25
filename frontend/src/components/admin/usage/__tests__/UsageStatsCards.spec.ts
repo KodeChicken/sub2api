@@ -86,4 +86,39 @@ describe('UsageStatsCards', () => {
     expect(tooltip?.classes()).toContain('hidden')
     expect(tooltip?.classes()).not.toContain('opacity-0')
   })
+
+  it('shows the user ratio, shared cost factor and estimated profit', () => {
+    const wrapper = mount(UsageStatsCards, {
+      props: {
+        stats,
+        billing: {
+          total: { requests: 2, user_cost: 283.8044, account_cost: 1491.9759 },
+          models: []
+        },
+        costFactor: 0.1155
+      },
+      global: { stubs: { Icon: true } }
+    })
+    expect(wrapper.text()).toContain('0.1902x')
+    expect(wrapper.text()).toContain('0.1155x')
+    expect(wrapper.text()).toContain('usage.estimatedProfit')
+    expect(wrapper.text()).toContain('$111.4812')
+    expect(wrapper.text()).toContain('$172.3232')
+  })
+
+  it('does not treat missing cost settings as zero cost or profit', async () => {
+    const wrapper = mount(UsageStatsCards, {
+      props: {
+        stats,
+        billing: { total: { requests: 1, user_cost: 1, account_cost: 2 }, models: [] },
+        costFactor: null
+      },
+      global: { stubs: { Icon: true } }
+    })
+    expect(wrapper.text()).toContain('usage.notConfigured')
+    expect(wrapper.text()).not.toContain('usage.estimatedCost $')
+    await wrapper.setProps({ costFactor: 1.5 })
+    expect(wrapper.text()).toContain('-$2.0000')
+    expect(wrapper.find('.text-red-600').exists()).toBe(true)
+  })
 })

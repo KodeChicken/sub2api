@@ -4,7 +4,7 @@ import { defineComponent, ref } from 'vue'
 
 import UsageView from '../UsageView.vue'
 
-const { list, exportList, getStats, getBillingAnalysis, getUsageCostEstimate, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery, aoaToSheet, sheetAddAoa, saveAs, xlsxWrite } = vi.hoisted(() => {
+const { list, exportList, getStats, getBillingAnalysis, getUsageCostEstimate, updateUsageCostEstimate, getSnapshotV2, getById, getModelStats, listErrorLogs, routeQuery, aoaToSheet, sheetAddAoa, saveAs, xlsxWrite } = vi.hoisted(() => {
   vi.stubGlobal('localStorage', {
     getItem: vi.fn(() => null),
     setItem: vi.fn(),
@@ -20,6 +20,7 @@ const { list, exportList, getStats, getBillingAnalysis, getUsageCostEstimate, ge
       models: []
     }),
     getUsageCostEstimate: vi.fn().mockResolvedValue({ weekly_cost_usd: 0, weekly_quota_usd: 0 }),
+    updateUsageCostEstimate: vi.fn(),
     getSnapshotV2: vi.fn(),
     getById: vi.fn(),
     getModelStats: vi.fn(),
@@ -75,7 +76,12 @@ vi.mock('@/api/admin/usage', () => ({
 		list: exportList,
     getBillingAnalysis,
     getUsageCostEstimate,
+    updateUsageCostEstimate,
   },
+}))
+
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ user: { id: 7 } })
 }))
 
 vi.mock('file-saver', () => ({ saveAs }))
@@ -127,6 +133,8 @@ const AppLayoutStub = { template: '<div><slot /></div>' }
 const UsageFiltersStub = defineComponent({
   setup(_, { expose }) {
     const userKeyword = ref('')
+    const apiKeyKeyword = ref('')
+    const accountKeyword = ref('')
     let userSearchRevision = 0
     const setUserKeyword = (email: string) => {
       userSearchRevision += 1
@@ -136,6 +144,12 @@ const UsageFiltersStub = defineComponent({
       getUserSearchRevision: () => userSearchRevision,
       setUserKeyword,
       simulateUserInput: setUserKeyword,
+      getFilterLabels: () => ({ user: userKeyword.value, apiKey: apiKeyKeyword.value, account: accountKeyword.value }),
+      restoreFilterLabels: (labels: { user?: string; apiKey?: string; account?: string }) => {
+        userKeyword.value = labels.user || ''
+        apiKeyKeyword.value = labels.apiKey || ''
+        accountKeyword.value = labels.account || ''
+      }
     })
     return { userKeyword }
   },
@@ -176,6 +190,7 @@ const mountRouteFilteredUsageView = () => mount(UsageView, {
     AppLayout: AppLayoutStub, UsageStatsCards: true, UsageFilters: UsageFiltersStub,
     UsageTable: true, UsageExportProgress: true, UsageCleanupDialog: true,
     UserBalanceHistoryModal: true, Pagination: true, Select: true,
+    BaseDialog: { props: ['show'], template: '<div v-if="show"><slot /><slot name="footer" /></div>' },
     DateRangePicker: true, Icon: true, TokenUsageTrend: true,
     ModelDistributionChart: true, GroupDistributionChart: true,
     EndpointDistributionChart: true, UserTokenRanking: true,
@@ -185,6 +200,11 @@ const mountRouteFilteredUsageView = () => mount(UsageView, {
 describe('admin UsageView route filters', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    vi.mocked(localStorage.getItem).mockReset().mockReturnValue(null)
+    vi.mocked(localStorage.setItem).mockReset()
+    vi.mocked(localStorage.removeItem).mockReset()
+    getUsageCostEstimate.mockReset().mockResolvedValue({ weekly_cost_usd: 0, weekly_quota_usd: 0 })
+    updateUsageCostEstimate.mockReset()
     Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
     list.mockReset().mockResolvedValue({ items: [], total: 0, pages: 0 })
     getStats.mockReset().mockResolvedValue({
@@ -297,6 +317,103 @@ describe('admin UsageView route filters', () => {
     expect((wrapper.vm as any).filters.model).toBe('gpt-6-astra')
     expect((wrapper.vm as any).activeTab).toBe('usage')
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-6-astra' }), expect.anything())
+    wrapper.unmount()
+  })
+
+  it('defaults to today in Shanghai and resets back to today', async () => {
+    vi.setSystemTime(new Date('2026-09-25T09:00:00Z'))
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    expect((wrapper.vm as any).startDate).toBe('2026-09-25')
+    expect((wrapper.vm as any).endDate).toBe('2026-09-25')
+    expect((wrapper.vm as any).rangePreset).toBe('today')
+    ;(wrapper.vm as any).onDateRangeChange({ startDate: '2026-09-20', endDate: '2026-09-23', preset: null })
+    ;(wrapper.vm as any).resetFilters()
+    expect((wrapper.vm as any).startDate).toBe('2026-09-25')
+    expect((wrapper.vm as any).rangePreset).toBe('today')
+    wrapper.unmount()
+  })
+
+  it('restores a saved group filter on revisit without saving the date', async () => {
+    const storage = new Map<string, string>()
+    vi.mocked(localStorage.getItem).mockImplementation((key) => storage.get(key) ?? null)
+    vi.mocked(localStorage.setItem).mockImplementation((key, value) => { storage.set(key, value) })
+    vi.mocked(localStorage.removeItem).mockImplementation((key) => { storage.delete(key) })
+
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    ;(wrapper.vm as any).filters.group_id = 42
+    await wrapper.get('[data-testid="usage-save-default"]').trigger('click')
+    expect(JSON.parse(storage.get('admin-usage-default-filters:7')!).filters).toEqual({ group_id: 42 })
+    ;(wrapper.vm as any).resetFilters()
+    expect((wrapper.vm as any).filters.group_id).toBeUndefined()
+    wrapper.unmount()
+
+    const revisit = mountRouteFilteredUsageView()
+    await flushPromises()
+    expect((revisit.vm as any).filters.group_id).toBe(42)
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ group_id: 42 }), expect.anything())
+    expect(revisit.find('[data-testid="usage-clear-default"]').exists()).toBe(true)
+    await revisit.get('[data-testid="usage-clear-default"]').trigger('click')
+    expect(storage.has('admin-usage-default-filters:7')).toBe(false)
+    revisit.unmount()
+  })
+
+  it('restores a saved user ID and its visible label', async () => {
+    const storage = new Map<string, string>()
+    vi.mocked(localStorage.getItem).mockImplementation((key) => storage.get(key) ?? null)
+    vi.mocked(localStorage.setItem).mockImplementation((key, value) => { storage.set(key, value) })
+    getById.mockResolvedValue({ id: 42, email: 'user@test.com' })
+
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    ;(wrapper.vm as any).filters.user_id = 42
+    ;(wrapper.findComponent(UsageFiltersStub).vm as any).setUserKeyword('user@test.com')
+    await wrapper.get('[data-testid="usage-save-default"]').trigger('click')
+    expect(JSON.parse(storage.get('admin-usage-default-filters:7')!)).toEqual({
+      filters: { user_id: 42 }, labels: { user: 'user@test.com', apiKey: '', account: '' }
+    })
+    wrapper.unmount()
+
+    const revisit = mountRouteFilteredUsageView()
+    await flushPromises()
+    expect((revisit.vm as any).filters.user_id).toBe(42)
+    expect(revisit.find('[data-test="user-filter-label"]').text()).toBe('user@test.com')
+    expect(list).toHaveBeenCalledWith(expect.objectContaining({ user_id: 42 }), expect.anything())
+    revisit.unmount()
+  })
+
+  it('lets an incoming link override saved defaults', async () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key) =>
+      key === 'admin-usage-default-filters:7' ? JSON.stringify({ filters: { group_id: 42 } }) : null)
+    routeQuery.user_id = '5'
+    getById.mockResolvedValue({ id: 5, email: 'user@test.com' })
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    expect((wrapper.vm as any).filters.group_id).toBeUndefined()
+    expect((wrapper.vm as any).filters.user_id).toBe(5)
+    wrapper.unmount()
+  })
+
+  it('shares updated cost settings with the model table and summary card', async () => {
+    getUsageCostEstimate.mockResolvedValue({ weekly_cost_usd: 17, weekly_quota_usd: 100 })
+    updateUsageCostEstimate.mockResolvedValue({ weekly_cost_usd: 20, weekly_quota_usd: 80 })
+    getBillingAnalysis.mockResolvedValue({
+      total: { requests: 1, user_cost: 50, account_cost: 100 },
+      models: [{ model: 'test', requests: 1, user_cost: 50, account_cost: 100 }]
+    })
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    expect((wrapper.vm as any).costFactor).toBe(0.17)
+    expect(wrapper.text()).toContain('$33.0000')
+    await wrapper.get('[data-testid="usage-cost-settings"]').trigger('click')
+    await wrapper.get('#weekly-cost-usd').setValue('20')
+    await wrapper.get('#weekly-quota-usd').setValue('80')
+    await wrapper.get('#usage-cost-estimate-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(updateUsageCostEstimate).toHaveBeenCalledWith({ weekly_cost_usd: 20, weekly_quota_usd: 80 })
+    expect((wrapper.vm as any).costFactor).toBe(0.25)
+    expect(wrapper.text()).toContain('$25.0000')
     wrapper.unmount()
   })
 })
@@ -461,9 +578,8 @@ describe('admin UsageView distribution metric toggles', () => {
 
     expect(getSnapshotV2).toHaveBeenCalledTimes(1)
     const now = new Date()
-    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
     expect(getSnapshotV2).toHaveBeenCalledWith(expect.objectContaining({
-      start_date: formatLocalDate(yesterday),
+      start_date: formatLocalDate(now),
       end_date: formatLocalDate(now),
       granularity: 'hour'
     }))
