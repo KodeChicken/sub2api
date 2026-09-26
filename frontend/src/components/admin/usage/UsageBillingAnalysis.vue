@@ -118,8 +118,8 @@
                       </colgroup>
                       <tbody>
                         <tr v-for="user in users" :key="user.user_id" class="border-t border-gray-100 dark:border-dark-700">
-                          <td class="max-w-[180px] truncate py-1.5 pl-5 font-medium" :title="user.username || `#${user.user_id}`">
-                            {{ user.username || t('usage.userIdFallback', { id: user.user_id }) }}
+                          <td class="py-1 pl-6 text-gray-600 dark:text-gray-300" :title="user.email">
+                            <span class="block max-w-[180px] truncate">{{ user.email || `User #${user.user_id}` }}</span>
                           </td>
                           <td class="py-1.5 text-right tabular-nums">{{ user.requests.toLocaleString() }}</td>
                           <td class="py-1.5 text-right tabular-nums text-green-600 dark:text-green-400">${{ user.user_cost.toFixed(4) }}</td>

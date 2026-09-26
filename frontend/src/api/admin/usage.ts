@@ -41,6 +41,7 @@ export interface BillingAnalysis {
 export interface BillingAnalysisUserRow {
   user_id: number
   username: string
+  email: string
   requests: number
   user_cost: number
   account_cost: number

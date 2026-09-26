@@ -118,7 +118,7 @@ func (r *usageLogRepository) GetBillingAnalysisUsers(ctx context.Context, filter
 			FROM scoped
 			GROUP BY user_id
 		)
-		SELECT g.user_id, COALESCE(u.username, ''), g.requests, g.user_cost, g.account_cost
+		SELECT g.user_id, COALESCE(u.username, ''), COALESCE(u.email, ''), g.requests, g.user_cost, g.account_cost
 		FROM grouped g
 		LEFT JOIN users u ON u.id = g.user_id
 		ORDER BY g.user_cost DESC, g.user_id
@@ -133,7 +133,7 @@ func (r *usageLogRepository) GetBillingAnalysisUsers(ctx context.Context, filter
 	result := &usagestats.BillingAnalysisUsers{Users: make([]usagestats.BillingAnalysisUserRow, 0)}
 	for rows.Next() {
 		var user usagestats.BillingAnalysisUserRow
-		if err := rows.Scan(&user.UserID, &user.Username, &user.Requests, &user.UserCost, &user.AccountCost); err != nil {
+		if err := rows.Scan(&user.UserID, &user.Username, &user.Email, &user.Requests, &user.UserCost, &user.AccountCost); err != nil {
 			return nil, err
 		}
 		if len(result.Users) < pageSize {

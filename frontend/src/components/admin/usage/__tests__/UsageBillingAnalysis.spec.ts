@@ -50,12 +50,12 @@ describe('UsageBillingAnalysis', () => {
     expect(wrapper.emitted('selectModel')?.[0]).toEqual(['gpt-6-astra'])
   })
 
-  it('expands by username, loads pages lazily and uses the same U/A and profit formula', async () => {
+  it('matches the model distribution email labels, loads pages lazily and keeps the same billing formulas', async () => {
     getUsers.mockResolvedValueOnce({
-      users: [{ user_id: 42, username: 'Alice', requests: 2, user_cost: 5, account_cost: 20 }],
+      users: [{ user_id: 42, username: 'Alice', email: 'alice@example.com', requests: 2, user_cost: 5, account_cost: 20 }],
       has_more: true
     }).mockResolvedValueOnce({
-      users: [{ user_id: 43, username: 'Bob', requests: 1, user_cost: 1, account_cost: 10 }],
+      users: [{ user_id: 43, username: '', email: '1173379996@qq.com', requests: 1, user_cost: 1, account_cost: 10 }],
       has_more: false
     })
     const wrapper = mountAnalysis()
@@ -65,17 +65,22 @@ describe('UsageBillingAnalysis', () => {
     expect(getUsers).toHaveBeenCalledWith(expect.objectContaining({
       model: 'gpt-6-astra', group_id: 7, start_date: '2026-09-25', page: 1, page_size: 50
     }))
-    expect(wrapper.text()).toContain('Alice')
+    expect(wrapper.text()).toContain('alice@example.com')
+    expect(wrapper.text()).not.toContain('Alice')
+    const userLabel = wrapper.get('td[title="alice@example.com"]')
+    expect(userLabel.classes()).toEqual(expect.arrayContaining(['pl-6', 'text-gray-600', 'dark:text-gray-300']))
+    expect(userLabel.classes()).not.toContain('font-medium')
+    expect(userLabel.get('span').classes()).toContain('truncate')
     expect(wrapper.text()).toContain('$3.4000')
     expect(wrapper.text()).toContain('$1.6000')
     expect(wrapper.text()).toContain('0.2500x')
-    expect(wrapper.text()).not.toContain('alice@example.com')
     await wrapper.findAll('button').find((button) => button.text() === 'usage.loadMoreUsers')!.trigger('click')
     await flushPromises()
     expect(getUsers).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
-    expect(wrapper.text()).toContain('Bob')
+    expect(wrapper.text()).toContain('1173379996@qq.com')
+    expect(wrapper.text()).not.toContain('User #43')
     await wrapper.get('[data-testid="billing-expand-gpt-6-astra"]').trigger('click')
-    expect(wrapper.text()).not.toContain('Bob')
+    expect(wrapper.text()).not.toContain('1173379996@qq.com')
   })
 
   it('switches the doughnut between requests and U without charting negative profit', async () => {
@@ -97,7 +102,7 @@ describe('UsageBillingAnalysis', () => {
     const wrapper = mountAnalysis()
     await wrapper.get('[data-testid="billing-expand-gpt-6-astra"]').trigger('click')
     await wrapper.setProps({ filters: { group_id: 8 } })
-    resolveUsers({ users: [{ user_id: 2, username: 'stale', requests: 1, user_cost: 1, account_cost: 1 }], has_more: false })
+    resolveUsers({ users: [{ user_id: 2, username: 'stale', email: 'stale@example.com', requests: 1, user_cost: 1, account_cost: 1 }], has_more: false })
     await flushPromises()
     expect(wrapper.text()).not.toContain('stale')
     expect(wrapper.find('[aria-expanded="true"]').exists()).toBe(false)
@@ -105,7 +110,7 @@ describe('UsageBillingAnalysis', () => {
 
   it('supports the unknown model and retries a failed detail request', async () => {
     getUsers.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce({
-      users: [{ user_id: 2, username: '', requests: 1, user_cost: 1, account_cost: 1 }],
+      users: [{ user_id: 2, username: 'Alice', email: '', requests: 1, user_cost: 1, account_cost: 1 }],
       has_more: false
     })
     const wrapper = mountAnalysis({
@@ -118,7 +123,8 @@ describe('UsageBillingAnalysis', () => {
     await wrapper.findAll('button').find((button) => button.text() === 'usage.retry')!.trigger('click')
     await flushPromises()
     expect(getUsers).toHaveBeenLastCalledWith(expect.objectContaining({ model: '', page: 1 }))
-    expect(wrapper.text()).toContain('usage.userIdFallback')
+    expect(wrapper.text()).toContain('User #2')
+    expect(wrapper.text()).not.toContain('Alice')
   })
 
   it('emits both weekly inputs and recalculates from the parent settings', async () => {

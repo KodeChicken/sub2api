@@ -323,6 +323,7 @@ type BillingAnalysis struct {
 type BillingAnalysisUserRow struct {
 	UserID      int64   `json:"user_id"`
 	Username    string  `json:"username"`
+	Email       string  `json:"email"`
 	Requests    int64   `json:"requests"`
 	UserCost    float64 `json:"user_cost"`
 	AccountCost float64 `json:"account_cost"`
