@@ -54,7 +54,7 @@ func (s *adminUsageRepoCapture) GetBillingAnalysisUsers(ctx context.Context, fil
 
 func newAdminUsageRequestTypeTestRouter(repo *adminUsageRepoCapture) *gin.Engine {
 	gin.SetMode(gin.TestMode)
-	usageSvc := service.NewUsageService(repo, nil, nil, nil)
+	usageSvc := service.NewUsageService(repo, nil, nil, nil, nil)
 	handler := NewUsageHandler(usageSvc, nil, nil, nil)
 	router := gin.New()
 	router.GET("/admin/usage", handler.List)

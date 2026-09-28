@@ -105,7 +105,7 @@ func billingAnalysisFilters(c *gin.Context) (usagestats.UsageLogFilters, bool) {
 	return filters, true
 }
 
-// BillingAnalysis returns the persisted U/A totals and model breakdown.
+// BillingAnalysis returns persisted U/A totals and per-request catalog ratios.
 func (h *UsageHandler) BillingAnalysis(c *gin.Context) {
 	filters, ok := billingAnalysisFilters(c)
 	if !ok {

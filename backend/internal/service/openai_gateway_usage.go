@@ -323,6 +323,16 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			cost.ActualCost = standardCost.ActualCost
 		}
 	}
+	if cost != nil {
+		cost.OfficialReferenceCost = calculateOfficialReferenceCost(
+			s.billingService,
+			cost,
+			tokens,
+			serviceTier,
+			optionalStringValue(result.ReasoningEffort),
+			pricingAt,
+		)
+	}
 
 	// Determine billing type
 	isSubscriptionBilling := subscription != nil && apiKey.Group != nil && apiKey.Group.IsSubscriptionType()
@@ -424,6 +434,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		usageLog.TotalCost = cost.TotalCost
 		usageLog.ActualCost = cost.ActualCost
 		usageLog.LongContextBillingApplied = cost.LongContextBillingApplied
+		usageLog.OfficialReferenceCost = cost.OfficialReferenceCost
 	}
 	if isVideoUsage && (cost == nil || cost.BillingMode != string(BillingModeToken)) {
 		usageLog.RateMultiplier = videoMultiplier
@@ -627,6 +638,7 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 				longContextBillingGate,
 			)
 			if err == nil {
+				cost.BillingModel = candidate
 				tokenCost = cost
 				break
 			}

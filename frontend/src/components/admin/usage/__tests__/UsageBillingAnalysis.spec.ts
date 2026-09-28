@@ -9,9 +9,6 @@ const { getUsers } = vi.hoisted(() => ({ getUsers: vi.fn() }))
 vi.mock('@/api/admin/usage', () => ({
   adminUsageAPI: { getBillingAnalysisUsers: getUsers }
 }))
-vi.mock('vue-chartjs', () => ({
-  Doughnut: { props: ['data'], template: '<div data-testid="billing-doughnut">{{ data.datasets[0].data.join(",") }}</div>' }
-}))
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key })
 }))
@@ -21,8 +18,8 @@ const BaseDialogStub = defineComponent({
   template: '<div v-if="show"><slot /><slot name="footer" /></div>'
 })
 const analysis: BillingAnalysis = {
-  total: { requests: 119, user_cost: 25.71962, account_cost: 160.604579 },
-  models: [{ model: 'gpt-6-astra', requests: 119, user_cost: 25.71962, account_cost: 160.604579 }]
+  total: { requests: 119, priced_requests: 119, user_cost: 25.71962, account_cost: 160.604579, official_reference_cost: 80.3022895 },
+  models: [{ model: 'gpt-6-astra', requests: 119, priced_requests: 119, user_cost: 25.71962, account_cost: 160.604579, official_reference_cost: 80.3022895 }]
 }
 const mountAnalysis = (data = analysis) => mount(UsageBillingAnalysis, {
   props: {
@@ -31,7 +28,7 @@ const mountAnalysis = (data = analysis) => mount(UsageBillingAnalysis, {
     settings: { weekly_cost_usd: 17, weekly_quota_usd: 100 },
     settingsState: 'ready', coefficient: 0.17
   },
-  global: { stubs: { BaseDialog: BaseDialogStub, Icon: true, Doughnut: true, LoadingSpinner: true } }
+  global: { stubs: { BaseDialog: BaseDialogStub, Icon: true, LoadingSpinner: true } }
 })
 
 describe('UsageBillingAnalysis', () => {
@@ -39,23 +36,23 @@ describe('UsageBillingAnalysis', () => {
     getUsers.mockReset().mockResolvedValue({ users: [], has_more: false })
   })
 
-  it('shows total and per-model profit from U minus estimated cost without changing U/A', async () => {
+  it('shows profit from U minus estimated cost and the real U/catalog ratio', async () => {
     const wrapper = mountAnalysis()
-    expect(wrapper.text()).toContain('0.1601x')
+    expect(wrapper.text()).toContain('0.3203x')
     expect(wrapper.text()).toContain('0.17x')
     expect(wrapper.text()).toContain('$27.3028')
     expect(wrapper.text()).toContain('-$1.5832')
-    expect(wrapper.findAll('tbody td')[5].classes()).toContain('text-red-600')
+    expect(wrapper.findAll('tbody td')[4].classes()).toContain('text-red-600')
     await wrapper.get('[aria-label="usage.viewModelRecords"]').trigger('click')
     expect(wrapper.emitted('selectModel')?.[0]).toEqual(['gpt-6-astra'])
   })
 
   it('matches the model distribution email labels, loads pages lazily and keeps the same billing formulas', async () => {
     getUsers.mockResolvedValueOnce({
-      users: [{ user_id: 42, username: 'Alice', email: 'alice@example.com', requests: 2, user_cost: 5, account_cost: 20 }],
+      users: [{ user_id: 42, username: 'Alice', email: 'alice@example.com', requests: 2, priced_requests: 2, user_cost: 5, account_cost: 20, official_reference_cost: 10 }],
       has_more: true
     }).mockResolvedValueOnce({
-      users: [{ user_id: 43, username: '', email: '1173379996@qq.com', requests: 1, user_cost: 1, account_cost: 10 }],
+      users: [{ user_id: 43, username: '', email: '1173379996@qq.com', requests: 1, priced_requests: 1, user_cost: 1, account_cost: 10, official_reference_cost: 4 }],
       has_more: false
     })
     const wrapper = mountAnalysis()
@@ -73,7 +70,7 @@ describe('UsageBillingAnalysis', () => {
     expect(userLabel.get('span').classes()).toContain('truncate')
     expect(wrapper.text()).toContain('$3.4000')
     expect(wrapper.text()).toContain('$1.6000')
-    expect(wrapper.text()).toContain('0.2500x')
+    expect(wrapper.text()).toContain('0.5000x')
     await wrapper.findAll('button').find((button) => button.text() === 'usage.loadMoreUsers')!.trigger('click')
     await flushPromises()
     expect(getUsers).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
@@ -83,17 +80,19 @@ describe('UsageBillingAnalysis', () => {
     expect(wrapper.text()).not.toContain('1173379996@qq.com')
   })
 
-  it('switches the doughnut between requests and U without charting negative profit', async () => {
+  it('shows only the requested billing columns and each model real ratio', () => {
     const wrapper = mountAnalysis({
-      total: { requests: 3, user_cost: 7, account_cost: 30 },
+      total: { requests: 3, priced_requests: 3, user_cost: 7, account_cost: 30, official_reference_cost: 20 },
       models: [
-        { model: 'first', requests: 2, user_cost: 5, account_cost: 20 },
-        { model: 'second', requests: 1, user_cost: 2, account_cost: 10 }
+        { model: 'first', requests: 2, priced_requests: 2, user_cost: 5, account_cost: 20, official_reference_cost: 10 },
+        { model: 'second', requests: 1, priced_requests: 1, user_cost: 2, account_cost: 10, official_reference_cost: 10 }
       ]
     })
-    expect(wrapper.get('[data-testid="billing-doughnut"]').text()).toBe('2,1')
-    await wrapper.findAll('button').find((button) => button.text() === 'U')!.trigger('click')
-    expect(wrapper.get('[data-testid="billing-doughnut"]').text()).toBe('5,2')
+    expect(wrapper.findAll('thead th').map((cell) => cell.text())).toEqual([
+      'usage.model', 'U', 'A', 'usage.estimatedCost', 'usage.estimatedProfit', 'usage.realRatio'
+    ])
+    expect(wrapper.get('tbody').text()).toContain('0.5000x')
+    expect(wrapper.get('tbody').text()).toContain('0.2000x')
   })
 
   it('does not display stale user details after the active filters change', async () => {
@@ -102,7 +101,7 @@ describe('UsageBillingAnalysis', () => {
     const wrapper = mountAnalysis()
     await wrapper.get('[data-testid="billing-expand-gpt-6-astra"]').trigger('click')
     await wrapper.setProps({ filters: { group_id: 8 } })
-    resolveUsers({ users: [{ user_id: 2, username: 'stale', email: 'stale@example.com', requests: 1, user_cost: 1, account_cost: 1 }], has_more: false })
+    resolveUsers({ users: [{ user_id: 2, username: 'stale', email: 'stale@example.com', requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 }], has_more: false })
     await flushPromises()
     expect(wrapper.text()).not.toContain('stale')
     expect(wrapper.find('[aria-expanded="true"]').exists()).toBe(false)
@@ -110,12 +109,12 @@ describe('UsageBillingAnalysis', () => {
 
   it('supports the unknown model and retries a failed detail request', async () => {
     getUsers.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce({
-      users: [{ user_id: 2, username: 'Alice', email: '', requests: 1, user_cost: 1, account_cost: 1 }],
+      users: [{ user_id: 2, username: 'Alice', email: '', requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 }],
       has_more: false
     })
     const wrapper = mountAnalysis({
-      total: { requests: 1, user_cost: 1, account_cost: 1 },
-      models: [{ model: '', requests: 1, user_cost: 1, account_cost: 1 }]
+      total: { requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 },
+      models: [{ model: '', requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 }]
     })
     await wrapper.get('[data-testid="billing-expand-"]').trigger('click')
     await flushPromises()
@@ -183,12 +182,21 @@ describe('UsageBillingAnalysis', () => {
     expect(wrapper.emitted('retrySettings')).toHaveLength(1)
   })
 
-  it('shows no U/A ratio for a zero account estimate', () => {
+  it('shows no real ratio when no official reference cost is available', () => {
     const wrapper = mountAnalysis({
-      total: { requests: 1, user_cost: 1, account_cost: 0 },
-      models: [{ model: 'free', requests: 1, user_cost: 1, account_cost: 0 }]
+      total: { requests: 1, priced_requests: 0, user_cost: 1, account_cost: 0, official_reference_cost: 0 },
+      models: [{ model: 'free', requests: 1, priced_requests: 0, user_cost: 1, account_cost: 0, official_reference_cost: 0 }]
     })
     expect(wrapper.get('tbody').text()).toContain('usage.unavailable')
     expect(wrapper.get('tbody').text()).toContain('$1.0000')
+  })
+
+  it('does not mix all user charges with a partially covered reference cost', () => {
+    const wrapper = mountAnalysis({
+      total: { requests: 2, priced_requests: 1, user_cost: 2, account_cost: 4, official_reference_cost: 1 },
+      models: [{ model: 'partial', requests: 2, priced_requests: 1, user_cost: 2, account_cost: 4, official_reference_cost: 1 }]
+    })
+    expect(wrapper.get('tbody').text()).toContain('usage.unavailable')
+    expect(wrapper.get('tbody').text()).not.toContain('2.0000x')
   })
 })

@@ -822,6 +822,9 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 
 	// 计算费用
 	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, pricingAt)
+	if cost != nil {
+		cost.BillingModel = billingModel
+	}
 	// response_model：按上游成功响应自报的模型计费（渠道显式开启才生效）。
 	// 采纳条件见 responseModelBillingDeclaration + hasIdentifiedResponseModelPricing
 	// + responseModelBillingAdoptable。任一条件不满足都静默回落基线，即开启本模式前的
@@ -840,8 +843,27 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 				// 因此这里不改写它，改由日志记录实际生效的计费基准。
 				logResponseModelBillingApplied("service.gateway", account, result.RequestID, billingModel, responseModel, cost, responseCost)
 				cost = responseCost
+				cost.BillingModel = responseModel
 			}
 		}
+	}
+	if cost != nil {
+		cost.OfficialReferenceCost = calculateOfficialReferenceCost(
+			s.billingService,
+			cost,
+			UsageTokens{
+				InputTokens:           result.Usage.InputTokens,
+				OutputTokens:          result.Usage.OutputTokens,
+				CacheCreationTokens:   result.Usage.CacheCreationInputTokens,
+				CacheReadTokens:       result.Usage.CacheReadInputTokens,
+				CacheCreation5mTokens: result.Usage.CacheCreation5mTokens,
+				CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
+				ImageOutputTokens:     result.Usage.ImageOutputTokens,
+			},
+			optionalStringValue(result.ServiceTier),
+			optionalStringValue(result.ReasoningEffort),
+			pricingAt,
+		)
 	}
 
 	// 判断计费方式：订阅模式 vs 余额模式
@@ -1241,6 +1263,7 @@ func (s *GatewayService) buildRecordUsageLog(
 		usageLog.TotalCost = cost.TotalCost
 		usageLog.ActualCost = cost.ActualCost
 		usageLog.LongContextBillingApplied = cost.LongContextBillingApplied
+		usageLog.OfficialReferenceCost = cost.OfficialReferenceCost
 	}
 
 	return usageLog

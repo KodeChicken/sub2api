@@ -29,8 +29,10 @@ export interface AdminUsageStatsResponse {
 export interface BillingAnalysisRow {
   model?: string
   requests: number
+  priced_requests: number
   user_cost: number
   account_cost: number
+  official_reference_cost: number
 }
 
 export interface BillingAnalysis {
@@ -43,8 +45,10 @@ export interface BillingAnalysisUserRow {
   username: string
   email: string
   requests: number
+  priced_requests: number
   user_cost: number
   account_cost: number
+  official_reference_cost: number
 }
 
 export interface BillingAnalysisUsers {

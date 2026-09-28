@@ -33,36 +33,21 @@
     <p class="px-4 py-2 text-xs text-gray-500 dark:text-gray-400">{{ t('usage.billingEstimateHint') }}</p>
     <div v-if="loading" class="flex h-48 items-center justify-center"><LoadingSpinner /></div>
     <div v-else-if="!sortedModels.length" class="flex h-48 items-center justify-center text-sm text-gray-500">{{ t('usage.noData') }}</div>
-    <div v-else class="flex flex-col items-center gap-4 p-4 lg:flex-row lg:items-start lg:gap-6">
-      <div class="flex w-full shrink-0 flex-col items-center gap-3 lg:w-48">
-        <div class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5 dark:border-dark-700 dark:bg-dark-800">
-          <button type="button" class="rounded-md px-2.5 py-1 text-xs font-medium" :class="chartMetric === 'requests' ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white' : 'text-gray-500'" @click="chartMetric = 'requests'">
-            {{ t('usage.totalRequests') }}
-          </button>
-          <button type="button" class="rounded-md px-2.5 py-1 text-xs font-medium" :class="chartMetric === 'user_cost' ? 'bg-white text-gray-900 shadow-sm dark:bg-dark-700 dark:text-white' : 'text-gray-500'" @click="chartMetric = 'user_cost'">
-            U
-          </button>
-        </div>
-        <div class="h-48 w-48">
-          <Doughnut v-if="chartData" :data="chartData" :options="chartOptions" />
-          <div v-else class="flex h-full items-center justify-center text-xs text-gray-500">{{ t('usage.noData') }}</div>
-        </div>
-      </div>
-      <div class="max-h-[520px] w-full min-w-0 flex-1 overflow-auto">
-        <table class="w-full min-w-[780px] table-fixed text-left text-xs">
+    <div v-else class="p-4">
+      <div class="max-h-[520px] w-full overflow-auto">
+        <table class="w-full min-w-[760px] table-fixed text-left text-xs">
           <colgroup>
-            <col class="w-[23%]" /><col class="w-[11%]" /><col class="w-[12%]" />
-            <col class="w-[12%]" /><col class="w-[14%]" /><col class="w-[15%]" /><col class="w-[13%]" />
+            <col class="w-[25%]" /><col class="w-[14%]" /><col class="w-[14%]" />
+            <col class="w-[16%]" /><col class="w-[17%]" /><col class="w-[14%]" />
           </colgroup>
           <thead class="text-gray-500 dark:text-gray-400">
             <tr>
               <th class="pb-2 text-left font-medium">{{ t('usage.model') }}</th>
-              <th class="pb-2 text-right font-medium">{{ t('usage.totalRequests') }}</th>
               <th class="pb-2 text-right font-medium">U</th>
               <th class="pb-2 text-right font-medium">A</th>
               <th class="pb-2 text-right font-medium">{{ t('usage.estimatedCost') }}</th>
               <th class="pb-2 text-right font-medium">{{ t('usage.estimatedProfit') }}</th>
-              <th class="pb-2 text-right font-medium">U/A</th>
+              <th class="pb-2 text-right font-medium">{{ t('usage.realRatio') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -93,17 +78,16 @@
                     </button>
                   </div>
                 </td>
-                <td class="py-1.5 text-right tabular-nums">{{ row.requests.toLocaleString() }}</td>
                 <td class="py-1.5 text-right tabular-nums text-green-600 dark:text-green-400">${{ row.user_cost.toFixed(4) }}</td>
                 <td class="py-1.5 text-right tabular-nums text-orange-500">${{ row.account_cost.toFixed(4) }}</td>
                 <td class="py-1.5 text-right tabular-nums">{{ coefficient == null ? '-' : `$${(row.account_cost * coefficient).toFixed(4)}` }}</td>
                 <td class="py-1.5 text-right font-medium tabular-nums" :class="coefficient == null ? '' : profitColor(row.user_cost - row.account_cost * coefficient)">
                   {{ coefficient == null ? '-' : formatAmount(row.user_cost - row.account_cost * coefficient) }}
                 </td>
-                <td class="py-1.5 text-right font-medium tabular-nums">{{ ratio(row) }}</td>
+                <td class="py-1.5 text-right font-medium tabular-nums" :title="coverageTitle(row)">{{ realRatio(row) }}</td>
               </tr>
               <tr v-if="expandedModel === modelKey(row)" class="bg-gray-50/60 dark:bg-dark-700/30">
-                <td colspan="7" class="p-0">
+                <td colspan="6" class="p-0">
                   <div v-if="breakdownLoading && !users.length" class="flex justify-center py-4"><LoadingSpinner /></div>
                   <div v-else-if="breakdownError && !users.length" class="py-3 text-center text-gray-500">
                     {{ t('usage.usersLoadFailed') }}
@@ -113,22 +97,21 @@
                   <div v-else>
                     <table class="w-full table-fixed text-xs">
                       <colgroup>
-                        <col class="w-[23%]" /><col class="w-[11%]" /><col class="w-[12%]" />
-                        <col class="w-[12%]" /><col class="w-[14%]" /><col class="w-[15%]" /><col class="w-[13%]" />
+                        <col class="w-[25%]" /><col class="w-[14%]" /><col class="w-[14%]" />
+                        <col class="w-[16%]" /><col class="w-[17%]" /><col class="w-[14%]" />
                       </colgroup>
                       <tbody>
                         <tr v-for="user in users" :key="user.user_id" class="border-t border-gray-100 dark:border-dark-700">
                           <td class="py-1 pl-6 text-gray-600 dark:text-gray-300" :title="user.email">
                             <span class="block max-w-[180px] truncate">{{ user.email || `User #${user.user_id}` }}</span>
                           </td>
-                          <td class="py-1.5 text-right tabular-nums">{{ user.requests.toLocaleString() }}</td>
                           <td class="py-1.5 text-right tabular-nums text-green-600 dark:text-green-400">${{ user.user_cost.toFixed(4) }}</td>
                           <td class="py-1.5 text-right tabular-nums text-orange-500">${{ user.account_cost.toFixed(4) }}</td>
                           <td class="py-1.5 text-right tabular-nums">{{ coefficient == null ? '-' : `$${(user.account_cost * coefficient).toFixed(4)}` }}</td>
                           <td class="py-1.5 text-right font-medium tabular-nums" :class="coefficient == null ? '' : profitColor(user.user_cost - user.account_cost * coefficient)">
                             {{ coefficient == null ? '-' : formatAmount(user.user_cost - user.account_cost * coefficient) }}
                           </td>
-                          <td class="py-1.5 text-right font-medium tabular-nums">{{ ratio(user) }}</td>
+                          <td class="py-1.5 text-right font-medium tabular-nums" :title="coverageTitle(user)">{{ realRatio(user) }}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -190,17 +173,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
-import type { ChartOptions, TooltipItem } from 'chart.js'
-import { Doughnut } from 'vue-chartjs'
 import { adminUsageAPI } from '@/api/admin/usage'
 import type { AdminUsageQueryParams, BillingAnalysis, BillingAnalysisRow, BillingAnalysisUserRow, UsageCostEstimate } from '@/api/admin/usage'
 import { formatMultiplier } from '@/utils/formatters'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import LoadingSpinner from '@/components/common/LoadingSpinner.vue'
 import Icon from '@/components/icons/Icon.vue'
-
-ChartJS.register(ArcElement, Tooltip, Legend)
 
 const props = defineProps<{
   analysis: BillingAnalysis | null
@@ -221,7 +199,6 @@ const settingsSaving = ref(false)
 const showSettings = ref(false)
 const weeklyCostInput = ref('')
 const weeklyQuotaInput = ref('')
-const chartMetric = ref<'requests' | 'user_cost'>('requests')
 const expandedModel = ref<string | null>(null)
 const users = ref<BillingAnalysisUserRow[]>([])
 const breakdownLoading = ref(false)
@@ -239,40 +216,11 @@ const draftCoefficient = computed(() => {
 })
 const sortedModels = computed(() => [...(props.analysis?.models || [])].sort((a, b) => b.account_cost - a.account_cost))
 const modelKey = (row: BillingAnalysisRow) => row.model || ''
-const chartData = computed(() => {
-  const sorted = [...sortedModels.value].sort((a, b) => b[chartMetric.value] - a[chartMetric.value])
-  const top = sorted.slice(0, 8)
-  const remaining = sorted.slice(8).reduce((sum, row) => sum + row[chartMetric.value], 0)
-  const data = top.map((row) => row[chartMetric.value])
-  if (remaining > 0) data.push(remaining)
-  if (!data.some((value) => value > 0)) return null
-  return {
-    labels: [...top.map((row) => row.model || t('usage.unknown')), ...(remaining > 0 ? [t('usage.otherModels')] : [])],
-    datasets: [{ data, backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#94a3b8'], borderWidth: 0 }]
-  }
-})
-const chartOptions: ChartOptions<'doughnut'> = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: { display: false },
-    tooltip: {
-      callbacks: {
-        label: (context: TooltipItem<'doughnut'>) => {
-          const value = Number(context.raw)
-          const total = context.dataset.data.reduce((sum, value) => sum + value, 0)
-          const amount = chartMetric.value === 'requests'
-            ? value.toLocaleString()
-            : `$${value.toFixed(4)}`
-          return `${context.label}: ${amount} (${total > 0 ? (value / total * 100).toFixed(1) : '0.0'}%)`
-        }
-      }
-    }
-  }
-}
-const ratio = (row: BillingAnalysisRow | BillingAnalysisUserRow) => row.account_cost > 0
-  ? `${(row.user_cost / row.account_cost).toFixed(4)}x`
+const realRatio = (row: BillingAnalysisRow | BillingAnalysisUserRow) => row.requests > 0 && row.priced_requests === row.requests && row.official_reference_cost > 0
+  ? `${(row.user_cost / row.official_reference_cost).toFixed(4)}x`
   : t('usage.unavailable')
+const coverageTitle = (row: BillingAnalysisRow | BillingAnalysisUserRow) =>
+  t('usage.realRatioCoverage', { priced: row.priced_requests, total: row.requests })
 const formatAmount = (value: number) => value < 0 ? `-$${Math.abs(value).toFixed(4)}` : `$${value.toFixed(4)}`
 const profitColor = (value: number) => value < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'
 

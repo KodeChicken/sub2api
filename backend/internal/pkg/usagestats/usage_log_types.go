@@ -309,10 +309,12 @@ type UsageStats struct {
 
 // BillingAnalysis keeps user charges and account-side estimates separate.
 type BillingAnalysisRow struct {
-	Model       string  `json:"model,omitempty"`
-	Requests    int64   `json:"requests"`
-	UserCost    float64 `json:"user_cost"`
-	AccountCost float64 `json:"account_cost"`
+	Model                 string  `json:"model,omitempty"`
+	Requests              int64   `json:"requests"`
+	PricedRequests        int64   `json:"priced_requests"`
+	UserCost              float64 `json:"user_cost"`
+	AccountCost           float64 `json:"account_cost"`
+	OfficialReferenceCost float64 `json:"official_reference_cost"`
 }
 
 type BillingAnalysis struct {
@@ -321,12 +323,14 @@ type BillingAnalysis struct {
 }
 
 type BillingAnalysisUserRow struct {
-	UserID      int64   `json:"user_id"`
-	Username    string  `json:"username"`
-	Email       string  `json:"email"`
-	Requests    int64   `json:"requests"`
-	UserCost    float64 `json:"user_cost"`
-	AccountCost float64 `json:"account_cost"`
+	UserID                int64   `json:"user_id"`
+	Username              string  `json:"username"`
+	Email                 string  `json:"email"`
+	Requests              int64   `json:"requests"`
+	PricedRequests        int64   `json:"priced_requests"`
+	UserCost              float64 `json:"user_cost"`
+	AccountCost           float64 `json:"account_cost"`
+	OfficialReferenceCost float64 `json:"official_reference_cost"`
 }
 
 type BillingAnalysisUsers struct {

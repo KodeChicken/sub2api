@@ -172,6 +172,8 @@ type UsageLog struct {
 	AccountRateMultiplier *float64
 	// AccountStatsCost 账号统计定价预计算费用（nil = 使用默认公式 total_cost × account_rate_multiplier）
 	AccountStatsCost *float64
+	// OfficialReferenceCost 按本次请求实际计费模型和长上下文结果计算的官方参考价。
+	OfficialReferenceCost *float64
 
 	BillingType        int8
 	RequestType        RequestType

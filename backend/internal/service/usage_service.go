@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -60,15 +61,17 @@ type UsageService struct {
 	userRepo             UserRepository
 	entClient            *dbent.Client
 	authCacheInvalidator APIKeyAuthCacheInvalidator
+	billingService       *BillingService
 }
 
 // NewUsageService 创建使用统计服务实例
-func NewUsageService(usageRepo UsageLogRepository, userRepo UserRepository, entClient *dbent.Client, authCacheInvalidator APIKeyAuthCacheInvalidator) *UsageService {
+func NewUsageService(usageRepo UsageLogRepository, userRepo UserRepository, entClient *dbent.Client, authCacheInvalidator APIKeyAuthCacheInvalidator, billingService *BillingService) *UsageService {
 	return &UsageService{
 		usageRepo:            usageRepo,
 		userRepo:             userRepo,
 		entClient:            entClient,
 		authCacheInvalidator: authCacheInvalidator,
+		billingService:       billingService,
 	}
 }
 
@@ -463,9 +466,158 @@ func (s *UsageService) GetStatsWithFilters(ctx context.Context, filters usagesta
 }
 
 func (s *UsageService) GetBillingAnalysis(ctx context.Context, filters usagestats.UsageLogFilters) (*usagestats.BillingAnalysis, error) {
-	return s.usageRepo.GetBillingAnalysis(ctx, filters)
+	analysis, err := s.usageRepo.GetBillingAnalysis(ctx, filters)
+	if err != nil {
+		return nil, err
+	}
+	logs, ok, err := s.billingAnalysisUsageLogs(ctx, filters)
+	if err != nil || !ok {
+		return analysis, err
+	}
+	applyBillingAnalysisReferenceCosts(analysis, logs, s.billingService)
+	return analysis, nil
 }
 
 func (s *UsageService) GetBillingAnalysisUsers(ctx context.Context, filters usagestats.UsageLogFilters, page, pageSize int) (*usagestats.BillingAnalysisUsers, error) {
-	return s.usageRepo.GetBillingAnalysisUsers(ctx, filters, page, pageSize)
+	users, err := s.usageRepo.GetBillingAnalysisUsers(ctx, filters, page, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	logs, ok, err := s.billingAnalysisUsageLogs(ctx, filters)
+	if err != nil || !ok {
+		return users, err
+	}
+	applyBillingAnalysisUserReferenceCosts(users, logs, s.billingService)
+	return users, nil
+}
+
+type billingAnalysisUsageLogReader interface {
+	ListMissingBillingReferenceUsageLogs(ctx context.Context, filters usagestats.UsageLogFilters) ([]UsageLog, error)
+}
+
+func (s *UsageService) billingAnalysisUsageLogs(ctx context.Context, filters usagestats.UsageLogFilters) ([]UsageLog, bool, error) {
+	if s == nil || s.billingService == nil {
+		return nil, false, nil
+	}
+	reader, ok := s.usageRepo.(billingAnalysisUsageLogReader)
+	if !ok {
+		return nil, false, nil
+	}
+	logs, err := reader.ListMissingBillingReferenceUsageLogs(ctx, filters)
+	return logs, true, err
+}
+
+func applyBillingAnalysisReferenceCosts(analysis *usagestats.BillingAnalysis, logs []UsageLog, billingService *BillingService) {
+	if analysis == nil {
+		return
+	}
+	byModel := make(map[string]*usagestats.BillingAnalysisRow, len(analysis.Models))
+	for i := range analysis.Models {
+		byModel[analysis.Models[i].Model] = &analysis.Models[i]
+	}
+	for i := range logs {
+		referenceCost := officialReferenceCostForUsageLog(&logs[i], billingService)
+		if referenceCost == nil {
+			continue
+		}
+		analysis.Total.PricedRequests++
+		analysis.Total.OfficialReferenceCost += *referenceCost
+		model := strings.TrimSpace(logs[i].RequestedModel)
+		if model == "" {
+			model = strings.TrimSpace(logs[i].Model)
+		}
+		if row := byModel[model]; row != nil {
+			row.PricedRequests++
+			row.OfficialReferenceCost += *referenceCost
+		}
+	}
+}
+
+func applyBillingAnalysisUserReferenceCosts(result *usagestats.BillingAnalysisUsers, logs []UsageLog, billingService *BillingService) {
+	if result == nil {
+		return
+	}
+	byUser := make(map[int64]*usagestats.BillingAnalysisUserRow, len(result.Users))
+	for i := range result.Users {
+		byUser[result.Users[i].UserID] = &result.Users[i]
+	}
+	for i := range logs {
+		row := byUser[logs[i].UserID]
+		if row == nil {
+			continue
+		}
+		referenceCost := officialReferenceCostForUsageLog(&logs[i], billingService)
+		if referenceCost == nil {
+			continue
+		}
+		row.PricedRequests++
+		row.OfficialReferenceCost += *referenceCost
+	}
+}
+
+func officialReferenceCostForUsageLog(log *UsageLog, billingService *BillingService) *float64 {
+	if log == nil {
+		return nil
+	}
+	if log.OfficialReferenceCost != nil {
+		return log.OfficialReferenceCost
+	}
+	billingMode := string(BillingModeToken)
+	if log.BillingMode != nil && strings.TrimSpace(*log.BillingMode) != "" {
+		billingMode = strings.TrimSpace(*log.BillingMode)
+	}
+	model, ok := unambiguousHistoricalBillingModel(log)
+	if !ok {
+		return nil
+	}
+	cost := &CostBreakdown{
+		InputCost:                 log.InputCost,
+		ImageInputCost:            log.ImageInputCost,
+		OutputCost:                log.OutputCost,
+		ImageOutputCost:           log.ImageOutputCost,
+		CacheCreationCost:         log.CacheCreationCost,
+		CacheReadCost:             log.CacheReadCost,
+		TotalCost:                 log.TotalCost,
+		BillingMode:               billingMode,
+		BillingModel:              model,
+		LongContextBillingApplied: log.LongContextBillingApplied,
+	}
+	return calculateOfficialReferenceCost(
+		billingService,
+		cost,
+		UsageTokens{
+			InputTokens:           log.InputTokens,
+			ImageInputTokens:      log.ImageInputTokens,
+			OutputTokens:          log.OutputTokens,
+			CacheCreationTokens:   log.CacheCreationTokens,
+			CacheReadTokens:       log.CacheReadTokens,
+			CacheCreation5mTokens: log.CacheCreation5mTokens,
+			CacheCreation1hTokens: log.CacheCreation1hTokens,
+			ImageOutputTokens:     log.ImageOutputTokens,
+		},
+		optionalStringValue(log.ServiceTier),
+		optionalStringValue(log.ReasoningEffort),
+		log.CreatedAt,
+	)
+}
+
+func unambiguousHistoricalBillingModel(log *UsageLog) (string, bool) {
+	model := strings.TrimSpace(log.Model)
+	requested := strings.TrimSpace(log.RequestedModel)
+	if requested == "" {
+		requested = model
+	}
+	if log.UpstreamModel != nil && strings.TrimSpace(*log.UpstreamModel) != "" {
+		model = strings.TrimSpace(*log.UpstreamModel)
+	}
+	if model == "" || !strings.EqualFold(requested, model) {
+		return "", false
+	}
+	if log.UpstreamResponseModel != nil {
+		responseModel := strings.TrimSpace(*log.UpstreamResponseModel)
+		if responseModel != "" && !strings.EqualFold(responseModel, model) {
+			return "", false
+		}
+	}
+	return model, true
 }
