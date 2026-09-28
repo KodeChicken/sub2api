@@ -847,23 +847,25 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 			}
 		}
 	}
-	if cost != nil {
-		cost.OfficialReferenceCost = calculateOfficialReferenceCost(
-			s.billingService,
-			cost,
-			UsageTokens{
-				InputTokens:           result.Usage.InputTokens,
-				OutputTokens:          result.Usage.OutputTokens,
-				CacheCreationTokens:   result.Usage.CacheCreationInputTokens,
-				CacheReadTokens:       result.Usage.CacheReadInputTokens,
-				CacheCreation5mTokens: result.Usage.CacheCreation5mTokens,
-				CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
-				ImageOutputTokens:     result.Usage.ImageOutputTokens,
-			},
-			optionalStringValue(result.ServiceTier),
-			optionalStringValue(result.ReasoningEffort),
-			pricingAt,
-		)
+	officialLongContextEnabled := effectiveOfficialReferenceLongContextEnabled(apiKey.Group, nil)
+	var officialReference *OfficialReferenceResult
+	if officialInput, ok := officialReferenceInputFromCost(
+		cost,
+		UsageTokens{
+			InputTokens:           result.Usage.InputTokens,
+			OutputTokens:          result.Usage.OutputTokens,
+			CacheCreationTokens:   result.Usage.CacheCreationInputTokens,
+			CacheReadTokens:       result.Usage.CacheReadInputTokens,
+			CacheCreation5mTokens: result.Usage.CacheCreation5mTokens,
+			CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
+			ImageOutputTokens:     result.Usage.ImageOutputTokens,
+		},
+		optionalStringValue(result.ServiceTier),
+		optionalStringValue(result.ReasoningEffort),
+		pricingAt,
+		officialLongContextEnabled,
+	); ok {
+		officialReference = CalculateOfficialReferenceCost(s.billingService, officialInput)
 	}
 
 	// 判断计费方式：订阅模式 vs 余额模式
@@ -877,6 +879,7 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	accountRateMultiplier := account.BillingRateMultiplier()
 	usageLog := s.buildRecordUsageLog(ctx, input, result, apiKey, user, account, subscription,
 		requestedModel, multiplier, imageMultiplier, accountRateMultiplier, billingType, cacheTTLOverridden, cost)
+	applyOfficialReferenceResult(usageLog, officialReference, officialLongContextEnabled, pricingAt)
 
 	// 计算账号统计定价费用（使用最终上游模型匹配自定义规则）
 	if apiKey.GroupID != nil {
@@ -1263,7 +1266,6 @@ func (s *GatewayService) buildRecordUsageLog(
 		usageLog.TotalCost = cost.TotalCost
 		usageLog.ActualCost = cost.ActualCost
 		usageLog.LongContextBillingApplied = cost.LongContextBillingApplied
-		usageLog.OfficialReferenceCost = cost.OfficialReferenceCost
 	}
 
 	return usageLog

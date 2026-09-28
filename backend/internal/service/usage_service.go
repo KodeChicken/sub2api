@@ -562,43 +562,24 @@ func officialReferenceCostForUsageLog(log *UsageLog, billingService *BillingServ
 	if log.OfficialReferenceCost != nil {
 		return log.OfficialReferenceCost
 	}
-	billingMode := string(BillingModeToken)
-	if log.BillingMode != nil && strings.TrimSpace(*log.BillingMode) != "" {
-		billingMode = strings.TrimSpace(*log.BillingMode)
+	if log.OfficialReferenceLongContextEnabled == nil {
+		// Historical policy state is unknown. Never infer it from current group or
+		// account settings in a read path.
+		return nil
 	}
-	model, ok := unambiguousHistoricalBillingModel(log)
+	pricingAt := log.CreatedAt
+	if log.OfficialReferencePricingAt != nil {
+		pricingAt = *log.OfficialReferencePricingAt
+	}
+	input, ok := OfficialReferenceInputForUsageLog(log, *log.OfficialReferenceLongContextEnabled, pricingAt)
 	if !ok {
 		return nil
 	}
-	cost := &CostBreakdown{
-		InputCost:                 log.InputCost,
-		ImageInputCost:            log.ImageInputCost,
-		OutputCost:                log.OutputCost,
-		ImageOutputCost:           log.ImageOutputCost,
-		CacheCreationCost:         log.CacheCreationCost,
-		CacheReadCost:             log.CacheReadCost,
-		TotalCost:                 log.TotalCost,
-		BillingMode:               billingMode,
-		BillingModel:              model,
-		LongContextBillingApplied: log.LongContextBillingApplied,
+	result := CalculateOfficialReferenceCost(billingService, input)
+	if result == nil {
+		return nil
 	}
-	return calculateOfficialReferenceCost(
-		billingService,
-		cost,
-		UsageTokens{
-			InputTokens:           log.InputTokens,
-			ImageInputTokens:      log.ImageInputTokens,
-			OutputTokens:          log.OutputTokens,
-			CacheCreationTokens:   log.CacheCreationTokens,
-			CacheReadTokens:       log.CacheReadTokens,
-			CacheCreation5mTokens: log.CacheCreation5mTokens,
-			CacheCreation1hTokens: log.CacheCreation1hTokens,
-			ImageOutputTokens:     log.ImageOutputTokens,
-		},
-		optionalStringValue(log.ServiceTier),
-		optionalStringValue(log.ReasoningEffort),
-		log.CreatedAt,
-	)
+	return &result.Cost
 }
 
 func unambiguousHistoricalBillingModel(log *UsageLog) (string, bool) {

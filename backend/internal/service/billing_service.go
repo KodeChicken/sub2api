@@ -204,7 +204,6 @@ type CostBreakdown struct {
 	ActualCost                float64 // 应用倍率后的实际费用
 	BillingMode               string  // 计费模式（"token"/"per_request"/"image"），由 CalculateCostUnified 填充
 	BillingModel              string  // 本次费用实际采用的计费模型
-	OfficialReferenceCost     *float64
 	LongContextBillingApplied bool
 }
 

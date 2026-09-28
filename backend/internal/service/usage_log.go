@@ -172,8 +172,16 @@ type UsageLog struct {
 	AccountRateMultiplier *float64
 	// AccountStatsCost 账号统计定价预计算费用（nil = 使用默认公式 total_cost × account_rate_multiplier）
 	AccountStatsCost *float64
-	// OfficialReferenceCost 按本次请求实际计费模型和长上下文结果计算的官方参考价。
+	// OfficialReferenceCost 按本次请求实际计费模型和官方目录计算的参考价。
 	OfficialReferenceCost *float64
+	// OfficialReferenceLongContextEnabled is the request-time policy snapshot.
+	// Nil means historical state is unknown and must not be inferred from current settings.
+	OfficialReferenceLongContextEnabled *bool
+	// OfficialReferenceLongContextApplied reports whether catalog pricing crossed
+	// the model's own long-context threshold for this request.
+	OfficialReferenceLongContextApplied *bool
+	// OfficialReferencePricingAt is the exact pricing timestamp used by the catalog calculation.
+	OfficialReferencePricingAt *time.Time
 
 	BillingType        int8
 	RequestType        RequestType

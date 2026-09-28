@@ -78,6 +78,17 @@ func resolveAccountStatsCost(
 // 每加一个定价特性都要手工镜像一次。解析器不配置渠道或分组，保持优先级 3 的
 // 语义：只取模型定价文件，不引入自定义售价。
 func tryModelFilePricing(billingService *BillingService, model string, tokens UsageTokens, serviceTier string, pricingAt time.Time, longContextPricingEnabled bool, reasoningEfforts ...string) *float64 {
+	breakdown := tryModelFilePricingBreakdown(billingService, model, tokens, serviceTier, pricingAt, longContextPricingEnabled, reasoningEfforts...)
+	if breakdown == nil || breakdown.TotalCost <= 0 {
+		return nil
+	}
+	return &breakdown.TotalCost
+}
+
+func tryModelFilePricingBreakdown(billingService *BillingService, model string, tokens UsageTokens, serviceTier string, pricingAt time.Time, longContextPricingEnabled bool, reasoningEfforts ...string) *CostBreakdown {
+	if billingService == nil || strings.TrimSpace(model) == "" {
+		return nil
+	}
 	reasoningEffort := ""
 	if len(reasoningEfforts) > 0 {
 		reasoningEffort = reasoningEfforts[0]
@@ -98,10 +109,10 @@ func tryModelFilePricing(billingService *BillingService, model string, tokens Us
 		Resolver:        resolver,
 		Resolved:        resolved,
 	})
-	if err != nil || breakdown == nil || breakdown.TotalCost <= 0 {
+	if err != nil || breakdown == nil {
 		return nil
 	}
-	return &breakdown.TotalCost
+	return breakdown
 }
 
 // tryCustomRules 遍历自定义规则，按数组顺序先命中为准。

@@ -100,6 +100,9 @@ func TestUsageLogRepositoryCreateSyncRequestTypeAndLegacyFields(t *testing.T) {
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
 			sqlmock.AnyArg(), // official_reference_cost
+			sqlmock.AnyArg(), // official_reference_long_context_enabled
+			sqlmock.AnyArg(), // official_reference_long_context_applied
+			sqlmock.AnyArg(), // official_reference_pricing_at
 			sqlmock.AnyArg(), // upstream_request_id
 			sqlmock.AnyArg(), // session_id
 			log.NativeCompactionV2,
@@ -196,6 +199,9 @@ func TestUsageLogRepositoryCreate_PersistsServiceTier(t *testing.T) {
 			sqlmock.AnyArg(), // billing_mode
 			sqlmock.AnyArg(), // account_stats_cost
 			sqlmock.AnyArg(), // official_reference_cost
+			sqlmock.AnyArg(), // official_reference_long_context_enabled
+			sqlmock.AnyArg(), // official_reference_long_context_applied
+			sqlmock.AnyArg(), // official_reference_pricing_at
 			sqlmock.AnyArg(), // upstream_request_id
 			sqlmock.AnyArg(), // session_id
 			log.NativeCompactionV2,
@@ -960,6 +966,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullFloat64{},
 			sql.NullFloat64{}, // official_reference_cost
+			sql.NullBool{},    // official_reference_long_context_enabled
+			sql.NullBool{},    // official_reference_long_context_applied
+			sql.NullTime{},    // official_reference_pricing_at
 			sql.NullString{},  // upstream_request_id
 			sql.NullString{},
 			false, // native_compaction_v2
@@ -1041,6 +1050,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			sql.NullFloat64{}, // official_reference_cost
+			sql.NullBool{},    // official_reference_long_context_enabled
+			sql.NullBool{},    // official_reference_long_context_applied
+			sql.NullTime{},    // official_reference_pricing_at
 			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
 			false,             // native_compaction_v2
@@ -1105,6 +1117,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			sql.NullFloat64{}, // official_reference_cost
+			sql.NullBool{},    // official_reference_long_context_enabled
+			sql.NullBool{},    // official_reference_long_context_applied
+			sql.NullTime{},    // official_reference_pricing_at
 			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
 			true,              // native_compaction_v2
@@ -1170,6 +1185,9 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // billing_mode
 			sql.NullFloat64{}, // account_stats_cost
 			sql.NullFloat64{}, // official_reference_cost
+			sql.NullBool{},    // official_reference_long_context_enabled
+			sql.NullBool{},    // official_reference_long_context_applied
+			sql.NullTime{},    // official_reference_pricing_at
 			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
 			false,             // native_compaction_v2

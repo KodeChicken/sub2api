@@ -236,6 +236,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		serviceTier = strings.TrimSpace(*result.ServiceTier)
 	}
 	longContextBillingGate := openAILongContextBillingGate(billingAccount)
+	officialLongContextEnabled := effectiveOfficialReferenceLongContextEnabled(apiKey.Group, longContextBillingGate)
 	cost, err = s.calculateOpenAIRecordUsageCost(
 		ctx,
 		result,
@@ -323,15 +324,16 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			cost.ActualCost = standardCost.ActualCost
 		}
 	}
-	if cost != nil {
-		cost.OfficialReferenceCost = calculateOfficialReferenceCost(
-			s.billingService,
-			cost,
-			tokens,
-			serviceTier,
-			optionalStringValue(result.ReasoningEffort),
-			pricingAt,
-		)
+	var officialReference *OfficialReferenceResult
+	if officialInput, ok := officialReferenceInputFromCost(
+		cost,
+		tokens,
+		serviceTier,
+		optionalStringValue(result.ReasoningEffort),
+		pricingAt,
+		officialLongContextEnabled,
+	); ok {
+		officialReference = CalculateOfficialReferenceCost(s.billingService, officialInput)
 	}
 
 	// Determine billing type
@@ -434,8 +436,8 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		usageLog.TotalCost = cost.TotalCost
 		usageLog.ActualCost = cost.ActualCost
 		usageLog.LongContextBillingApplied = cost.LongContextBillingApplied
-		usageLog.OfficialReferenceCost = cost.OfficialReferenceCost
 	}
+	applyOfficialReferenceResult(usageLog, officialReference, officialLongContextEnabled, pricingAt)
 	if isVideoUsage && (cost == nil || cost.BillingMode != string(BillingModeToken)) {
 		usageLog.RateMultiplier = videoMultiplier
 	} else if result.ImageCount > 0 && (cost == nil || cost.BillingMode != string(BillingModeToken)) {
