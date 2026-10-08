@@ -252,7 +252,7 @@ func (s *OpenAIQuotaAutoResetService) scanEnabledAccounts(ctx context.Context) {
 		for i := range accounts {
 			account := &accounts[i]
 			_, hasCarpoolSubscriptions := carpoolAccountIDs[account.ID]
-			if account.Schedulable && (ResolveOpenAIAutoResetCreditConfig(account).Enabled || hasCarpoolSubscriptions) {
+			if hasCarpoolSubscriptions || (account.Schedulable && ResolveOpenAIAutoResetCreditConfig(account).Enabled) {
 				s.Notify(account.ID)
 			}
 		}
@@ -305,7 +305,7 @@ func (s *OpenAIQuotaAutoResetService) evaluateAccount(ctx context.Context, accou
 		}
 		return nil
 	}
-	if account.IsActive() && account.Schedulable && s.carpoolSubscriptions != nil {
+	if account.IsActive() && s.carpoolSubscriptions != nil {
 		if err := s.checkCarpoolQuotaSnapshot(ctx, account); err != nil {
 			slog.Warn("carpool_subscription_snapshot_check_failed", "account_id", accountID, "error", err)
 		}
@@ -554,15 +554,28 @@ func (s *OpenAIQuotaAutoResetService) checkCarpoolQuotaSnapshot(ctx context.Cont
 	if err != nil {
 		return err
 	}
-	if eventKey, detected := DetectCarpool7DWindowReset(account.Extra, usage, now); detected && !cardReset {
-		if _, err := s.carpoolSubscriptions.ResetCarpoolSubscriptionQuotas(ctx, account.ID, CarpoolResetSourceOfficial7D, eventKey); err != nil {
+	if cardReset {
+		persistUpdates := prepareCarpool7DResetSnapshotUpdates(account.Extra, updates, carpool7DResetDecision{})
+		if len(persistUpdates) == 0 {
+			return nil
+		}
+		return s.accountRepo.UpdateExtra(ctx, account.ID, persistUpdates)
+	}
+	decision := assessCarpool7DWindowReset(account.Extra, updates, now)
+	persistUpdates := prepareCarpool7DResetSnapshotUpdates(account.Extra, updates, decision)
+	if decision.Pending != nil {
+		slog.Info("carpool_7d_forced_reset_pending_confirmation", "account_id", account.ID, "event_key", decision.EventKey)
+		return s.accountRepo.UpdateExtra(ctx, account.ID, persistUpdates)
+	}
+	if decision.Detected {
+		if _, err := s.carpoolSubscriptions.ResetCarpoolSubscriptionQuotas(ctx, account.ID, CarpoolResetSourceOfficial7D, decision.EventKey); err != nil {
 			return err
 		}
 	}
-	if len(updates) == 0 {
+	if len(persistUpdates) == 0 {
 		return nil
 	}
-	return s.accountRepo.UpdateExtra(ctx, account.ID, updates)
+	return s.accountRepo.UpdateExtra(ctx, account.ID, persistUpdates)
 }
 
 func carpoolQuotaSnapshotStale(extra map[string]any, now time.Time) bool {

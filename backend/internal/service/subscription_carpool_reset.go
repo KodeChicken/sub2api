@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -18,6 +19,14 @@ const (
 	CarpoolResetSourceManualCard = "manual_reset_card"
 	CarpoolResetSourceAutoCard   = "automatic_reset_card"
 	CarpoolResetSourceFallback   = "manual_fallback"
+)
+
+const (
+	carpoolForcedResetCandidateExtraKey = "codex_7d_forced_reset_candidate"
+	carpoolNaturalResetMinDropPercent   = 1.0
+	carpoolForcedResetMinDropPercent    = 2.0
+	carpoolForcedResetMaxRemainingRatio = 0.30
+	carpoolForcedResetConfirmDelay      = 30 * time.Second
 )
 
 var (
@@ -52,6 +61,17 @@ type carpoolQuotaSnapshot struct {
 type carpoolQuotaRow struct {
 	carpoolQuotaSnapshot
 	RevisionBefore int64
+}
+
+type carpool7DResetCandidate struct {
+	EventKey   string `json:"event_key"`
+	ObservedAt string `json:"observed_at"`
+}
+
+type carpool7DResetDecision struct {
+	EventKey string
+	Detected bool
+	Pending  *carpool7DResetCandidate
 }
 
 func (s *SubscriptionService) withCarpoolQuotaTx(ctx context.Context, fn func(context.Context, *dbent.Client) error) error {
@@ -319,34 +339,97 @@ func DetectCarpool7DWindowReset(previousExtra map[string]any, usage *OpenAIQuota
 }
 
 func DetectCarpool7DWindowResetFromUpdates(previousExtra, updates map[string]any, now time.Time) (string, bool) {
+	decision := assessCarpool7DWindowReset(previousExtra, updates, now)
+	return decision.EventKey, decision.Detected
+}
+
+func assessCarpool7DWindowReset(previousExtra, updates map[string]any, now time.Time) carpool7DResetDecision {
 	if previousExtra == nil || updates == nil {
-		return "", false
+		return carpool7DResetDecision{}
 	}
-	previousUsed := readOpenAIQuotaUsedPercent(previousExtra, "7d") / 100
-	if previousUsed < 0.10 {
-		return "", false
+	if _, ok := previousExtra["codex_7d_used_percent"]; !ok {
+		return carpool7DResetDecision{}
 	}
 	if _, hasCurrent7DUsage := updates["codex_7d_used_percent"]; !hasCurrent7DUsage {
-		return "", false
+		return carpool7DResetDecision{}
 	}
-	currentUsed := readOpenAIQuotaUsedPercent(updates, "7d") / 100
-	if currentUsed > 0.01 || currentUsed >= previousUsed {
-		return "", false
+	previousUsed := readOpenAIQuotaUsedPercent(previousExtra, "7d")
+	currentUsed := readOpenAIQuotaUsedPercent(updates, "7d")
+	drop := previousUsed - currentUsed
+	if previousUsed <= 0 || currentUsed < 0 || drop <= 0 {
+		return carpool7DResetDecision{}
 	}
 	previousReset, previousResetOK := parseCarpoolResetTime(previousExtra["codex_7d_reset_at"])
 	currentReset, currentResetOK := parseCarpoolResetTime(updates["codex_7d_reset_at"])
 	resetAdvanced := previousResetOK && currentResetOK && currentReset.After(previousReset.Add(6*time.Hour))
-	// Exact zero is a strong signal even when an upstream response omits reset_at.
-	if !resetAdvanced && currentUsed > 0 {
-		return "", false
+	if resetAdvanced && drop >= carpoolNaturalResetMinDropPercent {
+		return carpool7DResetDecision{
+			EventKey: "7d:" + currentReset.UTC().Format(time.RFC3339),
+			Detected: true,
+		}
 	}
-	key := "7d-zero"
-	if currentResetOK {
-		key = "7d:" + currentReset.UTC().Format(time.RFC3339)
-	} else if previousResetOK {
-		key += ":" + previousReset.UTC().Format(time.RFC3339)
+	if drop < carpoolForcedResetMinDropPercent || currentUsed > previousUsed*carpoolForcedResetMaxRemainingRatio {
+		return carpool7DResetDecision{}
 	}
-	return key, true
+
+	baselineAt, ok := parseCarpoolResetTime(previousExtra["codex_usage_updated_at"])
+	if !ok {
+		return carpool7DResetDecision{}
+	}
+	eventKey := "7d-forced:" + baselineAt.UTC().Format(time.RFC3339)
+	if candidate, ok := parseCarpool7DResetCandidate(previousExtra[carpoolForcedResetCandidateExtraKey]); ok && candidate.EventKey == eventKey {
+		observedAt, observedOK := parseCarpoolResetTime(candidate.ObservedAt)
+		if observedOK && !now.Before(observedAt.Add(carpoolForcedResetConfirmDelay)) {
+			return carpool7DResetDecision{EventKey: eventKey, Detected: true}
+		}
+		return carpool7DResetDecision{EventKey: eventKey, Pending: candidate}
+	}
+	return carpool7DResetDecision{
+		EventKey: eventKey,
+		Pending: &carpool7DResetCandidate{
+			EventKey:   eventKey,
+			ObservedAt: now.UTC().Format(time.RFC3339),
+		},
+	}
+}
+
+func parseCarpool7DResetCandidate(raw any) (*carpool7DResetCandidate, bool) {
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return nil, false
+	}
+	var candidate carpool7DResetCandidate
+	if err := json.Unmarshal(encoded, &candidate); err != nil || candidate.EventKey == "" || candidate.ObservedAt == "" {
+		return nil, false
+	}
+	return &candidate, true
+}
+
+func prepareCarpool7DResetSnapshotUpdates(previousExtra, updates map[string]any, decision carpool7DResetDecision) map[string]any {
+	prepared := make(map[string]any, len(updates)+1)
+	for key, value := range updates {
+		prepared[key] = value
+	}
+	if decision.Pending != nil {
+		prepared = retainCarpool7DBaseline(prepared)
+		prepared[carpoolForcedResetCandidateExtraKey] = decision.Pending
+		return prepared
+	}
+	if _, exists := previousExtra[carpoolForcedResetCandidateExtraKey]; exists {
+		prepared[carpoolForcedResetCandidateExtraKey] = nil
+	}
+	return prepared
+}
+
+func retainCarpool7DBaseline(updates map[string]any) map[string]any {
+	persistUpdates := make(map[string]any, len(updates))
+	for key, value := range updates {
+		if strings.HasPrefix(key, "codex_7d_") || key == "codex_usage_updated_at" {
+			continue
+		}
+		persistUpdates[key] = value
+	}
+	return persistUpdates
 }
 
 func parseCarpoolResetTime(raw any) (time.Time, bool) {

@@ -954,38 +954,32 @@ func (s *AccountUsageService) applyCarpoolResetForSnapshot(ctx context.Context, 
 		return retainCarpool7DBaseline(updates)
 	}
 	if cardReset {
-		return updates
+		return prepareCarpool7DResetSnapshotUpdates(account.Extra, updates, carpool7DResetDecision{})
 	}
-	eventKey, detected := DetectCarpool7DWindowResetFromUpdates(account.Extra, updates, now)
-	if !detected {
-		return updates
+	decision := assessCarpool7DWindowReset(account.Extra, updates, now)
+	persistUpdates := prepareCarpool7DResetSnapshotUpdates(account.Extra, updates, decision)
+	if decision.Pending != nil {
+		slog.Info("carpool_7d_forced_reset_pending_confirmation", "account_id", account.ID, "event_key", decision.EventKey)
+		return persistUpdates
+	}
+	if !decision.Detected {
+		return persistUpdates
 	}
 	count, err := s.carpoolSubscriptionService.PreviewCarpoolSubscriptionQuotaReset(ctx, account.ID)
 	if err == nil && count == 0 {
-		return updates
+		return persistUpdates
 	}
 	if err == nil {
-		_, err = s.carpoolSubscriptionService.ResetCarpoolSubscriptionQuotas(ctx, account.ID, CarpoolResetSourceOfficial7D, eventKey)
+		_, err = s.carpoolSubscriptionService.ResetCarpoolSubscriptionQuotas(ctx, account.ID, CarpoolResetSourceOfficial7D, decision.EventKey)
 	}
 	if err == nil {
-		return updates
+		return persistUpdates
 	}
 	slog.Warn("carpool_subscription_quota_reset_failed", "account_id", account.ID, "source", CarpoolResetSourceOfficial7D, "error", err)
 	// Keep the prior 7d baseline durable so the periodic scanner can retry. The
 	// fresh probe still drives the current response/UI; only the stored baseline
 	// remains old until the reset event commits.
 	return retainCarpool7DBaseline(updates)
-}
-
-func retainCarpool7DBaseline(updates map[string]any) map[string]any {
-	persistUpdates := make(map[string]any, len(updates))
-	for key, value := range updates {
-		if strings.HasPrefix(key, "codex_7d_") || key == "codex_usage_updated_at" {
-			continue
-		}
-		persistUpdates[key] = value
-	}
-	return persistUpdates
 }
 
 func (s *AccountUsageService) persistOpenAICodexProbeSnapshot(accountID int64, updates map[string]any) {
