@@ -130,8 +130,8 @@ func TestApplyBillingAnalysisReferenceCostsUsesPerRequestEvidence(t *testing.T) 
 		},
 	}
 	analysis := &usagestats.BillingAnalysis{
-		Total:  usagestats.BillingAnalysisRow{Requests: 3},
-		Models: []usagestats.BillingAnalysisRow{{Model: "gpt-6-sol", Requests: 3}},
+		Total:  usagestats.BillingAnalysisRow{Requests: 3, NonImageRequests: 3},
+		Models: []usagestats.BillingAnalysisRow{{Model: "gpt-6-sol", Requests: 3, NonImageRequests: 3}},
 	}
 
 	applyBillingAnalysisReferenceCosts(analysis, logs, billingService)
@@ -140,4 +140,56 @@ func TestApplyBillingAnalysisReferenceCostsUsesPerRequestEvidence(t *testing.T) 
 	require.InDelta(t, 0.0828188, analysis.Total.OfficialReferenceCost, 1e-12)
 	require.Equal(t, analysis.Total.PricedRequests, analysis.Models[0].PricedRequests)
 	require.Equal(t, analysis.Total.OfficialReferenceCost, analysis.Models[0].OfficialReferenceCost)
+	require.Equal(t, analysis.Total.PricedRequests, analysis.Total.NonImagePricedRequests)
+	require.Equal(t, analysis.Total.OfficialReferenceCost, analysis.Total.NonImageOfficialReferenceCost)
+	require.Equal(t, analysis.Total.NonImagePricedRequests, analysis.Models[0].NonImagePricedRequests)
+	require.Equal(t, analysis.Total.NonImageOfficialReferenceCost, analysis.Models[0].NonImageOfficialReferenceCost)
+}
+
+func TestApplyBillingAnalysisReferenceCostsExcludesImagesFromRealRatio(t *testing.T) {
+	billingService := NewBillingService(nil, nil)
+	tokenMode := string(BillingModeToken)
+	imageMode := string(BillingModeImage)
+	imageReference := 0.5
+	logs := []UsageLog{
+		{
+			UserID: 1, Model: "gpt-6-sol", BillingMode: &tokenMode,
+			InputTokens: 467, OutputTokens: 968, CacheReadTokens: 161024,
+			OfficialReferenceLongContextEnabled: boolPtr(false),
+			CreatedAt:                           time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC),
+		},
+		{UserID: 1, Model: "gpt-6-sol", BillingMode: &imageMode, ActualCost: 0.05},
+		{UserID: 1, Model: "gpt-6-sol", ImageCount: 1, OfficialReferenceCost: &imageReference},
+	}
+	row := usagestats.BillingAnalysisRow{
+		Requests: 3, UserCost: 1.05, AccountCost: 2,
+		NonImageRequests: 1, NonImageUserCost: 1,
+	}
+	analysis := &usagestats.BillingAnalysis{
+		Total: row, Models: []usagestats.BillingAnalysisRow{row},
+	}
+	analysis.Models[0].Model = "gpt-6-sol"
+	users := &usagestats.BillingAnalysisUsers{Users: []usagestats.BillingAnalysisUserRow{{
+		UserID: 1, Requests: 3, UserCost: 1.05, AccountCost: 2,
+		NonImageRequests: 1, NonImageUserCost: 1,
+	}}}
+
+	applyBillingAnalysisReferenceCosts(analysis, logs, billingService)
+	applyBillingAnalysisUserReferenceCosts(users, logs, billingService)
+
+	for _, got := range []usagestats.BillingAnalysisRow{analysis.Total, analysis.Models[0]} {
+		require.Equal(t, int64(3), got.Requests)
+		require.Equal(t, 1.05, got.UserCost)
+		require.Equal(t, float64(2), got.AccountCost)
+		require.Equal(t, int64(2), got.PricedRequests)
+		require.InDelta(t, 0.5428188, got.OfficialReferenceCost, 1e-12)
+		require.Equal(t, int64(1), got.NonImageRequests)
+		require.Equal(t, int64(1), got.NonImagePricedRequests)
+		require.Equal(t, float64(1), got.NonImageUserCost)
+		require.InDelta(t, 0.0428188, got.NonImageOfficialReferenceCost, 1e-12)
+	}
+	require.Equal(t, int64(1), users.Users[0].NonImagePricedRequests)
+	require.InDelta(t, 0.0428188, users.Users[0].NonImageOfficialReferenceCost, 1e-12)
+	require.Equal(t, 1.05, users.Users[0].UserCost)
+	require.Equal(t, float64(2), users.Users[0].AccountCost)
 }

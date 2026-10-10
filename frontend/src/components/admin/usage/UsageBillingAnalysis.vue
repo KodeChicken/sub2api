@@ -216,11 +216,11 @@ const draftCoefficient = computed(() => {
 })
 const sortedModels = computed(() => [...(props.analysis?.models || [])].sort((a, b) => b.account_cost - a.account_cost))
 const modelKey = (row: BillingAnalysisRow) => row.model || ''
-const realRatio = (row: BillingAnalysisRow | BillingAnalysisUserRow) => row.requests > 0 && row.priced_requests === row.requests && row.official_reference_cost > 0
-  ? `${(row.user_cost / row.official_reference_cost).toFixed(4)}x`
+const realRatio = (row: BillingAnalysisRow | BillingAnalysisUserRow) => row.non_image_requests > 0 && row.non_image_priced_requests === row.non_image_requests && row.non_image_official_reference_cost > 0
+  ? `${(row.non_image_user_cost / row.non_image_official_reference_cost).toFixed(4)}x`
   : t('usage.unavailable')
 const coverageTitle = (row: BillingAnalysisRow | BillingAnalysisUserRow) =>
-  t('usage.realRatioCoverage', { priced: row.priced_requests, total: row.requests })
+  t('usage.realRatioCoverage', { priced: row.non_image_priced_requests, total: row.non_image_requests })
 const formatAmount = (value: number) => value < 0 ? `-$${Math.abs(value).toFixed(4)}` : `$${value.toFixed(4)}`
 const profitColor = (value: number) => value < 0 ? 'text-red-600 dark:text-red-400' : 'text-green-700 dark:text-green-400'
 

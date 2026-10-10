@@ -3,23 +3,33 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { defineComponent } from 'vue'
 import UsageBillingAnalysis from '../UsageBillingAnalysis.vue'
-import type { BillingAnalysis } from '@/api/admin/usage'
+import type { BillingAnalysis, BillingAnalysisRow } from '@/api/admin/usage'
 
 const { getUsers } = vi.hoisted(() => ({ getUsers: vi.fn() }))
 vi.mock('@/api/admin/usage', () => ({
   adminUsageAPI: { getBillingAnalysisUsers: getUsers }
 }))
 vi.mock('vue-i18n', () => ({
-  useI18n: () => ({ t: (key: string) => key })
+  useI18n: () => ({ t: (key: string, params?: { priced: number; total: number }) =>
+    params ? `${key}:${params.priced}/${params.total}` : key })
 }))
 
 const BaseDialogStub = defineComponent({
   props: { show: Boolean },
   template: '<div v-if="show"><slot /><slot name="footer" /></div>'
 })
+const billingRow = (row: Omit<BillingAnalysisRow,
+  'non_image_requests' | 'non_image_priced_requests' | 'non_image_user_cost' | 'non_image_official_reference_cost'
+>): BillingAnalysisRow => ({
+  ...row,
+  non_image_requests: row.requests,
+  non_image_priced_requests: row.priced_requests,
+  non_image_user_cost: row.user_cost,
+  non_image_official_reference_cost: row.official_reference_cost
+})
 const analysis: BillingAnalysis = {
-  total: { requests: 119, priced_requests: 119, user_cost: 25.71962, account_cost: 160.604579, official_reference_cost: 80.3022895 },
-  models: [{ model: 'gpt-6-astra', requests: 119, priced_requests: 119, user_cost: 25.71962, account_cost: 160.604579, official_reference_cost: 80.3022895 }]
+  total: billingRow({ requests: 119, priced_requests: 119, user_cost: 25.71962, account_cost: 160.604579, official_reference_cost: 80.3022895 }),
+  models: [billingRow({ model: 'gpt-6-astra', requests: 119, priced_requests: 119, user_cost: 25.71962, account_cost: 160.604579, official_reference_cost: 80.3022895 })]
 }
 const mountAnalysis = (data = analysis) => mount(UsageBillingAnalysis, {
   props: {
@@ -49,10 +59,10 @@ describe('UsageBillingAnalysis', () => {
 
   it('matches the model distribution email labels, loads pages lazily and keeps the same billing formulas', async () => {
     getUsers.mockResolvedValueOnce({
-      users: [{ user_id: 42, username: 'Alice', email: 'alice@example.com', requests: 2, priced_requests: 2, user_cost: 5, account_cost: 20, official_reference_cost: 10 }],
+      users: [{ user_id: 42, username: 'Alice', email: 'alice@example.com', ...billingRow({ requests: 2, priced_requests: 2, user_cost: 5, account_cost: 20, official_reference_cost: 10 }) }],
       has_more: true
     }).mockResolvedValueOnce({
-      users: [{ user_id: 43, username: '', email: '1173379996@qq.com', requests: 1, priced_requests: 1, user_cost: 1, account_cost: 10, official_reference_cost: 4 }],
+      users: [{ user_id: 43, username: '', email: '1173379996@qq.com', ...billingRow({ requests: 1, priced_requests: 1, user_cost: 1, account_cost: 10, official_reference_cost: 4 }) }],
       has_more: false
     })
     const wrapper = mountAnalysis()
@@ -82,10 +92,10 @@ describe('UsageBillingAnalysis', () => {
 
   it('shows only the requested billing columns and each model real ratio', () => {
     const wrapper = mountAnalysis({
-      total: { requests: 3, priced_requests: 3, user_cost: 7, account_cost: 30, official_reference_cost: 20 },
+      total: billingRow({ requests: 3, priced_requests: 3, user_cost: 7, account_cost: 30, official_reference_cost: 20 }),
       models: [
-        { model: 'first', requests: 2, priced_requests: 2, user_cost: 5, account_cost: 20, official_reference_cost: 10 },
-        { model: 'second', requests: 1, priced_requests: 1, user_cost: 2, account_cost: 10, official_reference_cost: 10 }
+        billingRow({ model: 'first', requests: 2, priced_requests: 2, user_cost: 5, account_cost: 20, official_reference_cost: 10 }),
+        billingRow({ model: 'second', requests: 1, priced_requests: 1, user_cost: 2, account_cost: 10, official_reference_cost: 10 })
       ]
     })
     expect(wrapper.findAll('thead th').map((cell) => cell.text())).toEqual([
@@ -101,7 +111,7 @@ describe('UsageBillingAnalysis', () => {
     const wrapper = mountAnalysis()
     await wrapper.get('[data-testid="billing-expand-gpt-6-astra"]').trigger('click')
     await wrapper.setProps({ filters: { group_id: 8 } })
-    resolveUsers({ users: [{ user_id: 2, username: 'stale', email: 'stale@example.com', requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 }], has_more: false })
+    resolveUsers({ users: [{ user_id: 2, username: 'stale', email: 'stale@example.com', ...billingRow({ requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 }) }], has_more: false })
     await flushPromises()
     expect(wrapper.text()).not.toContain('stale')
     expect(wrapper.find('[aria-expanded="true"]').exists()).toBe(false)
@@ -109,12 +119,12 @@ describe('UsageBillingAnalysis', () => {
 
   it('supports the unknown model and retries a failed detail request', async () => {
     getUsers.mockRejectedValueOnce(new Error('network')).mockResolvedValueOnce({
-      users: [{ user_id: 2, username: 'Alice', email: '', requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 }],
+      users: [{ user_id: 2, username: 'Alice', email: '', ...billingRow({ requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 }) }],
       has_more: false
     })
     const wrapper = mountAnalysis({
-      total: { requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 },
-      models: [{ model: '', requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 }]
+      total: billingRow({ requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 }),
+      models: [billingRow({ model: '', requests: 1, priced_requests: 1, user_cost: 1, account_cost: 1, official_reference_cost: 1 })]
     })
     await wrapper.get('[data-testid="billing-expand-"]').trigger('click')
     await flushPromises()
@@ -184,8 +194,8 @@ describe('UsageBillingAnalysis', () => {
 
   it('shows no real ratio when no official reference cost is available', () => {
     const wrapper = mountAnalysis({
-      total: { requests: 1, priced_requests: 0, user_cost: 1, account_cost: 0, official_reference_cost: 0 },
-      models: [{ model: 'free', requests: 1, priced_requests: 0, user_cost: 1, account_cost: 0, official_reference_cost: 0 }]
+      total: billingRow({ requests: 1, priced_requests: 0, user_cost: 1, account_cost: 0, official_reference_cost: 0 }),
+      models: [billingRow({ model: 'free', requests: 1, priced_requests: 0, user_cost: 1, account_cost: 0, official_reference_cost: 0 })]
     })
     expect(wrapper.get('tbody').text()).toContain('usage.unavailable')
     expect(wrapper.get('tbody').text()).toContain('$1.0000')
@@ -193,10 +203,64 @@ describe('UsageBillingAnalysis', () => {
 
   it('does not mix all user charges with a partially covered reference cost', () => {
     const wrapper = mountAnalysis({
-      total: { requests: 2, priced_requests: 1, user_cost: 2, account_cost: 4, official_reference_cost: 1 },
-      models: [{ model: 'partial', requests: 2, priced_requests: 1, user_cost: 2, account_cost: 4, official_reference_cost: 1 }]
+      total: billingRow({ requests: 2, priced_requests: 1, user_cost: 2, account_cost: 4, official_reference_cost: 1 }),
+      models: [billingRow({ model: 'partial', requests: 2, priced_requests: 1, user_cost: 2, account_cost: 4, official_reference_cost: 1 })]
     })
     expect(wrapper.get('tbody').text()).toContain('usage.unavailable')
     expect(wrapper.get('tbody').text()).not.toContain('2.0000x')
+  })
+
+  it('excludes image charges from model and user real ratios without changing U, A or profit', async () => {
+    const row = {
+      ...billingRow({ model: 'mixed', requests: 3, priced_requests: 2, user_cost: 5.05, account_cost: 20, official_reference_cost: 10 }),
+      non_image_requests: 2,
+      non_image_priced_requests: 2,
+      non_image_user_cost: 5
+    }
+    getUsers.mockResolvedValueOnce({
+      users: [{ user_id: 42, username: '', email: 'mixed@example.com', ...row }],
+      has_more: false
+    })
+    const wrapper = mountAnalysis({ total: row, models: [row] })
+    const cells = wrapper.findAll('tbody tr')[0].findAll('td')
+    expect(cells.map((cell) => cell.text()).slice(1)).toEqual([
+      '$5.0500', '$20.0000', '$3.4000', '$1.6500', '0.5000x'
+    ])
+    expect(cells[5].attributes('title')).toBe('usage.realRatioCoverage:2/2')
+    await wrapper.get('[data-testid="billing-expand-mixed"]').trigger('click')
+    await flushPromises()
+    const userCells = wrapper.get('td[title="mixed@example.com"]').element.parentElement!.querySelectorAll('td')
+    expect(Array.from(userCells).slice(1).map((cell) => cell.textContent?.trim())).toEqual([
+      '$5.0500', '$20.0000', '$3.4000', '$1.6500', '0.5000x'
+    ])
+    expect(userCells[5].getAttribute('title')).toBe('usage.realRatioCoverage:2/2')
+  })
+
+  it('shows no real ratio for image-only rows even when they have catalog reference costs', () => {
+    const row = {
+      ...billingRow({ model: 'images', requests: 1, priced_requests: 1, user_cost: 0.05, account_cost: 0.1, official_reference_cost: 0.1 }),
+      non_image_requests: 0,
+      non_image_priced_requests: 0,
+      non_image_user_cost: 0,
+      non_image_official_reference_cost: 0
+    }
+    const wrapper = mountAnalysis({ total: row, models: [row] })
+    const cells = wrapper.findAll('tbody td')
+    expect(cells[1].text()).toBe('$0.0500')
+    expect(cells[5].text()).toBe('usage.unavailable')
+    expect(cells[5].attributes('title')).toBe('usage.realRatioCoverage:0/0')
+  })
+
+  it('still hides the real ratio when a non-image request has no catalog pricing', () => {
+    const row = {
+      ...billingRow({ model: 'mixed', requests: 3, priced_requests: 1, user_cost: 5.05, account_cost: 20, official_reference_cost: 10 }),
+      non_image_requests: 2,
+      non_image_priced_requests: 1,
+      non_image_user_cost: 5
+    }
+    const wrapper = mountAnalysis({ total: row, models: [row] })
+    const cell = wrapper.findAll('tbody td')[5]
+    expect(cell.text()).toBe('usage.unavailable')
+    expect(cell.attributes('title')).toBe('usage.realRatioCoverage:1/2')
   })
 })

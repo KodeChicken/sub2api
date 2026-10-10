@@ -522,6 +522,11 @@ func applyBillingAnalysisReferenceCosts(analysis *usagestats.BillingAnalysis, lo
 		}
 		analysis.Total.PricedRequests++
 		analysis.Total.OfficialReferenceCost += *referenceCost
+		nonImage := logs[i].ImageCount == 0 && optionalStringValue(logs[i].BillingMode) != string(BillingModeImage)
+		if nonImage {
+			analysis.Total.NonImagePricedRequests++
+			analysis.Total.NonImageOfficialReferenceCost += *referenceCost
+		}
 		model := strings.TrimSpace(logs[i].RequestedModel)
 		if model == "" {
 			model = strings.TrimSpace(logs[i].Model)
@@ -529,6 +534,10 @@ func applyBillingAnalysisReferenceCosts(analysis *usagestats.BillingAnalysis, lo
 		if row := byModel[model]; row != nil {
 			row.PricedRequests++
 			row.OfficialReferenceCost += *referenceCost
+			if nonImage {
+				row.NonImagePricedRequests++
+				row.NonImageOfficialReferenceCost += *referenceCost
+			}
 		}
 	}
 }
@@ -552,6 +561,10 @@ func applyBillingAnalysisUserReferenceCosts(result *usagestats.BillingAnalysisUs
 		}
 		row.PricedRequests++
 		row.OfficialReferenceCost += *referenceCost
+		if logs[i].ImageCount == 0 && optionalStringValue(logs[i].BillingMode) != string(BillingModeImage) {
+			row.NonImagePricedRequests++
+			row.NonImageOfficialReferenceCost += *referenceCost
+		}
 	}
 }
 
