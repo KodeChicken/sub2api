@@ -926,6 +926,7 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 	if err != nil {
 		return nil, fmt.Errorf("build openai probe client: %w", err)
 	}
+	observedAt := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("openai codex probe request failed: %w", err)
@@ -937,6 +938,7 @@ func (s *AccountUsageService) probeOpenAICodexSnapshot(ctx context.Context, acco
 		return nil, err
 	}
 	if len(updates) > 0 {
+		updates["codex_usage_updated_at"] = observedAt.UTC().Format(time.RFC3339Nano)
 		persistUpdates := s.applyCarpoolResetForSnapshot(ctx, account, updates, time.Now())
 		s.persistOpenAICodexProbeSnapshot(account.ID, persistUpdates)
 		return updates, nil
@@ -948,38 +950,10 @@ func (s *AccountUsageService) applyCarpoolResetForSnapshot(ctx context.Context, 
 	if s == nil || s.carpoolSubscriptionService == nil || account == nil || account.IsShadow() {
 		return updates
 	}
-	cardReset, resetErr := s.carpoolSubscriptionService.CarpoolCardResetSinceSnapshot(ctx, account.ID, account.Extra, now)
-	if resetErr != nil {
-		slog.Warn("carpool_reset_card_event_check_failed", "account_id", account.ID, "error", resetErr)
-		return retainCarpool7DBaseline(updates)
+	if _, err := s.carpoolSubscriptionService.ObserveCarpoolQuotaSnapshot(ctx, account.ID, updates, now); err != nil {
+		slog.Warn("carpool_subscription_quota_reset_failed", "account_id", account.ID, "source", CarpoolResetSourceOfficial7D, "error", err)
 	}
-	if cardReset {
-		return prepareCarpool7DResetSnapshotUpdates(account.Extra, updates, carpool7DResetDecision{})
-	}
-	decision := assessCarpool7DWindowReset(account.Extra, updates, now)
-	persistUpdates := prepareCarpool7DResetSnapshotUpdates(account.Extra, updates, decision)
-	if decision.Pending != nil {
-		slog.Info("carpool_7d_forced_reset_pending_confirmation", "account_id", account.ID, "event_key", decision.EventKey)
-		return persistUpdates
-	}
-	if !decision.Detected {
-		return persistUpdates
-	}
-	count, err := s.carpoolSubscriptionService.PreviewCarpoolSubscriptionQuotaReset(ctx, account.ID)
-	if err == nil && count == 0 {
-		return persistUpdates
-	}
-	if err == nil {
-		_, err = s.carpoolSubscriptionService.ResetCarpoolSubscriptionQuotas(ctx, account.ID, CarpoolResetSourceOfficial7D, decision.EventKey)
-	}
-	if err == nil {
-		return persistUpdates
-	}
-	slog.Warn("carpool_subscription_quota_reset_failed", "account_id", account.ID, "source", CarpoolResetSourceOfficial7D, "error", err)
-	// Keep the prior 7d baseline durable so the periodic scanner can retry. The
-	// fresh probe still drives the current response/UI; only the stored baseline
-	// remains old until the reset event commits.
-	return retainCarpool7DBaseline(updates)
+	return updates
 }
 
 func (s *AccountUsageService) persistOpenAICodexProbeSnapshot(accountID int64, updates map[string]any) {

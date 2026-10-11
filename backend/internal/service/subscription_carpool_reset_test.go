@@ -116,7 +116,7 @@ func TestAssessCarpool7DWindowResetIgnoresSmallCorrection(t *testing.T) {
 	}
 }
 
-func TestPrepareCarpool7DResetSnapshotUpdatesRetainsBaselineWhilePending(t *testing.T) {
+func TestCarpoolQuotaResetStateRetainsBaselineWhilePending(t *testing.T) {
 	previous := map[string]any{
 		"codex_7d_used_percent":  5.0,
 		"codex_usage_updated_at": "2026-10-08T03:59:00Z",
@@ -127,17 +127,42 @@ func TestPrepareCarpool7DResetSnapshotUpdatesRetainsBaselineWhilePending(t *test
 		"codex_usage_updated_at": "2026-10-08T04:00:00Z",
 	}
 	candidate := &carpool7DResetCandidate{EventKey: "7d-forced:2026-10-08T03:59:00Z", ObservedAt: "2026-10-08T04:00:00Z"}
-	prepared := prepareCarpool7DResetSnapshotUpdates(previous, updates, carpool7DResetDecision{EventKey: candidate.EventKey, Pending: candidate})
-	if _, ok := prepared["codex_7d_used_percent"]; ok {
-		t.Fatal("pending confirmation must retain the previous 7d baseline")
+	now := time.Date(2026, 10, 8, 4, 0, 0, 0, time.UTC)
+	state := nextCarpoolQuotaResetState(previous, updates, carpool7DResetDecision{EventKey: candidate.EventKey, Pending: candidate}, now)
+	updates[carpoolQuotaResetStateExtraKey] = state
+	persisted := carpoolQuotaResetStateFromExtra(updates)
+	if persisted == nil || persisted.Baseline["codex_7d_used_percent"] != 5.0 || persisted.Baseline["codex_usage_updated_at"] != previous["codex_usage_updated_at"] {
+		t.Fatal("display updates must not replace the pending detection baseline")
 	}
-	if _, ok := prepared["codex_usage_updated_at"]; ok {
-		t.Fatal("pending confirmation must keep the snapshot stale for a prompt retry")
+	confirmed := assessCarpool7DWindowReset(persisted.Baseline, updates, now.Add(carpoolForcedResetConfirmDelay))
+	if !confirmed.Detected || confirmed.EventKey != candidate.EventKey {
+		t.Fatalf("persisted candidate must survive decoding and confirm: %+v", confirmed)
 	}
-	if prepared[carpoolForcedResetCandidateExtraKey] != candidate {
-		t.Fatal("pending confirmation candidate must be persisted")
+}
+
+func TestCarpoolQuotaSnapshotStaleIgnoresDisplayWrites(t *testing.T) {
+	now := time.Date(2026, 10, 11, 4, 0, 0, 0, time.UTC)
+	display := map[string]any{"codex_usage_updated_at": now.Format(time.RFC3339)}
+	if !carpoolQuotaSnapshotStale(display, now) {
+		t.Fatal("a fresh display snapshot must not defer the initial detection")
 	}
-	if prepared["codex_5h_used_percent"] != 10.0 {
-		t.Fatal("unrelated 5h usage should still be persisted")
+	state := &carpoolQuotaResetState{
+		Baseline:  map[string]any{"codex_7d_used_percent": 80.0},
+		CheckedAt: now.Format(time.RFC3339),
+	}
+	display[carpoolQuotaResetStateExtraKey] = state
+	if carpoolQuotaSnapshotStale(display, now.Add(9*time.Minute)) {
+		t.Fatal("a recent independent observation should defer the scanner")
+	}
+	for minute := 10; minute <= 120; minute++ {
+		checkedAt := now.Add(time.Duration(minute) * time.Minute)
+		display["codex_usage_updated_at"] = checkedAt.Format(time.RFC3339)
+		if !carpoolQuotaSnapshotStale(display, checkedAt) {
+			t.Fatalf("traffic must not starve the scanner at minute %d", minute)
+		}
+	}
+	state.Baseline[carpoolForcedResetCandidateExtraKey] = &carpool7DResetCandidate{EventKey: "pending", ObservedAt: state.CheckedAt}
+	if carpoolQuotaSnapshotStale(display, now.Add(29*time.Second)) || !carpoolQuotaSnapshotStale(display, now.Add(30*time.Second)) {
+		t.Fatal("pending observations should be checked again after 30 seconds")
 	}
 }

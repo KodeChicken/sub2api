@@ -526,6 +526,7 @@ func (h *OpenAIOAuthHandler) RefreshQuota(c *gin.Context) {
 		return
 	}
 
+	observedAt := time.Now()
 	usage, err := h.quotaService.QueryUsage(c.Request.Context(), accountID)
 	if err != nil {
 		response.ErrorFrom(c, err)
@@ -538,7 +539,7 @@ func (h *OpenAIOAuthHandler) RefreshQuota(c *gin.Context) {
 	service.NotifyOpenAIAutoResetCredit(accountID)
 
 	refreshResponse := openAIQuotaRefreshResponse{OpenAIQuotaUsage: *usage}
-	carpoolReset, resetErr := h.resetCarpoolForUsage(c.Request.Context(), accountID, usage, service.CarpoolResetSourceOfficial7D, "")
+	carpoolReset, resetErr := h.carpoolQuotaObservation(c.Request.Context(), accountID, usage, observedAt)
 	if resetErr != nil {
 		slog.Warn("carpool_subscription_quota_reset_failed", "account_id", accountID, "source", service.CarpoolResetSourceOfficial7D, "error", resetErr)
 		refreshResponse.CarpoolResetWarning = resetErr.Error()
@@ -650,30 +651,11 @@ func (h *OpenAIOAuthHandler) ResetQuota(c *gin.Context) {
 	response.Success(c, resetResponse)
 }
 
-func (h *OpenAIOAuthHandler) resetCarpoolForUsage(ctx context.Context, accountID int64, usage *service.OpenAIQuotaUsage, source, forcedKey string) (*service.CarpoolQuotaResetResult, error) {
+func (h *OpenAIOAuthHandler) carpoolQuotaObservation(ctx context.Context, accountID int64, usage *service.OpenAIQuotaUsage, observedAt time.Time) (*service.CarpoolQuotaResetResult, error) {
 	if h.carpoolSubscriptionService == nil || usage == nil {
 		return nil, nil
 	}
-	account, err := h.adminService.GetAccount(ctx, accountID)
-	if err != nil {
-		return nil, err
-	}
-	cardReset, err := h.carpoolSubscriptionService.CarpoolCardResetSinceSnapshot(ctx, accountID, account.Extra, time.Now())
-	if err != nil || cardReset {
-		return nil, err
-	}
-	eventKey, detected := service.DetectCarpool7DWindowReset(account.Extra, usage, time.Now())
-	if !detected {
-		return nil, nil
-	}
-	if forcedKey != "" {
-		eventKey = forcedKey
-	}
-	count, err := h.carpoolSubscriptionService.PreviewCarpoolSubscriptionQuotaReset(ctx, accountID)
-	if err != nil || count == 0 {
-		return nil, err
-	}
-	return h.carpoolSubscriptionService.ResetCarpoolSubscriptionQuotas(ctx, accountID, source, eventKey)
+	return h.carpoolSubscriptionService.ObserveCarpoolQuotaUsage(ctx, accountID, usage, observedAt)
 }
 
 func (h *OpenAIOAuthHandler) resetCarpoolSubscriptions(ctx context.Context, accountID int64, source, eventKey string) (*service.CarpoolQuotaResetResult, error) {

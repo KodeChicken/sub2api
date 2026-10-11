@@ -541,6 +541,7 @@ func (s *OpenAIQuotaAutoResetService) checkCarpoolQuotaSnapshot(ctx context.Cont
 	if !carpoolQuotaSnapshotStale(account.Extra, time.Now()) {
 		return nil
 	}
+	observedAt := time.Now()
 	usage, err := s.quota.QueryUsage(ctx, account.ID)
 	if err != nil {
 		return err
@@ -548,46 +549,26 @@ func (s *OpenAIQuotaAutoResetService) checkCarpoolQuotaSnapshot(ctx context.Cont
 	if usage == nil {
 		return errors.New("openai quota query returned an empty result")
 	}
-	now := time.Now()
-	updates := buildOpenAIAutoResetUsageUpdates(usage, now)
-	cardReset, err := s.carpoolSubscriptions.CarpoolCardResetSinceSnapshot(ctx, account.ID, account.Extra, now)
-	if err != nil {
+	if _, err := s.carpoolSubscriptions.ObserveCarpoolQuotaUsage(ctx, account.ID, usage, observedAt); err != nil {
 		return err
 	}
-	if cardReset {
-		persistUpdates := prepareCarpool7DResetSnapshotUpdates(account.Extra, updates, carpool7DResetDecision{})
-		if len(persistUpdates) == 0 {
-			return nil
-		}
-		return s.accountRepo.UpdateExtra(ctx, account.ID, persistUpdates)
-	}
-	decision := assessCarpool7DWindowReset(account.Extra, updates, now)
-	persistUpdates := prepareCarpool7DResetSnapshotUpdates(account.Extra, updates, decision)
-	if decision.Pending != nil {
-		slog.Info("carpool_7d_forced_reset_pending_confirmation", "account_id", account.ID, "event_key", decision.EventKey)
-		return s.accountRepo.UpdateExtra(ctx, account.ID, persistUpdates)
-	}
-	if decision.Detected {
-		if _, err := s.carpoolSubscriptions.ResetCarpoolSubscriptionQuotas(ctx, account.ID, CarpoolResetSourceOfficial7D, decision.EventKey); err != nil {
-			return err
-		}
-	}
-	if len(persistUpdates) == 0 {
-		return nil
-	}
-	return s.accountRepo.UpdateExtra(ctx, account.ID, persistUpdates)
+	return s.accountRepo.UpdateExtra(ctx, account.ID, buildOpenAIAutoResetUsageUpdates(usage, observedAt))
 }
 
 func carpoolQuotaSnapshotStale(extra map[string]any, now time.Time) bool {
-	raw, ok := extra["codex_usage_updated_at"]
+	state := carpoolQuotaResetStateFromExtra(extra)
+	if state == nil {
+		return true
+	}
+	checkedAt, ok := parseCarpoolResetTime(state.CheckedAt)
 	if !ok {
 		return true
 	}
-	ts, err := time.Parse(time.RFC3339, fmt.Sprint(raw))
-	if err != nil {
-		return true
+	interval := carpoolQuotaSnapshotInterval
+	if _, ok := parseCarpool7DResetCandidate(state.Baseline[carpoolForcedResetCandidateExtraKey]); ok {
+		interval = carpoolForcedResetConfirmDelay
 	}
-	return now.Sub(ts) >= carpoolQuotaSnapshotInterval
+	return now.Sub(checkedAt) >= interval
 }
 
 type openAIAutoResetConsumeResult struct {

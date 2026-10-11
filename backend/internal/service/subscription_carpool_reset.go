@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
@@ -153,40 +152,32 @@ WHERE g.deleted_at IS NULL AND g.is_carpool = TRUE
 	return ids, rows.Err()
 }
 
-// CarpoolCardResetSinceSnapshot prevents a just-consumed reset card from being
-// misclassified as an official 7d refresh when the next usage read observes the
-// same 7d drop. The baseline timestamp is from accounts.extra.
-func (s *SubscriptionService) CarpoolCardResetSinceSnapshot(ctx context.Context, accountID int64, extra map[string]any, now time.Time) (bool, error) {
-	if s == nil || s.entClient == nil || accountID <= 0 {
-		return false, nil
-	}
-	since := now.Add(-carpoolQuotaSnapshotInterval)
-	if snapshotAt, ok := parseCarpoolResetTime(extra["codex_usage_updated_at"]); ok {
-		since = snapshotAt
-	}
-	var exists bool
-	err := scanCarpoolQueryRow(ctx, s.entClient, `
-SELECT EXISTS (
-    SELECT 1 FROM carpool_subscription_quota_reset_events
-    WHERE account_id=$1
-      AND source IN ($2, $3)
-      AND status='applied'
-      AND created_at > $4
-)`, []any{&exists}, accountID, CarpoolResetSourceManualCard, CarpoolResetSourceAutoCard, since)
-	return exists, err
-}
-
 // ResetCarpoolSubscriptionQuotas resets every active subscription configured on
 // carpool groups bound to an account. The event and quota changes commit together.
 func (s *SubscriptionService) ResetCarpoolSubscriptionQuotas(ctx context.Context, accountID int64, source, eventKey string) (*CarpoolQuotaResetResult, error) {
+	result, users, err := s.resetCarpoolSubscriptionQuotas(ctx, accountID, source, eventKey)
+	if err != nil {
+		return nil, err
+	}
+	if !result.AlreadyApplied && result.AffectedCount > 0 {
+		s.invalidateCarpoolSubscriptionCaches(ctx, users)
+	}
+	return result, nil
+}
+
+func (s *SubscriptionService) resetCarpoolSubscriptionQuotas(ctx context.Context, accountID int64, source, eventKey string) (*CarpoolQuotaResetResult, map[int64]int64, error) {
 	if accountID <= 0 || source == "" || eventKey == "" || s == nil || s.entClient == nil {
-		return nil, ErrInvalidInput
+		return nil, nil, ErrInvalidInput
 	}
 	result := &CarpoolQuotaResetResult{AccountID: accountID, Source: source}
 	users := make(map[int64]int64)
 	now := time.Now()
 	dailyStart := timezone.StartOfDay(now)
 	err := s.withCarpoolQuotaTx(ctx, func(txCtx context.Context, client *dbent.Client) error {
+		var lockedAccountID int64
+		if err := scanCarpoolQueryRow(txCtx, client, `SELECT id FROM accounts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, []any{&lockedAccountID}, accountID); err != nil {
+			return err
+		}
 		rows, err := client.QueryContext(txCtx, `
 SELECT us.id, us.user_id, us.group_id,
        us.daily_usage_usd, us.weekly_usage_usd, us.monthly_usage_usd,
@@ -298,12 +289,9 @@ RETURNING quota_reset_revision`, []any{&revision}, row.SubscriptionID, row.Reset
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if !result.AlreadyApplied && result.AffectedCount > 0 {
-		s.invalidateCarpoolSubscriptionCaches(ctx, users)
-	}
-	return result, nil
+	return result, users, nil
 }
 
 func nullableTimePointer(value sql.NullTime) *time.Time {
@@ -405,33 +393,6 @@ func parseCarpool7DResetCandidate(raw any) (*carpool7DResetCandidate, bool) {
 	return &candidate, true
 }
 
-func prepareCarpool7DResetSnapshotUpdates(previousExtra, updates map[string]any, decision carpool7DResetDecision) map[string]any {
-	prepared := make(map[string]any, len(updates)+1)
-	for key, value := range updates {
-		prepared[key] = value
-	}
-	if decision.Pending != nil {
-		prepared = retainCarpool7DBaseline(prepared)
-		prepared[carpoolForcedResetCandidateExtraKey] = decision.Pending
-		return prepared
-	}
-	if _, exists := previousExtra[carpoolForcedResetCandidateExtraKey]; exists {
-		prepared[carpoolForcedResetCandidateExtraKey] = nil
-	}
-	return prepared
-}
-
-func retainCarpool7DBaseline(updates map[string]any) map[string]any {
-	persistUpdates := make(map[string]any, len(updates))
-	for key, value := range updates {
-		if strings.HasPrefix(key, "codex_7d_") || key == "codex_usage_updated_at" {
-			continue
-		}
-		persistUpdates[key] = value
-	}
-	return persistUpdates
-}
-
 func parseCarpoolResetTime(raw any) (time.Time, bool) {
 	value, ok := raw.(string)
 	if !ok || value == "" {
@@ -451,6 +412,10 @@ func (s *SubscriptionService) UndoLatestCarpoolSubscriptionQuotaReset(ctx contex
 	result := &CarpoolQuotaResetResult{AccountID: accountID}
 	users := make(map[int64]int64)
 	err := s.withCarpoolQuotaTx(ctx, func(txCtx context.Context, client *dbent.Client) error {
+		var lockedAccountID int64
+		if err := scanCarpoolQueryRow(txCtx, client, `SELECT id FROM accounts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, []any{&lockedAccountID}, accountID); err != nil {
+			return err
+		}
 		var eventID int64
 		var source, status string
 		var rawSnapshot []byte
