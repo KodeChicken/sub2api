@@ -1,15 +1,15 @@
 <template>
   <div v-if="totalCount > 0" class="relative max-w-56">
-    <!-- 分组容器：固定最大宽度，最多显示2行 -->
-    <div class="flex flex-wrap gap-1 max-h-14 overflow-hidden">
+    <!-- 限制列宽但不裁切行高，完整显示分组名称和 +N 按钮 -->
+    <div class="flex flex-wrap gap-1">
       <template v-for="entry in displayGroups" :key="`${entry.temporary ? 'temporary' : 'bound'}-${entry.group.id}`">
         <span
           v-if="entry.temporary"
-          class="inline-flex max-w-32 items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-700/70 dark:bg-amber-900/25 dark:text-amber-300"
+          class="inline-flex min-w-0 max-w-full items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700 dark:border-amber-700/70 dark:bg-amber-900/25 dark:text-amber-300"
           :title="t('admin.accounts.temporaryGroupHint')"
         >
           <span aria-hidden="true">◷</span>
-          <span class="truncate">{{ t('admin.accounts.temporaryGroupPrefix') }} · {{ entry.group.name }}</span>
+          <span class="break-words">{{ t('admin.accounts.temporaryGroupPrefix') }} · {{ entry.group.name }}</span>
         </span>
         <GroupBadge
           v-else
@@ -18,7 +18,8 @@
           :subscription-type="entry.group.subscription_type"
           :rate-multiplier="entry.group.rate_multiplier"
           :show-rate="false"
-          class="max-w-24"
+          :truncate="false"
+          class="min-w-0 max-w-full"
         />
       </template>
       <!-- 更多数量徽章 -->
@@ -84,6 +85,8 @@
               :subscription-type="group.subscription_type"
               :rate-multiplier="group.rate_multiplier"
               :show-rate="false"
+              :truncate="false"
+              class="min-w-0 max-w-full"
             />
           </div>
         </div>
