@@ -250,6 +250,7 @@ const billingFilters = computed<AdminUsageQueryParams>(() => {
   const legacyStream = requestType ? requestTypeToLegacyStream(requestType) : filters.value.stream
   return {
     ...filters.value,
+    billing_mode: 'token',
     timezone: 'Asia/Shanghai',
     start_date: startDate.value,
     end_date: endDate.value,

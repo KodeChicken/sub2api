@@ -32,7 +32,7 @@ func billingAnalysisConditions(filters usagestats.UsageLogFilters) ([]string, []
 		conditions = append(conditions, fmt.Sprintf("billing_type = $%d", len(args)+1))
 		args = append(args, int16(*filters.BillingType))
 	}
-	conditions, args = appendUsageLogBillingModeWhereCondition(conditions, args, filters.BillingMode)
+	conditions, args = appendUsageLogBillingModeWhereCondition(conditions, args, string(service.BillingModeToken))
 	if filters.UpstreamModelMismatch != nil {
 		conditions = append(conditions, upstreamModelMismatchCondition("upstream_model_mismatch", *filters.UpstreamModelMismatch))
 	}
@@ -48,8 +48,8 @@ func billingAnalysisConditions(filters usagestats.UsageLogFilters) ([]string, []
 	return conditions, args
 }
 
-// GetBillingAnalysis aggregates persisted charges and account estimates with
-// exactly the same request filters, without the model chart's display override.
+// GetBillingAnalysis aggregates token-billed charges and account estimates
+// without the model chart's display override.
 func (r *usageLogRepository) GetBillingAnalysis(ctx context.Context, filters usagestats.UsageLogFilters) (*usagestats.BillingAnalysis, error) {
 	conditions, args := billingAnalysisConditions(filters)
 	query := fmt.Sprintf(`

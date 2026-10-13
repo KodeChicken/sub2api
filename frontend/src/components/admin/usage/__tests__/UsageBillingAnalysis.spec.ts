@@ -10,8 +10,8 @@ vi.mock('@/api/admin/usage', () => ({
   adminUsageAPI: { getBillingAnalysisUsers: getUsers }
 }))
 vi.mock('vue-i18n', () => ({
-  useI18n: () => ({ t: (key: string, params?: { priced: number; total: number }) =>
-    params ? `${key}:${params.priced}/${params.total}` : key })
+  useI18n: () => ({ t: (key: string, params?: Record<string, number>) =>
+    params ? 'count' in params ? `${key}:${params.count}` : `${key}:${params.priced}/${params.total}` : key })
 }))
 
 const BaseDialogStub = defineComponent({
@@ -197,7 +197,7 @@ describe('UsageBillingAnalysis', () => {
       total: billingRow({ requests: 1, priced_requests: 0, user_cost: 1, account_cost: 0, official_reference_cost: 0 }),
       models: [billingRow({ model: 'free', requests: 1, priced_requests: 0, user_cost: 1, account_cost: 0, official_reference_cost: 0 })]
     })
-    expect(wrapper.get('tbody').text()).toContain('usage.unavailable')
+    expect(wrapper.get('tbody').text()).toContain('usage.realRatioMissing:1')
     expect(wrapper.get('tbody').text()).toContain('$1.0000')
   })
 
@@ -206,16 +206,17 @@ describe('UsageBillingAnalysis', () => {
       total: billingRow({ requests: 2, priced_requests: 1, user_cost: 2, account_cost: 4, official_reference_cost: 1 }),
       models: [billingRow({ model: 'partial', requests: 2, priced_requests: 1, user_cost: 2, account_cost: 4, official_reference_cost: 1 })]
     })
-    expect(wrapper.get('tbody').text()).toContain('usage.unavailable')
+    expect(wrapper.get('tbody').text()).toContain('usage.realRatioMissing:1')
     expect(wrapper.get('tbody').text()).not.toContain('2.0000x')
   })
 
-  it('excludes image charges from model and user real ratios without changing U, A or profit', async () => {
+  it('uses the same token-scoped costs for model and user amounts, profit and real ratios', async () => {
     const row = {
-      ...billingRow({ model: 'mixed', requests: 3, priced_requests: 2, user_cost: 5.05, account_cost: 20, official_reference_cost: 10 }),
+      ...billingRow({ model: 'mixed', requests: 3, priced_requests: 3, user_cost: 5, account_cost: 20, official_reference_cost: 10 }),
       non_image_requests: 2,
       non_image_priced_requests: 2,
-      non_image_user_cost: 5
+      non_image_user_cost: 4,
+      non_image_official_reference_cost: 9
     }
     getUsers.mockResolvedValueOnce({
       users: [{ user_id: 42, username: '', email: 'mixed@example.com', ...row }],
@@ -224,43 +225,41 @@ describe('UsageBillingAnalysis', () => {
     const wrapper = mountAnalysis({ total: row, models: [row] })
     const cells = wrapper.findAll('tbody tr')[0].findAll('td')
     expect(cells.map((cell) => cell.text()).slice(1)).toEqual([
-      '$5.0500', '$20.0000', '$3.4000', '$1.6500', '0.5000x'
+      '$5.0000', '$20.0000', '$3.4000', '$1.6000', '0.5000x'
     ])
-    expect(cells[5].attributes('title')).toBe('usage.realRatioCoverage:2/2')
+    expect(cells[5].attributes('title')).toBe('usage.realRatioCoverage:3/3')
     await wrapper.get('[data-testid="billing-expand-mixed"]').trigger('click')
     await flushPromises()
     const userCells = wrapper.get('td[title="mixed@example.com"]').element.parentElement!.querySelectorAll('td')
     expect(Array.from(userCells).slice(1).map((cell) => cell.textContent?.trim())).toEqual([
-      '$5.0500', '$20.0000', '$3.4000', '$1.6500', '0.5000x'
+      '$5.0000', '$20.0000', '$3.4000', '$1.6000', '0.5000x'
     ])
-    expect(userCells[5].getAttribute('title')).toBe('usage.realRatioCoverage:2/2')
+    expect(userCells[5].getAttribute('title')).toBe('usage.realRatioCoverage:3/3')
   })
 
-  it('shows no real ratio for image-only rows even when they have catalog reference costs', () => {
-    const row = {
-      ...billingRow({ model: 'images', requests: 1, priced_requests: 1, user_cost: 0.05, account_cost: 0.1, official_reference_cost: 0.1 }),
-      non_image_requests: 0,
-      non_image_priced_requests: 0,
-      non_image_user_cost: 0,
-      non_image_official_reference_cost: 0
-    }
+  it('does not divide by a zero reference cost even with complete coverage', () => {
+    const row = billingRow({ model: 'free', requests: 1, priced_requests: 1, user_cost: 0.05, account_cost: 0.1, official_reference_cost: 0 })
     const wrapper = mountAnalysis({ total: row, models: [row] })
     const cells = wrapper.findAll('tbody td')
     expect(cells[1].text()).toBe('$0.0500')
     expect(cells[5].text()).toBe('usage.unavailable')
-    expect(cells[5].attributes('title')).toBe('usage.realRatioCoverage:0/0')
+    expect(cells[5].attributes('title')).toBe('usage.realRatioCoverage:1/1')
   })
 
-  it('still hides the real ratio when a non-image request has no catalog pricing', () => {
-    const row = {
-      ...billingRow({ model: 'mixed', requests: 3, priced_requests: 1, user_cost: 5.05, account_cost: 20, official_reference_cost: 10 }),
-      non_image_requests: 2,
-      non_image_priced_requests: 1,
-      non_image_user_cost: 5
-    }
+  it('shows missing reference counts for both model and user rows', async () => {
+    const row = billingRow({ model: 'mixed', requests: 3, priced_requests: 1, user_cost: 5, account_cost: 20, official_reference_cost: 10 })
+    getUsers.mockResolvedValueOnce({
+      users: [{ user_id: 42, username: '', email: 'missing@example.com', ...row }],
+      has_more: false
+    })
     const wrapper = mountAnalysis({ total: row, models: [row] })
     const cell = wrapper.findAll('tbody td')[5]
-    expect(cell.text()).toBe('usage.unavailable')
-    expect(cell.attributes('title')).toBe('usage.realRatioCoverage:1/2')
+    expect(cell.text()).toBe('usage.realRatioMissing:2')
+    expect(cell.attributes('title')).toBe('usage.realRatioCoverage:1/3')
+    await wrapper.get('[data-testid="billing-expand-mixed"]').trigger('click')
+    await flushPromises()
+    const userCells = wrapper.get('td[title="missing@example.com"]').element.parentElement!.querySelectorAll('td')
+    expect(userCells[5].textContent?.trim()).toBe('usage.realRatioMissing:2')
+    expect(userCells[5].getAttribute('title')).toBe('usage.realRatioCoverage:1/3')
   })
 })

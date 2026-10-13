@@ -236,6 +236,29 @@ describe('admin UsageView route filters', () => {
     vi.useRealTimers()
   })
 
+  it('restricts both billing panels to token usage without changing the general usage filters', async () => {
+    const wrapper = mountRouteFilteredUsageView()
+    await flushPromises()
+    ;(wrapper.vm as any).filters.billing_mode = 'image'
+    ;(wrapper.vm as any).filters.account_id = 42
+    wrapper.findComponent(UsageFiltersStub).vm.$emit('change')
+    await flushPromises()
+
+    expect(getBillingAnalysis).toHaveBeenLastCalledWith(expect.objectContaining({
+      billing_mode: 'token', account_id: 42
+    }))
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({
+      billing_mode: 'image', account_id: 42
+    }), expect.anything())
+    expect(getStats).toHaveBeenLastCalledWith(expect.objectContaining({
+      billing_mode: 'image', account_id: 42
+    }))
+    expect(wrapper.findComponent({ name: 'UsageBillingAnalysis' }).props('filters')).toEqual(
+      expect.objectContaining({ billing_mode: 'token', account_id: 42 })
+    )
+    wrapper.unmount()
+  })
+
   it('shows the routed user while applying user_id to usage requests', async () => {
     routeQuery.user_id = '42'
     getById.mockResolvedValue({ id: 42, email: 'route-user@test.com' })

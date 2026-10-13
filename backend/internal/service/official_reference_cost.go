@@ -133,14 +133,18 @@ func OfficialReferenceInputForUsageLog(log *UsageLog, longContextPricingEnabled 
 }
 
 func applyOfficialReferenceResult(log *UsageLog, result *OfficialReferenceResult, enabled bool, pricingAt time.Time) {
-	if log == nil || result == nil {
+	if log == nil {
+		return
+	}
+	// Keep request-time evidence even when catalog pricing is temporarily unavailable.
+	log.OfficialReferenceLongContextEnabled = boolPtr(enabled)
+	pricingAtCopy := pricingAt
+	log.OfficialReferencePricingAt = &pricingAtCopy
+	if result == nil {
 		return
 	}
 	cost := result.Cost
 	applied := result.LongContextApplied
 	log.OfficialReferenceCost = &cost
-	log.OfficialReferenceLongContextEnabled = boolPtr(enabled)
 	log.OfficialReferenceLongContextApplied = &applied
-	pricingAtCopy := pricingAt
-	log.OfficialReferencePricingAt = &pricingAtCopy
 }

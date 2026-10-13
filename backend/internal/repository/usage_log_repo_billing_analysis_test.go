@@ -20,7 +20,7 @@ func TestBillingAnalysisSeparatesPersistedCostsForAccountFilter(t *testing.T) {
 		StartTime: &start, EndTime: &end,
 	}
 	mock.ExpectQuery("GROUP BY GROUPING SETS").
-		WithArgs(int64(42), "gpt-6-astra", start, end).
+		WithArgs(int64(42), "gpt-6-astra", "token", start, end).
 		WillReturnRows(sqlmock.NewRows([]string{"model_grouped", "model", "requests", "priced_requests", "user_cost", "account_cost", "official_reference_cost",
 			"non_image_requests", "non_image_priced_requests", "non_image_user_cost", "non_image_official_reference_cost"}).
 			AddRow(1, nil, 119, 119, 25.719620, 160.604579, 80.3022895, 119, 119, 25.719620, 80.3022895).
@@ -45,6 +45,7 @@ func TestBillingAnalysisEmptyRange(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := &usageLogRepository{sql: db}
 	mock.ExpectQuery("GROUP BY GROUPING SETS").
+		WithArgs("token").
 		WillReturnRows(sqlmock.NewRows([]string{"model_grouped", "model", "requests", "priced_requests", "user_cost", "account_cost", "official_reference_cost",
 			"non_image_requests", "non_image_priced_requests", "non_image_user_cost", "non_image_official_reference_cost"}).
 			AddRow(1, nil, 0, 0, 0, 0, 0, 0, 0, 0, 0))
@@ -68,7 +69,7 @@ func TestBillingAnalysisUsersUsesPersistedCostsAndUserIdentity(t *testing.T) {
 		StartTime: &start, EndTime: &end,
 	}
 	mock.ExpectQuery("SELECT g.user_id, COALESCE\\(u.username, ''\\), COALESCE\\(u.email, ''\\), g.requests, g.priced_requests, g.user_cost, g.account_cost, g.official_reference_cost").
-		WithArgs(int64(7), "gpt-6-astra", start, end, 3, 2).
+		WithArgs(int64(7), "gpt-6-astra", "token", start, end, 3, 2).
 		WillReturnRows(sqlmock.NewRows([]string{"user_id", "username", "email", "requests", "priced_requests", "user_cost", "account_cost", "official_reference_cost",
 			"non_image_requests", "non_image_priced_requests", "non_image_user_cost", "non_image_official_reference_cost"}).
 			AddRow(10, "alice", "alice@example.com", 2, 2, 5.25, 20.5, 17.5, 2, 2, 5.25, 17.5).
@@ -90,12 +91,37 @@ func TestBillingAnalysisUsersFiltersUnknownModel(t *testing.T) {
 	db, mock := newSQLMock(t)
 	repo := &usageLogRepository{sql: db}
 	mock.ExpectQuery("COALESCE\\(NULLIF\\(TRIM\\(requested_model\\), ''\\), model\\) = ''").
-		WithArgs(51, 0).
+		WithArgs("token", 51, 0).
 		WillReturnRows(sqlmock.NewRows([]string{"user_id", "username", "email", "requests", "priced_requests", "user_cost", "account_cost", "official_reference_cost",
 			"non_image_requests", "non_image_priced_requests", "non_image_user_cost", "non_image_official_reference_cost"}))
 	result, err := repo.GetBillingAnalysisUsers(context.Background(), usagestats.UsageLogFilters{}, 1, 50)
 	require.NoError(t, err)
 	require.Empty(t, result.Users)
 	require.False(t, result.HasMore)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBillingAnalysisAlwaysUsesTokenScope(t *testing.T) {
+	for _, mode := range []string{"", "token", "per_request", "image", "video"} {
+		t.Run("billing_mode="+mode, func(t *testing.T) {
+			conditions, args := billingAnalysisConditions(usagestats.UsageLogFilters{BillingMode: mode})
+			require.Equal(t, []any{"token"}, args)
+			require.Equal(t, []string{
+				"(billing_mode = $1 OR ((billing_mode IS NULL OR billing_mode = '') AND COALESCE(image_count, 0) <= 0))",
+			}, conditions)
+		})
+	}
+}
+
+func TestMissingBillingReferencesUseSameTokenScope(t *testing.T) {
+	db, mock := newSQLMock(t)
+	repo := &usageLogRepository{sql: db}
+	mock.ExpectQuery("WHERE .*billing_mode = \\$1.*official_reference_cost IS NULL").
+		WithArgs("token").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	logs, err := repo.ListMissingBillingReferenceUsageLogs(context.Background(), usagestats.UsageLogFilters{})
+	require.NoError(t, err)
+	require.Empty(t, logs)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

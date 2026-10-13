@@ -60,6 +60,38 @@ func TestCalculateOfficialReferenceCostLongContextIsIndependentFromCustomerCost(
 	require.False(t, customerCost.LongContextBillingApplied)
 }
 
+func TestApplyOfficialReferenceResultPreservesEvidenceForRetry(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "standard context", true: "long context enabled"}[enabled], func(t *testing.T) {
+			tokenMode := string(BillingModeToken)
+			pricingAt := time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC)
+			log := UsageLog{
+				Model: "gpt-6-sol", BillingMode: &tokenMode,
+				InputTokens: 467, OutputTokens: 968, CacheReadTokens: 161024,
+				ActualCost: 0.01, TotalCost: 0.04, InputCost: 0.04,
+			}
+
+			applyOfficialReferenceResult(&log, nil, enabled, pricingAt)
+
+			require.Nil(t, log.OfficialReferenceCost)
+			require.Nil(t, log.OfficialReferenceLongContextApplied)
+			require.NotNil(t, log.OfficialReferenceLongContextEnabled)
+			require.Equal(t, enabled, *log.OfficialReferenceLongContextEnabled)
+			require.NotNil(t, log.OfficialReferencePricingAt)
+			require.Equal(t, pricingAt, *log.OfficialReferencePricingAt)
+			recovered := officialReferenceCostForUsageLog(&log, NewBillingService(nil, nil))
+			require.NotNil(t, recovered)
+			require.InDelta(t, 0.0428188, *recovered, 1e-12)
+
+			applyOfficialReferenceResult(&log, &OfficialReferenceResult{Cost: *recovered}, enabled, pricingAt)
+			require.Equal(t, *recovered, *log.OfficialReferenceCost)
+			require.False(t, *log.OfficialReferenceLongContextApplied)
+			require.Equal(t, 0.01, log.ActualCost)
+			require.Equal(t, 0.04, log.TotalCost)
+		})
+	}
+}
+
 func TestEffectiveOfficialReferenceLongContextEnabled(t *testing.T) {
 	trueValue := true
 	falseValue := false
