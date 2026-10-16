@@ -1,7 +1,10 @@
 <template>
   <AppLayout>
-    <section class="flex min-h-[calc(100vh-8rem)] flex-col gap-5">
-      <header class="flex flex-col gap-4 border-b border-gray-200 pb-4 dark:border-dark-700 lg:flex-row lg:items-end lg:justify-between">
+    <section
+      class="flex min-h-[calc(100vh-8rem)] flex-col gap-5"
+      :class="{ 'lg:h-[calc(100dvh-8rem-1px)] lg:min-h-0': isActive('/image-generation/create') }"
+    >
+      <header class="flex shrink-0 flex-col gap-4 border-b border-gray-200 pb-4 dark:border-dark-700 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 class="text-2xl font-semibold text-gray-900 dark:text-white">{{ t('imageGeneration.title') }}</h1>
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('imageGeneration.description') }}</p>

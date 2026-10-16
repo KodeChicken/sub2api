@@ -1,13 +1,13 @@
 <template>
-  <div class="grid min-h-[680px] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-900 lg:h-[calc(100vh-13rem)] lg:grid-cols-[240px_minmax(0,1fr)_300px]">
-    <aside class="flex flex-col border-b border-gray-200 bg-gray-50/70 dark:border-dark-700 dark:bg-dark-900 lg:border-b-0 lg:border-r">
-      <div class="flex items-center justify-between border-b border-gray-200 p-3 dark:border-dark-700">
+  <div class="grid min-h-[680px] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-dark-700 dark:bg-dark-900 lg:min-h-0 lg:grid-cols-[240px_minmax(0,1fr)_300px] lg:grid-rows-[minmax(0,1fr)]">
+    <aside class="flex min-h-0 flex-col border-b border-gray-200 bg-gray-50/70 dark:border-dark-700 dark:bg-dark-900 lg:border-b-0 lg:border-r">
+      <div class="flex shrink-0 items-center justify-between border-b border-gray-200 p-3 dark:border-dark-700">
         <span class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('imageGeneration.sessions.title') }}</span>
         <button type="button" class="rounded-lg p-2 text-gray-500 hover:bg-gray-200 hover:text-gray-900 dark:hover:bg-dark-700 dark:hover:text-white" :title="t('imageGeneration.sessions.new')" @click="newSession">
           <Icon name="plus" size="sm" />
         </button>
       </div>
-      <div class="border-b border-gray-200 p-2 dark:border-dark-700">
+      <div class="shrink-0 border-b border-gray-200 p-2 dark:border-dark-700">
         <div class="relative">
           <Icon name="search" size="sm" class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -87,8 +87,8 @@
       </div>
     </aside>
 
-    <main class="flex min-h-[560px] min-w-0 flex-col bg-gray-50/40 dark:bg-dark-950/30">
-      <div ref="messageArea" class="flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
+    <main class="flex min-h-[560px] min-w-0 flex-col bg-gray-50/40 dark:bg-dark-950/30 lg:min-h-0">
+      <div ref="messageArea" class="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 md:p-6">
         <div v-if="activeRecords.length === 0" class="grid h-full min-h-72 place-items-center text-center">
           <div class="max-w-sm">
             <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-900/25 dark:text-primary-300">
@@ -154,7 +154,7 @@
 
       </div>
 
-      <form class="border-t border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-900 md:p-4" @paste="pasteReference" @submit.prevent="generate">
+      <form class="shrink-0 border-t border-gray-200 bg-white p-3 dark:border-dark-700 dark:bg-dark-900 md:p-4" @paste="pasteReference" @submit.prevent="generate">
         <div v-if="referenceDrafts.length" class="mb-3 grid gap-2 sm:grid-cols-2">
           <div v-for="(reference, index) in referenceDrafts" :key="reference.id" class="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-2 dark:border-dark-700 dark:bg-dark-800">
             <img :src="reference.url" alt="" class="h-14 w-14 rounded-md object-cover" />
@@ -192,7 +192,7 @@
       </form>
     </main>
 
-    <aside class="border-t border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-900 lg:border-l lg:border-t-0">
+    <aside class="border-t border-gray-200 bg-white dark:border-dark-700 dark:bg-dark-900 lg:overflow-y-auto lg:border-l lg:border-t-0">
       <div class="space-y-5 p-4">
         <div>
           <label class="input-label mb-1.5 block">{{ t('imageGeneration.form.apiKey') }}</label>
