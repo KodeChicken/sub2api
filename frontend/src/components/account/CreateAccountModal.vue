@@ -2309,7 +2309,16 @@
         </div>
       </div>
 
-      <KiroCredentialsFields v-if="form.platform === 'kiro'" v-model="kiroCredentials" />
+      <template v-if="form.platform === 'kiro'">
+        <fieldset>
+          <legend class="input-label">{{ t('admin.accounts.accountType') }}</legend>
+          <div class="flex flex-wrap gap-5 text-sm">
+            <label class="flex items-center gap-2"><input v-model="kiroAccountMode" type="radio" value="oauth" name="kiro-account-mode" />{{ t('admin.accounts.kiro.signInTitle') }}</label>
+            <label class="flex items-center gap-2"><input v-model="kiroAccountMode" type="radio" value="apikey" name="kiro-account-mode" />Kiro API Key</label>
+          </div>
+        </fieldset>
+        <KiroCredentialsFields v-if="kiroAccountMode === 'apikey'" v-model="kiroCredentials" account-type="apikey" />
+      </template>
 
       <!-- 配额控制 (Anthropic apikey/bedrock: 配额限制 + 亲和) -->
       <div
@@ -3778,7 +3787,15 @@
 
     <!-- Step 2: OAuth Authorization -->
     <div v-else class="space-y-5">
+      <KiroAuthorizationFlow
+        v-if="form.platform === 'kiro'"
+        ref="kiroFlowRef"
+        :draft="kiroAccountDraft"
+        :configuration="kiroOAuthConfiguration"
+        @authorized="handleKiroAuthorized"
+      />
       <OAuthAuthorizationFlow
+        v-else
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
         :auth-url="currentAuthUrl"
@@ -3857,11 +3874,11 @@
         </button>
       </div>
       <div v-else class="flex justify-between gap-3">
-        <button type="button" class="btn btn-secondary" @click="goBackToBasicInfo">
+        <button type="button" class="btn btn-secondary" :disabled="kiroFlowRef?.saving" @click="goBackToBasicInfo">
           {{ t('common.back') }}
         </button>
         <button
-          v-if="isManualInputMethod"
+          v-if="form.platform !== 'kiro' && isManualInputMethod"
           type="button"
           :disabled="!canExchangeCode"
           class="btn btn-primary"
@@ -4172,7 +4189,9 @@ import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import UpstreamRequestIdHeaderField from '@/components/account/UpstreamRequestIdHeaderField.vue'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
 import KiroCredentialsFields from '@/components/account/KiroCredentialsFields.vue'
-import { buildKiroCredentials, kiroAccountType, normalizeKiroCredentials } from '@/utils/kiroCredentials'
+import { buildKiroCredentials, normalizeKiroCredentials } from '@/utils/kiroCredentials'
+import type { KiroOAuthAccount } from '@/api/admin/kiro'
+import KiroAuthorizationFlow from './KiroAuthorizationFlow.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
@@ -4255,6 +4274,7 @@ const { t } = useI18n()
 const browserTimeZone = getBrowserTimeZone()
 
 const oauthStepTitle = computed(() => {
+  if (form.platform === 'kiro') return t('admin.accounts.kiro.signInTitle')
   if (form.platform === 'openai') return t('admin.accounts.oauth.openai.title')
   if (form.platform === 'gemini') return t('admin.accounts.oauth.gemini.title')
   if (form.platform === 'antigravity') return t('admin.accounts.oauth.antigravity.title')
@@ -5052,10 +5072,19 @@ const form = reactive({
   expires_at: null as number | null
 })
 const kiroCredentials = ref<Record<string, unknown>>(normalizeKiroCredentials({}))
+const kiroAccountMode = ref<'oauth' | 'apikey'>('oauth')
+const kiroFlowRef = ref<{ saving: boolean } | null>(null)
+const kiroOAuthConfiguration = ref<Record<string, unknown>>({})
+const kiroAccountDraft = computed<KiroOAuthAccount>(() => ({
+  name: form.name, notes: form.notes, proxy_id: form.proxy_id, concurrency: form.concurrency,
+  priority: form.priority, rate_multiplier: form.rate_multiplier, load_factor: form.load_factor,
+  group_ids: form.group_ids, expires_at: form.expires_at, auto_pause_on_expired: autoPauseOnExpired.value,
+  extra: withUpstreamRequestIdHeader(undefined)
+}))
 
 // Helper to check if current type needs OAuth flow
 const isOAuthFlow = computed(() => {
-  if (form.platform === 'kiro') return false
+  if (form.platform === 'kiro') return kiroAccountMode.value === 'oauth'
   // Antigravity upstream 类型不需要 OAuth 流程
   if (form.platform === 'antigravity' && antigravityAccountType.value === 'upstream') {
     return false
@@ -5128,10 +5157,13 @@ watch(
 
 // Sync form.type based on accountCategory, addMethod, and platform-specific type
 watch(
-  [accountCategory, addMethod, antigravityAccountType, () => form.platform, () => kiroCredentials.value.auth_method],
+  [accountCategory, addMethod, antigravityAccountType, () => form.platform, () => kiroCredentials.value.auth_method, kiroAccountMode],
   ([category, method, agType]) => {
     if (form.platform === 'kiro') {
-      form.type = kiroAccountType(kiroCredentials.value)
+      form.type = kiroAccountMode.value
+      if (form.type === 'apikey' && kiroCredentials.value.auth_method !== 'api_key') {
+        kiroCredentials.value = normalizeKiroCredentials({ auth_method: 'api_key' })
+      }
       return
     }
     // Antigravity upstream 类型（实际创建为 apikey）
@@ -5634,6 +5666,8 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
 // Methods
 const resetForm = () => {
   kiroCredentials.value = normalizeKiroCredentials({})
+  kiroAccountMode.value = 'oauth'
+  kiroOAuthConfiguration.value = {}
   step.value = 1
   form.name = ''
   form.notes = ''
@@ -5755,6 +5789,7 @@ const resetForm = () => {
 }
 
 const handleClose = () => {
+  if (kiroFlowRef.value?.saving) return
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -5969,7 +6004,14 @@ const handleSubmit = async () => {
       appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
       return
     }
-    await createAccountAndFinish('kiro', kiroAccountType(kiroCredentials.value), buildKiroCredentials(kiroCredentials.value))
+    if (kiroAccountMode.value === 'oauth') {
+      const configuration: Record<string, unknown> = {}
+      if (!applyTempUnschedConfig(configuration)) return
+      kiroOAuthConfiguration.value = configuration
+      step.value = 2
+      return
+    }
+    await createAccountAndFinish('kiro', 'apikey', buildKiroCredentials(kiroCredentials.value))
     return
   }
   // For OAuth-based type, handle OAuth flow (goes to step 2)
@@ -6261,6 +6303,7 @@ const handleSubmit = async () => {
 }
 
 const goBackToBasicInfo = () => {
+  if (kiroFlowRef.value?.saving) return
   step.value = 1
   oauth.resetState()
   openaiOAuth.resetState()
@@ -6268,6 +6311,13 @@ const goBackToBasicInfo = () => {
   antigravityOAuth.resetState()
   grokOAuth.resetState()
   oauthFlowRef.value?.reset()
+}
+
+const handleKiroAuthorized = () => {
+  if (form.platform !== 'kiro' || step.value !== 2 || !props.show) return
+  appStore.showSuccess(t('admin.accounts.accountCreated'))
+  emit('created')
+  handleClose()
 }
 
 const handleGenerateUrl = async () => {

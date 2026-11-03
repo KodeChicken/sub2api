@@ -66,8 +66,9 @@ func Canonicalize(input map[string]any) map[string]any {
 	}
 	for old, key := range map[string]string{
 		"accessToken": "access_token", "refreshToken": "refresh_token",
-		"expiresAt": "expires_at", "profileArn": "profile_arn",
+		"expiresAt": "expires_at", "expiresIn": "expires_in", "profileArn": "profile_arn",
 		"authMethod": "auth_method", "clientId": "client_id",
+		"clientIdIssuedAt": "client_id_issued_at", "clientSecretExpiresAt": "client_secret_expires_at",
 		"clientSecret": "client_secret", "authRegion": "auth_region",
 		"apiRegion": "api_region", "machineId": "machine_id",
 		"kiroApiKey": "api_key", "kiro_api_key": "api_key",

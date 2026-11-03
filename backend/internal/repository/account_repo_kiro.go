@@ -6,10 +6,46 @@ import (
 	"errors"
 	"time"
 
+	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
 var _ service.KiroOAuthRefreshPersistence = (*accountRepository)(nil)
+var _ service.KiroOAuthReauthPersistence = (*accountRepository)(nil)
+
+func (r *accountRepository) ApplyKiroOAuthReauthorization(ctx context.Context, id int64, expected map[string]any, proxyID *int64, credentials map[string]any) (bool, error) {
+	tx := dbent.TxFromContext(ctx)
+	if tx == nil {
+		return false, errors.New("Kiro reauthorization requires a transaction")
+	}
+	before, err := json.Marshal(normalizeJSONMap(expected))
+	if err != nil {
+		return false, err
+	}
+	after, err := json.Marshal(normalizeJSONMap(credentials))
+	if err != nil {
+		return false, err
+	}
+	result, err := tx.Client().ExecContext(ctx, `
+		WITH updated AS (
+			UPDATE accounts AS a SET credentials=$1::jsonb,
+				status=CASE WHEN a.status='error' THEN 'active' ELSE a.status END,
+				error_message=CASE WHEN a.status='error' THEN '' ELSE a.error_message END,
+				extra=COALESCE(a.extra,'{}'::jsonb)-'kiro_profile_checked_at'-'kiro_profile_credentials_hash'-'kiro_profile_arn',
+				updated_at=NOW()
+			WHERE a.id=$2 AND a.deleted_at IS NULL AND a.platform=$3 AND a.type=$4
+				AND a.credentials=$5::jsonb AND a.proxy_id IS NOT DISTINCT FROM $6
+			RETURNING a.id
+		)
+		INSERT INTO scheduler_outbox(event_type,account_id,group_id,payload)
+		SELECT $7,updated.id,NULL,NULL FROM updated`, string(after), id, service.PlatformKiro,
+		service.AccountTypeOAuth, string(before), proxyID, service.SchedulerOutboxEventAccountChanged)
+	if err != nil {
+		return false, err
+	}
+	count, err := result.RowsAffected()
+	return count > 0, err
+}
 
 func (r *accountRepository) UpdateKiroOAuthCredentialsIfUnchanged(ctx context.Context, id int64, expected map[string]any, proxyID *int64, credentials map[string]any) (bool, error) {
 	if r == nil || r.sql == nil {

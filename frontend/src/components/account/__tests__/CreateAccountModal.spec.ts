@@ -100,6 +100,13 @@ const OAuthAuthorizationFlowStub = defineComponent({
   `,
 })
 
+const KiroAuthorizationFlowStub = defineComponent({
+  name: 'KiroAuthorizationFlow',
+  props: ['draft', 'configuration'],
+  emits: ['authorized'],
+  template: '<button data-testid="kiro-authorized" @click="$emit(\'authorized\', 42)">authorized</button>',
+})
+
 const GroupSelectorStub = defineComponent({
   name: 'GroupSelector',
   props: {
@@ -145,6 +152,7 @@ function mountModal(groups: any[] = []) {
       stubs: {
         BaseDialog: BaseDialogStub,
         OAuthAuthorizationFlow: OAuthAuthorizationFlowStub,
+        KiroAuthorizationFlow: KiroAuthorizationFlowStub,
         ConfirmDialog: true,
         Select: true,
         Icon: true,
@@ -246,20 +254,37 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     wrapper.unmount()
   })
 
-  it('creates Kiro natively without using another provider OAuth flow or billing probe', async () => {
-    createAccountMock.mockResolvedValue({ id: 42, platform: 'kiro', type: 'oauth' })
+  it('keeps Kiro basic settings then delegates native authorization without another provider flow', async () => {
     const wrapper = mountModal()
     await wrapper.get('[data-testid="platform-button-kiro"]').trigger('click')
     await wrapper.get('form#create-account-form input[type="text"]').setValue('Kiro account')
-    await wrapper.get('[data-testid="kiro-credentials"] input[id$="-refresh_token"]').setValue('kiro-refresh')
+    expect(wrapper.find('[data-testid="kiro-credentials"]').exists()).toBe(false)
     expect(wrapper.findComponent(OAuthAuthorizationFlowStub).exists()).toBe(false)
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    const flow = wrapper.getComponent(KiroAuthorizationFlowStub)
+    expect(flow.props('draft')).toMatchObject({ name: 'Kiro account', concurrency: 10, group_ids: [] })
+    expect(wrapper.findComponent(OAuthAuthorizationFlowStub).exists()).toBe(false)
+    expect(createAccountMock).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="kiro-authorized"]').trigger('click')
+    expect(wrapper.emitted('created')).toHaveLength(1)
+    expect(probeUpstreamBillingMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('retains the Kiro API-key-only create path with CLI transport', async () => {
+    const wrapper = mountModal()
+    await wrapper.get('[data-testid="platform-button-kiro"]').trigger('click')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Kiro key')
+    await wrapper.get('input[name="kiro-account-mode"][value="apikey"]').setValue()
+    await wrapper.get('[data-testid="kiro-credentials"] input[id$="-api_key"]').setValue('ksk_example')
     await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()
     expect(createAccountMock).toHaveBeenCalledOnce()
     expect(createAccountMock.mock.calls[0]?.[0]).toMatchObject({
-      platform: 'kiro', type: 'oauth', credentials: { auth_method: 'social', refresh_token: 'kiro-refresh', endpoint: 'ide' }
+      platform: 'kiro', type: 'apikey', credentials: { api_key: 'ksk_example', endpoint: 'cli' }
     })
-    expect(createAccountMock.mock.calls[0]?.[0]?.credentials).not.toHaveProperty('base_url')
+    expect(wrapper.findComponent(KiroAuthorizationFlowStub).exists()).toBe(false)
     expect(probeUpstreamBillingMock).not.toHaveBeenCalled()
     wrapper.unmount()
   })

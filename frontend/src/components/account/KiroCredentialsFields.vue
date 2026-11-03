@@ -15,7 +15,7 @@
         <select :id="`${id}-auth`" class="input" :value="method" :disabled="accountType === 'apikey'" @change="changeMethod">
           <option value="social">GitHub / Google</option>
           <option value="idc">Builder ID / AWS IdC</option>
-          <option value="external_idp">Microsoft Entra ID</option>
+          <option value="external_idp">{{ t('admin.accounts.kiro.entraImportOnly') }}</option>
           <option v-if="!accountType || accountType === 'apikey'" value="api_key">Kiro API Key</option>
         </select>
       </div>

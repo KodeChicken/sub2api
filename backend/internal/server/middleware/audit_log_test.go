@@ -3,8 +3,11 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -187,4 +190,61 @@ func TestOllamaCloudUsageSessionRouteOmitsAuditBody(t *testing.T) {
 	require.Len(t, logs, 1)
 	require.Equal(t, "<credential-bearing body omitted>", logs[0].RequestBody)
 	require.NotContains(t, logs[0].RequestBody, "audit-canary")
+}
+
+func TestKiroOAuthAllPOSTBodiesAreOmittedBeforeValidation(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	repository := &auditCaptureRepository{}
+	auditService := service.NewAuditLogService(repository, nil)
+	auditService.Start()
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set(string(ContextKeyUser), AuthSubject{UserID: 77})
+		c.Set(string(ContextKeyUserRole), "admin")
+		c.Next()
+	})
+	router.Use(gin.HandlerFunc(NewAuditLogMiddleware(auditService)))
+	routes := []string{
+		"/api/v1/admin/kiro/oauth/sessions",
+		"/api/v1/admin/kiro/oauth/sessions/:id/complete",
+		"/api/v1/admin/kiro/oauth/sessions/:id/poll",
+		"/api/v1/admin/kiro/oauth/sessions/:id/finalize",
+	}
+	for _, route := range routes {
+		require.Contains(t, auditBodyOmittedRoutes, "POST "+route)
+		router.POST(route, func(c *gin.Context) {
+			status, err := strconv.Atoi(c.GetHeader("X-Test-Status"))
+			require.NoError(t, err)
+			SetAuditExtra(c, map[string]any{"result": "handled", "error_code": "KIRO_OAUTH_INVALID_CALLBACK"})
+			c.JSON(status, gin.H{"message": "Kiro authorization result"})
+		})
+		for _, body := range []string{
+			`{"callback_url":"http://127.0.0.1:3128/oauth/callback?code=sentinel-code&state=sentinel-state","clientSecret":"sentinel-client","deviceCode":"sentinel-device","code_verifier":"sentinel-pkce","accessToken":"sentinel-access","refreshToken":"sentinel-refresh"}`,
+			`{"unknown":"sentinel-malformed"`,
+		} {
+			for _, status := range []int{http.StatusOK, http.StatusBadRequest, http.StatusForbidden} {
+				recorder := httptest.NewRecorder()
+				path := strings.ReplaceAll(route, ":id", "session")
+				request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+				request.Header.Set("Content-Type", "application/json")
+				request.Header.Set("X-Test-Status", strconv.Itoa(status))
+				router.ServeHTTP(recorder, request)
+				require.Equal(t, status, recorder.Code)
+				require.NotContains(t, recorder.Body.String(), "sentinel")
+			}
+		}
+	}
+	auditService.Stop()
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	require.Len(t, repository.logs, 24)
+	for _, entry := range repository.logs {
+		require.Equal(t, "<credential-bearing body omitted>", entry.RequestBody)
+		encoded, err := json.Marshal(entry)
+		require.NoError(t, err)
+		require.NotContains(t, string(encoded), "sentinel")
+		require.NotNil(t, entry.ActorUserID)
+		require.EqualValues(t, 77, *entry.ActorUserID)
+		require.Contains(t, []int{http.StatusOK, http.StatusBadRequest, http.StatusForbidden}, entry.StatusCode)
+	}
 }

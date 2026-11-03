@@ -41,6 +41,8 @@
                       ? t('admin.accounts.antigravityAccount')
                       : isGrok
                         ? t('admin.accounts.grokAccount')
+                      : isKiro
+                        ? 'Kiro'
                         : t('admin.accounts.claudeCodeAccount')
               }}
             </span>
@@ -120,7 +122,15 @@
         </div>
       </div>
 
+      <KiroAuthorizationFlow
+        v-if="isKiro && show"
+        :key="account.id"
+        ref="kiroFlowRef"
+        :account="account"
+        @authorized="handleKiroAuthorized"
+      />
       <OAuthAuthorizationFlow
+        v-else-if="!isKiro"
         ref="oauthFlowRef"
         :add-method="addMethod"
         :auth-url="currentAuthUrl"
@@ -148,11 +158,11 @@
 
     <template #footer>
       <div v-if="account" class="flex justify-between gap-3">
-        <button type="button" class="btn btn-secondary" @click="handleClose">
+        <button type="button" class="btn btn-secondary" :disabled="kiroFlowRef?.saving" @click="handleClose">
           {{ t('common.cancel') }}
         </button>
         <button
-          v-if="isManualInputMethod"
+          v-if="!isKiro && isManualInputMethod"
           type="button"
           :disabled="!canExchangeCode"
           class="btn btn-primary"
@@ -207,6 +217,7 @@ import type { Account } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Icon from '@/components/icons/Icon.vue'
 import OAuthAuthorizationFlow from '@/components/account/OAuthAuthorizationFlow.vue'
+import KiroAuthorizationFlow from '@/components/account/KiroAuthorizationFlow.vue'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -242,6 +253,8 @@ const grokOAuth = useGrokOAuth()
 
 // Refs
 const oauthFlowRef = ref<OAuthFlowExposed | null>(null)
+const kiroFlowRef = ref<{ saving: boolean; reset: () => Promise<boolean> } | null>(null)
+let kiroResultGeneration = 0
 
 // State
 const addMethod = ref<AddMethod>('oauth')
@@ -254,6 +267,7 @@ const isGemini = computed(() => props.account?.platform === 'gemini')
 const isAnthropic = computed(() => props.account?.platform === 'anthropic')
 const isAntigravity = computed(() => props.account?.platform === 'antigravity')
 const isGrok = computed(() => props.account?.platform === 'grok')
+const isKiro = computed(() => props.account?.platform === 'kiro')
 
 /**
  * Grok reauth default tab (password auth is hidden):
@@ -324,6 +338,7 @@ const canExchangeCode = computed(() => {
 })
 
 // Watchers
+watch([() => props.show, () => props.account?.id, () => props.account?.platform], () => { kiroResultGeneration++ })
 watch(
   () => props.show,
   (newVal) => {
@@ -352,6 +367,7 @@ watch(
 
 // Methods
 const resetState = () => {
+  void kiroFlowRef.value?.reset()
   addMethod.value = 'oauth'
   geminiOAuthType.value = 'code_assist'
   claudeOAuth.resetState()
@@ -363,7 +379,19 @@ const resetState = () => {
 }
 
 const handleClose = () => {
+  if (kiroFlowRef.value?.saving) return
+  void kiroFlowRef.value?.reset()
   emit('close')
+}
+
+const handleKiroAuthorized = async (accountId: number) => {
+  if (!props.show || !isKiro.value || props.account?.id !== accountId) return
+  const generation = kiroResultGeneration
+  const account = await adminAPI.accounts.getById(accountId).catch(() => null)
+  if (generation !== kiroResultGeneration || !props.show || props.account?.id !== accountId || !isKiro.value) return
+  if (account) emit('reauthorized', account)
+  appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
+  handleClose()
 }
 
 const handleGenerateUrl = async () => {

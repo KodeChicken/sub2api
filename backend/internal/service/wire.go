@@ -11,6 +11,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/payment"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kiro"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 	"github.com/google/wire"
@@ -25,6 +26,12 @@ func ProvideGrokOAuthService(proxyRepo ProxyRepository, oauthClient GrokOAuthCli
 		svc = svc.WithSessionStore(xai.NewRedisSessionStore(redisClient))
 	}
 	return svc
+}
+
+func ProvideKiroOAuthService(redisClient *redis.Client, proxies ProxyRepository, accounts AccountRepository,
+	admin AdminService, entClient *dbent.Client, upstream HTTPUpstream, invalidator TokenCacheInvalidator,
+	blocker AccountRuntimeBlocker) *KiroOAuthService {
+	return NewKiroOAuthService(kiro.NewOAuthSessionStore(redisClient), proxies, accounts, admin, entClient, upstream, invalidator, blocker)
 }
 
 // BuildInfo contains build information
@@ -868,6 +875,7 @@ func ProvideAPIKeyService(
 // ProviderSet is the Wire provider set for all services
 var ProviderSet = wire.NewSet(
 	NewKiroService,
+	ProvideKiroOAuthService,
 	// Core services
 	ProvideAuthService,
 	NewPasskeyService,

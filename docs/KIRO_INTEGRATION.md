@@ -37,9 +37,85 @@ refused summaries are not reported as successful compaction.
 
 ## Accounts
 
-Create a Kiro account in the admin account dialog. Import a single-account IDE
-or kiro.rs credential JSON file, or enter the fields manually. Both camelCase
-exports and Sub2API snake_case fields are accepted.
+Create a Kiro account in the admin account dialog. Keep the account name,
+groups, proxy and concurrency on the first step, then continue to the Kiro
+authorization panel. Sign-in is the default; JSON import and manual credentials
+remain alternatives. Both camelCase exports and Sub2API snake_case fields are
+accepted.
+
+### Interactive Sign-In
+
+- **GitHub / Google:** generate the portal link, open it and choose the provider
+  in the official Kiro portal. After login, paste the **complete callback URL**
+  and complete authorization. A bare authorization code is not accepted.
+- **AWS Builder ID:** generate a device authorization, open the verification
+  page and enter the displayed user code. The panel polls at the server's
+  permitted interval and saves the account after authorization.
+- **Enterprise AWS IAM Identity Center:** provide the organization's HTTPS
+  SSO Start URL, then use the same device authorization flow.
+
+Social authorization uses `http://127.0.0.1:3128` as its fixed redirect base.
+Sub2API does not start a loopback listener: copy the browser's final URL even
+if the local page cannot load. Only `/oauth/callback` or `/signin/callback`
+with valid, matching parameters establishes an authorization result; an
+inaccessible page alone does not. This also works when Sub2API runs remotely
+or in Docker, without a callback domain, plugin or kiro.rs process.
+
+Normal sign-in does not expose access/refresh tokens, PKCE or OIDC client
+secrets. New interactive accounts default to IDE; advanced settings select
+IDE/CLI, authentication/API regions and API domain. Import preserves its
+transport settings. Kiro API keys retain the separate key-only path.
+Microsoft Entra ID is import/manual-only, not an interactive option.
+
+Use the existing account menu's reauthorization action for a Kiro OAuth
+account. The same panel replaces its complete authentication tuple, removes
+stale identity/profile metadata and preserves groups, proxy, concurrency,
+pricing, transport and other account configuration. Inactive accounts remain
+inactive and the persistent scheduling switch is not enabled. A concurrent
+credential refresh/edit or target/proxy change rejects the stale login
+instead of overwriting the newer credentials.
+
+### Session And Save Semantics
+
+Kiro-only admin endpoints live under `/api/v1/admin/kiro/oauth/sessions`:
+start, `/:id/complete`, `/:id/poll`, `/:id/finalize`, GET and DELETE.
+Restricted admin API keys cannot access these endpoints. All four POST
+request bodies are omitted before audit capture; safe actor/status metadata
+remain. Callback URLs are parsed, never fetched, and code/state ambiguity,
+wrong loopback origins/paths and duplicate parameters are rejected.
+Auth/token requests use fixed regional hosts, the captured proxy and no
+redirect following. The SSO Start URL is sent as protocol data, not fetched.
+
+Sessions are owner-bound in the existing Redis, with CAS transitions and
+Redis-clock claim deadlines. Redis is required; there is no process-local
+fallback. Backend restart and multiple replicas work while sharing retained
+Redis state. Authorization lasts at most ten minutes; device/registration
+expiry can shorten it. Device pending, cumulative `slow_down`, denial and
+expiry are separate states, with bounded server-side polling/backoff.
+
+Completion/polling stages credentials without writing an account. Only the
+current panel generation finalizes. Closing/restarting cancels before a save
+is accepted and fences late responses. During saving, ordinary close/restart
+is blocked until the result is reconciled: an accepted or committed save
+cannot honestly be reported as cancelled.
+
+Account/groups or conditional reauthorization, scheduler outbox and a
+nonsecret success receipt share one PostgreSQL transaction. The receipt's
+unique row serializes retries, including stale savers on another replica.
+Failed saves retain staged credentials for retry before authorization expiry;
+they do not re-exchange a spent social code. A confirmed receipt replays the
+original account after a lost response or Redis loss. Receipt retention is at
+least one hour, the configured write-idempotency window and the authorization
+deadline plus sixty seconds; missing/expired sessions never authorize new
+writes from an absent receipt.
+
+Request-driven stale-claim recovery needs no daemon. Starting uses a 25-second
+operation budget/35-second claim; exchange/poll uses 20/30 seconds; saving uses
+10/20 seconds. Saving recovery locks the SQL receipt before declaring retry
+or cancellation safe. Database contention/uncertain commit remains an explicit
+unknown result, not permission to create a second account. Transaction-local
+timeouts bound healthy-server waits but do not guarantee progress during a
+database partition.
 
 | Authentication | Required Fields |
 | --- | --- |
@@ -51,8 +127,7 @@ exports and Sub2API snake_case fields are accepted.
 Optional fields include `auth_region`, `api_region`, `profile_arn`, `machine_id`,
 `endpoint` (`ide` or `cli`), and `api_domain` (`q` or `runtime`).
 Entra token endpoints are restricted to HTTPS tenant endpoints under
-`login.microsoftonline.com`. Browser sign-in/device authorization is not hosted
-by this integration; import credentials obtained with your own authorized account.
+`login.microsoftonline.com`.
 
 OAuth refresh reuses Sub2API's local/distributed locking. Credential updates
 compare the complete original credential document and proxy, and atomically
@@ -103,6 +178,12 @@ Sub2API model pricing/rate multipliers before exposing paid access.
   admin warning, rather than guessed capabilities.
 - Kiro uses upstream-specific APIs; protocol changes or account permissions
   can break compatibility. This does not grant additional upstream entitlements.
+- Redis restart/eviction without retained state loses pending authorization.
+  A token issued upstream before a crash or failed durable staging cannot be
+  reconstructed: restart sign-in rather than blindly re-exchanging it.
+- There is no end-to-end exactly-once or availability guarantee across
+  upstream issuance, Redis and PostgreSQL. Durable save receipts prevent
+  duplicate local account effects within their retention and binding rules.
 
 ## Verification
 
@@ -110,8 +191,16 @@ The added tests cover all three client protocols in JSON/SSE modes, EventStream
 length/CRC validation, tools, reasoning, images, credits, search, compaction,
 refresh races, credential isolation, repository CAS predicates/outbox, and
 admin form behavior. Run the existing backend unit and frontend suites too.
+OAuth unit coverage additionally checks strict callbacks, fixed request
+payloads, device backoff, Redis CAS/expiry/cancellation, late responses,
+transaction-bound receipts, save retry/replay, selected-target reauthorization
+and audit-body omission. SQL mocks and injected protocol responses are unit
+evidence, not actual PostgreSQL/Redis multi-replica integration or an official
+Kiro sign-in.
 
-Live inference/refresh/quota validation requires an authorized Kiro account.
+Official portal/Builder/enterprise login, account permissions and live
+inference/refresh/quota validation require an authorized Kiro account and
+remain unverified without it.
 No real Kiro credentials are included in the repository or test fixtures.
 
 The full backend unit run observed two existing failures, both reproduced at

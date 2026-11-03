@@ -62,6 +62,7 @@ func RegisterAdminRoutes(
 
 		// Grok OAuth
 		registerGrokOAuthRoutes(admin, h)
+		registerKiroOAuthRoutes(admin, h)
 
 		// 国产供应商（kimi/zhipu/deepseek）额度与余额
 		registerCNProviderRoutes(admin, h)
@@ -133,6 +134,16 @@ func RegisterAdminRoutes(
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
 	}
+}
+
+func registerKiroOAuthRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	kiro := admin.Group("/kiro/oauth")
+	kiro.POST("/sessions", h.Admin.KiroOAuth.Start)
+	kiro.POST("/sessions/:id/complete", h.Admin.KiroOAuth.Complete)
+	kiro.POST("/sessions/:id/poll", h.Admin.KiroOAuth.Poll)
+	kiro.POST("/sessions/:id/finalize", h.Admin.KiroOAuth.Finalize)
+	kiro.GET("/sessions/:id", h.Admin.KiroOAuth.Status)
+	kiro.DELETE("/sessions/:id", h.Admin.KiroOAuth.Cancel)
 }
 
 func registerPromptAuditRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
