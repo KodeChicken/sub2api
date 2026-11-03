@@ -12,7 +12,10 @@ vi.mock('vue-i18n', async () => ({
 }))
 import KiroAuthorizationFlow from '../KiroAuthorizationFlow.vue'
 
-const draft = { name: 'Kiro', concurrency: 10, priority: 1, group_ids: [5], proxy_id: 8 }
+const draft = {
+  name: 'Kiro', concurrency: 10, priority: 1, group_ids: [5], proxy_id: 8,
+  extra: { mixed_scheduling: true, retained_setting: 'yes' }, confirm_mixed_channel_risk: true
+}
 const mounted: ReturnType<typeof mount>[] = []
 const render = () => {
   const wrapper = mount(KiroAuthorizationFlow, {
@@ -85,6 +88,7 @@ describe('KiroAuthorizationFlow', () => {
     await flushPromises()
     expect(api.start.mock.calls[0]?.[0]).toMatchObject({
       auth_type: 'credentials',
+      account: draft,
       credentials: { refresh_token: 'imported', endpoint: 'cli', api_region: 'eu-west-1', api_domain: 'runtime' },
       settings: { temp_unschedulable_enabled: false }
     })
@@ -100,5 +104,29 @@ describe('KiroAuthorizationFlow', () => {
     expect(api.cancel).toHaveBeenCalledWith('s')
     expect(wrapper.find('[data-testid="kiro-credentials"]').exists()).toBe(true)
     expect(wrapper.find('option[value="external_idp"]').text()).toContain('entraImportOnly')
+  })
+
+  it('passes confirmed opt-in through manual credentials without replacing transport', async () => {
+    const wrapper = render()
+    await wrapper.get('input[value="manual"]').setValue()
+    await wrapper.get('[data-testid="kiro-credentials"] input[id$="-refresh_token"]').setValue('manual-refresh')
+    api.start.mockResolvedValue({ session_id: 'm', status: 'ready' })
+    api.finalize.mockResolvedValue({ session_id: 'm', status: 'succeeded', account_id: 42 })
+    await button(wrapper, 'completeAuth').trigger('click')
+    await flushPromises()
+    expect(api.start.mock.calls[0]?.[0]).toMatchObject({
+      auth_type: 'credentials', account: draft, credentials: { refresh_token: 'manual-refresh', endpoint: 'ide' }
+    })
+    expect(wrapper.emitted('authorized')).toEqual([[42]])
+  })
+
+  it('reports a backend mixed-risk rejection without creating or polling a session', async () => {
+    const wrapper = render()
+    api.start.mockRejectedValue({ reason: 'KIRO_OAUTH_MIXED_CHANNEL_RISK', status: 409 })
+    await button(wrapper, 'generateAuthUrl').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('MIXED_CHANNEL_RISK')
+    expect(api.poll).not.toHaveBeenCalled()
+    expect(api.finalize).not.toHaveBeenCalled()
   })
 })

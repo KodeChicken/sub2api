@@ -84,6 +84,7 @@ func (s *adminServiceImpl) validateSimpleModeGroupAccess(group *Group) error {
 
 func (s *adminServiceImpl) GetGroupModelsListCandidates(ctx context.Context, id int64, platform string) ([]string, error) {
 	platform = strings.TrimSpace(platform)
+	var selectedGroup *Group
 	if id > 0 {
 		group, err := s.groupRepo.GetByIDLite(ctx, id)
 		if err != nil {
@@ -92,6 +93,7 @@ func (s *adminServiceImpl) GetGroupModelsListCandidates(ctx context.Context, id 
 		if platform == "" {
 			platform = group.Platform
 		}
+		selectedGroup = group
 	}
 	if platform == "" {
 		platform = PlatformAnthropic
@@ -116,10 +118,14 @@ func (s *adminServiceImpl) GetGroupModelsListCandidates(ctx context.Context, id 
 			if !isConcreteRequestPlatform(acc.Platform) {
 				continue
 			}
-		} else if acc.Platform != platform {
+		} else if acc.Platform != platform && !(platform == PlatformAnthropic && kiroMixedAccountInGroup(&acc, selectedGroup)) {
 			continue
 		}
-		for model := range acc.GetModelMapping() {
+		mapping := acc.GetModelMapping()
+		if acc.Platform == PlatformKiro {
+			mapping = acc.kiroFiniteModels()
+		}
+		for model := range mapping {
 			model = strings.TrimSpace(model)
 			if model == "" {
 				continue
@@ -300,6 +306,8 @@ func defaultModelsListCandidateIDs(platform string) []string {
 		return DefaultOpenCodeGoModelIDs()
 	case PlatformTypeSafe:
 		return []string{typesafe.JevLatestModel}
+	case PlatformKiro:
+		return []string{}
 	case PlatformComposite:
 		return compositeDefaultModelsListCandidateIDs()
 	default:

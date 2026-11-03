@@ -109,6 +109,34 @@ describe('BulkEditAccountModal', () => {
     )
   })
 
+  it('confirms Kiro mixed risk for explicit group changes without silently enabling the opt-in', async () => {
+    const wrapper = mountModal({ selectedPlatforms: ['kiro'], selectedTypes: ['oauth'] })
+    await wrapper.get('#bulk-edit-groups-enabled').setValue(true)
+    wrapper.findComponent({ name: 'GroupSelector' }).vm.$emit('update:modelValue', [10])
+    await nextTick()
+    vi.mocked(adminAPI.accounts.checkMixedChannelRisk).mockResolvedValue({
+      has_risk: true, details: { group_name: 'Claude', current_platform: 'Kiro', other_platform: 'Anthropic' }
+    } as any)
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(adminAPI.accounts.checkMixedChannelRisk).toHaveBeenCalledWith({ platform: 'kiro', group_ids: [10] })
+    expect(adminAPI.accounts.bulkUpdate).not.toHaveBeenCalled()
+    const dialog = wrapper.findComponent({ name: 'ConfirmDialog' })
+    expect(dialog.props('message')).toBe('admin.accounts.kiro.mixedChannelWarning')
+    dialog.vm.$emit('cancel')
+    await flushPromises()
+    expect(adminAPI.accounts.bulkUpdate).not.toHaveBeenCalled()
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+      group_ids: [10], confirm_mixed_channel_risk: true
+    })
+    expect(vi.mocked(adminAPI.accounts.bulkUpdate).mock.calls[0]?.[1]).not.toHaveProperty('extra')
+    wrapper.unmount()
+  })
+
   it('后端拒绝修改同步账号倍率时展示专用错误', async () => {
     vi.mocked(adminAPI.accounts.bulkUpdate).mockRejectedValueOnce({
       status: 409,

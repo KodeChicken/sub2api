@@ -134,6 +134,15 @@ func (s *KiroOAuthService) Start(ctx context.Context, owner int64, input KiroOAu
 		if err := s.admin.ValidateAccountGroupBindings(ctx, draft.GroupIDs); err != nil {
 			return nil, kiroOAuthError(400, "INVALID_GROUPS")
 		}
+		if draft.Extra["mixed_scheduling"] == true && !draft.ConfirmMixedChannelRisk {
+			if err := s.admin.CheckMixedChannelRisk(ctx, 0, PlatformKiro, draft.GroupIDs); err != nil {
+				var mixed *MixedChannelError
+				if errors.As(err, &mixed) {
+					return nil, kiroOAuthError(409, "MIXED_CHANNEL_RISK")
+				}
+				return nil, err
+			}
+		}
 		session.Draft, session.ProxyID = draft, draft.ProxyID
 	} else {
 		if input.Account != nil || input.AccountID <= 0 || len(input.Settings) != 0 {

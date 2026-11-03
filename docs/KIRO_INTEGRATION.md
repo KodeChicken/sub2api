@@ -150,6 +150,49 @@ Bind the account to a Kiro group, or an explicitly configured composite group,
 and use the existing Sub2API key and public endpoints. No second API key or
 proxy URL is required on the client.
 
+### Existing Anthropic Groups And Claude Code
+
+Kiro is an upstream platform, not a different public Messages protocol.
+A dedicated Kiro group already supports Claude Code through `/v1/messages`.
+To reuse an **existing Anthropic group and its Sub2API key**, enable the Kiro
+account's **Participate in Anthropic groups** switch and explicitly bind it to
+that group. The switch defaults to off for OAuth and API-key accounts.
+Creation, import/manual authorization and editing retain the same setting;
+reauthorization does not change it. Turning it off keeps the stored bindings
+and credentials but removes mixed scheduling eligibility.
+
+Synchronize the Kiro model whitelist or configure concrete public aliases
+before enabling traffic. Empty mappings and wildcard-only mappings do not
+admit Kiro to an Anthropic mixed pool. Exact aliases win; equivalent known
+Claude dot/dash/date spellings resolve to the same native model. Ambiguous
+normalized targets are rejected. This does not infer `latest`, Haiku, Opus or
+any other entitlement. Model discovery, availability diagnosis and the group's
+model-route account picker use the same bounded Kiro eligibility. Group model
+allowlists, channel restrictions, pricing and normal account policies remain
+in force; usage retains the public requested ID and actual upstream ID.
+
+The opt-in applies only to ordinary Anthropic groups with explicit membership,
+including when simple mode uses a shared snapshot pool. It does not add Kiro
+to Gemini/OpenAI groups, ungrouped pools, temporary dispatch or forced
+non-Kiro targets. Composite groups still require their existing Kiro route;
+an explicit Anthropic composite target cannot silently select Kiro. Group-copy
+rules are unchanged. Bulk binding does not automatically enable the switch.
+Snapshot/outbox invalidation covers opt-out, rebinding, unbinding and deletion;
+Anthropic mixed snapshot memoization also observes Kiro account revisions.
+
+Before mixing, the account dialogs require confirmation when another channel
+is present. Kiro history and thinking signatures may be incompatible with
+native Anthropic history: seamless continuation or automatic repair is **not**
+guaranteed. `/v1/messages/count_tokens` is a local estimate, marked with
+`X-Sub2api-Usage-Source: estimate`; it makes no Kiro request.
+
+For Claude Code, use the existing key dialog's Anthropic base URL and auth
+token configuration, and explicitly select available main/background models.
+Advanced deferred-tool search, context-management betas and strict structured
+output are not newly implemented by mixed scheduling. Client settings or
+managed overrides can still request unsupported features; mixing is not a
+claim of full native Anthropic equivalence.
+
 The native quota query displays monthly credits, active trials and unexpired
 bonuses. Unknown quota is not interpreted as zero usage.
 
@@ -197,6 +240,13 @@ transaction-bound receipts, save retry/replay, selected-target reauthorization
 and audit-body omission. SQL mocks and injected protocol responses are unit
 evidence, not actual PostgreSQL/Redis multi-replica integration or an official
 Kiro sign-in.
+
+Mixed-group units additionally exercise real selection from an Anthropic group
+through the Messages handler to injected native Kiro JSON/SSE/tool responses,
+the no-upstream count branch, finite aliases, cross-group/forced isolation,
+snapshot old/new buckets and memo revisions, empty-unbind outbox publication,
+and mounted create/edit/bulk/risk-confirmation/model-route controls. These are
+unit fixtures, not live Claude Code or upstream inference evidence.
 
 Official portal/Builder/enterprise login, account permissions and live
 inference/refresh/quota validation require an authorized Kiro account and

@@ -63,7 +63,8 @@ const OAuthStub = defineComponent({
   template: '<button data-testid="provider-generate" @click="$emit(\'generate-url\')">generate</button>'
 })
 const account = (id = 42, platform = 'kiro') => ({
-  id, platform, type: 'oauth', name: 'Kiro', proxy_id: 8, credentials: { refresh_token: 'old', endpoint: 'cli' }
+  id, platform, type: 'oauth', name: 'Kiro', proxy_id: 8, credentials: { refresh_token: 'old', endpoint: 'cli' },
+  group_ids: [10], extra: { mixed_scheduling: true, retained_setting: 'yes' }
 }) as Account
 const render = (selected = account()) => mount(ReAuthAccountModal, {
   props: { show: true, account: selected },
@@ -79,6 +80,9 @@ describe('active admin Kiro reauthorization modal', () => {
   it('uses only the selected Kiro branch and emits the returned account', async () => {
     const wrapper = render()
     expect(wrapper.getComponent(KiroStub).props('account').id).toBe(42)
+    expect(wrapper.getComponent(KiroStub).props('account')).toMatchObject({
+      group_ids: [10], extra: { mixed_scheduling: true, retained_setting: 'yes' }
+    })
     expect(wrapper.findComponent(OAuthStub).exists()).toBe(false)
     const updated = { ...account(), credentials: { refresh_token: 'fresh', endpoint: 'cli' } }
     mocks.getById.mockResolvedValue(updated)

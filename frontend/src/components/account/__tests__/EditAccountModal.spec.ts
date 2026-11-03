@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import {
   BUILTIN_PLATFORM_CATALOG,
   resetPlatformCatalog,
@@ -27,6 +27,9 @@ vi.mock('@/stores/auth', () => ({
       return authIsSimpleMode.value
     }
   })
+}))
+vi.mock('@/stores', () => ({
+  useAuthStore: () => ({ get isSimpleMode() { return authIsSimpleMode.value } })
 }))
 
 vi.mock('@/api/admin', () => ({
@@ -186,6 +189,51 @@ describe('EditAccountModal Kiro isolation', () => {
     expect(payload.credentials).not.toHaveProperty('refresh_token')
     expect(payload.credentials).not.toHaveProperty('client_secret')
     expect(payload).not.toHaveProperty('upstream_billing_probe_enabled')
+    wrapper.unmount()
+  })
+
+  it('persists opt-out while retaining real Anthropic bindings, extra settings and native credentials', async () => {
+    authIsSimpleMode.value = false
+    const account = { ...buildAccount(), platform: 'kiro', type: 'oauth', group_ids: [10],
+      extra: { mixed_scheduling: true, retained: 'yes' },
+      credentials: { endpoint: 'cli', api_region: 'eu-west-1', model_mapping: { alias: 'native-model' } } }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: true })
+    const wrapper = mountModal(account, true)
+    await wrapper.setProps({ groups: [{ id: 10, name: 'Claude', platform: 'anthropic', status: 'active' }] as any })
+    await wrapper.get('[data-testid="mixed-scheduling"]').setValue(false)
+    expect(wrapper.get<HTMLInputElement>('input[value="10"]').element.checked).toBe(true)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    expect(updateAccountMock.mock.calls[0]?.[1]).toMatchObject({
+      group_ids: [10], extra: { mixed_scheduling: false, retained: 'yes' },
+      credentials: { endpoint: 'cli', api_region: 'eu-west-1', model_mapping: { alias: 'native-model' } }
+    })
+    expect(checkMixedChannelRiskMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('requires Kiro risk confirmation when enabling mixing on existing groups and carries the boolean', async () => {
+    authIsSimpleMode.value = false
+    const account = { ...buildAccount(), platform: 'kiro', type: 'oauth', group_ids: [10],
+      extra: { retained: 'yes' }, credentials: { endpoint: 'cli', model_mapping: { alias: 'native-model' } } }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({
+      has_risk: true, details: { group_name: 'Claude', current_platform: 'Kiro', other_platform: 'Anthropic' }
+    })
+    const wrapper = mountModal(account, true)
+    await wrapper.setProps({ groups: [{ id: 10, name: 'Claude', platform: 'anthropic', status: 'active' }] as any })
+    await wrapper.get('[data-testid="mixed-scheduling"]').setValue(true)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(checkMixedChannelRiskMock).toHaveBeenCalledWith({ platform: 'kiro', group_ids: [10], account_id: 1 })
+    expect(updateAccountMock).not.toHaveBeenCalled()
+    const dialog = wrapper.findComponent({ name: 'ConfirmDialog' })
+    expect(dialog.props('message')).toBe('admin.accounts.kiro.mixedChannelWarning')
+    dialog.vm.$emit('confirm')
+    await flushPromises()
+    expect(updateAccountMock.mock.calls[0]?.[1]).toMatchObject({
+      group_ids: [10], extra: { mixed_scheduling: true, retained: 'yes' }, confirm_mixed_channel_risk: true
+    })
     wrapper.unmount()
   })
 })

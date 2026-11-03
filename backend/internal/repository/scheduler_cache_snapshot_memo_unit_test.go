@@ -749,6 +749,35 @@ func TestSchedulerCacheSnapshotMemoAntigravityRevisionInvalidatesMixedBuckets(t 
 	require.False(t, reloaded, "forced buckets never contain Antigravity accounts")
 }
 
+func TestSchedulerCacheSnapshotMemoKiroRevisionOnlyInvalidatesAnthropicMixed(t *testing.T) {
+	ctx := context.Background()
+	cache, _, recorder := newSchedulerCacheMemoUnit(t, defaultSchedulerSnapshotWriteChunkSize)
+	kiroAccount := memoTestAccountOn(service.PlatformKiro, 251, "kiro")
+	kiroAccount.Extra = map[string]any{"mixed_scheduling": true}
+	anthropic := memoTestAccount(252, "anthropic")
+	gemini := memoTestAccountOn(service.PlatformGemini, 253, "gemini")
+	mixed := service.SchedulerBucket{GroupID: 202, Platform: service.PlatformAnthropic, Mode: service.SchedulerModeMixed}
+	forced := service.SchedulerBucket{GroupID: 202, Platform: service.PlatformAnthropic, Mode: service.SchedulerModeForced}
+	geminiMixed := service.SchedulerBucket{GroupID: 202, Platform: service.PlatformGemini, Mode: service.SchedulerModeMixed}
+	memoPublish(t, cache, mixed, anthropic, kiroAccount)
+	memoPublish(t, cache, forced, anthropic)
+	memoPublish(t, cache, geminiMixed, gemini)
+	for _, bucket := range []service.SchedulerBucket{mixed, forced, geminiMixed} {
+		memoRead(t, cache, bucket)
+	}
+	kiroAccount.Extra["mixed_scheduling"] = false
+	require.NoError(t, cache.SetAccount(ctx, &kiroAccount))
+	got, reloaded := memoReadExpectHit(t, cache, recorder, mixed)
+	require.True(t, reloaded)
+	require.Equal(t, false, got[1].Extra["mixed_scheduling"])
+	for _, bucket := range []service.SchedulerBucket{forced, geminiMixed} {
+		_, reloaded := memoReadExpectHit(t, cache, recorder, bucket)
+		require.False(t, reloaded, bucket.String())
+	}
+	require.NoError(t, cache.DeleteAccount(ctx, kiroAccount.ID))
+	memoRequireMiss(t, cache, mixed)
+}
+
 func TestSchedulerCacheSnapshotMemoGlobalRevisionInvalidatesEveryPlatform(t *testing.T) {
 	ctx := context.Background()
 	buckets := []service.SchedulerBucket{

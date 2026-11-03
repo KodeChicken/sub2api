@@ -610,6 +610,9 @@ func (s *SchedulerSnapshotService) handleBulkAccountEvent(ctx context.Context, p
 		}
 		accountGroupIDs := s.normalizeGroupIDs(account.GroupIDs)
 		switch {
+		case account.Platform == PlatformKiro:
+			addPlatformGroups(PlatformKiro, accountGroupIDs)
+			addPlatformGroups(PlatformAnthropic, accountGroupIDs)
 		case account.Platform != PlatformAntigravity && isConcreteRequestPlatform(account.Platform):
 			addPlatformGroups(account.Platform, accountGroupIDs)
 		case account.Platform == PlatformAntigravity:
@@ -682,6 +685,8 @@ func (s *SchedulerSnapshotService) handleAccountEvent(ctx context.Context, accou
 	}
 	if len(groupIDs) == 0 {
 		groupIDs = account.GroupIDs
+	} else if account.Platform == PlatformKiro {
+		groupIDs = append(append([]int64(nil), groupIDs...), account.GroupIDs...)
 	}
 	return s.rebuildByAccount(ctx, account, groupIDs, "account_change", seen)
 }
@@ -818,6 +823,10 @@ func (s *SchedulerSnapshotService) rebuildByAccount(ctx context.Context, account
 	}
 
 	buckets := s.bucketsForPlatform(account.Platform, groupIDs, seen)
+	if account.Platform == PlatformKiro {
+		// Opt-out must evict previous mixed members too.
+		buckets = append(buckets, s.bucketsForPlatform(PlatformAnthropic, groupIDs, seen)...)
+	}
 	if account.Platform == PlatformAntigravity && account.IsMixedSchedulingEnabled() {
 		buckets = append(buckets, s.bucketsForPlatform(PlatformAnthropic, groupIDs, seen)...)
 		buckets = append(buckets, s.bucketsForPlatform(PlatformGemini, groupIDs, seen)...)
@@ -1479,6 +1488,9 @@ func (s *SchedulerSnapshotService) loadAccountsFromDB(ctx context.Context, bucke
 
 	if useMixed {
 		platforms := []string{bucket.Platform, PlatformAntigravity}
+		if bucket.Platform == PlatformAnthropic {
+			platforms = append(platforms, PlatformKiro)
+		}
 		var accounts []Account
 		var err error
 		if groupID > 0 {
@@ -1495,6 +1507,17 @@ func (s *SchedulerSnapshotService) loadAccountsFromDB(ctx context.Context, bucke
 		for _, acc := range accounts {
 			if acc.Platform == PlatformAntigravity && !acc.IsMixedSchedulingEnabled() {
 				continue
+			}
+			if acc.Platform == PlatformKiro {
+				if !acc.IsKiroMixedSchedulingEnabled() || len(acc.kiroFiniteModels()) == 0 {
+					continue
+				}
+				if groupID > 0 && !accountHasGroupID(&acc, groupID) {
+					continue
+				}
+				if groupID == 0 && len(acc.GroupIDs) == 0 && len(acc.AccountGroups) == 0 {
+					continue
+				}
 			}
 			filtered = append(filtered, acc)
 		}

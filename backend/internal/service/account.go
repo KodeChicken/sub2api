@@ -974,6 +974,15 @@ func (a *Account) isModelMappingSupported(requestedModel string) bool {
 		return true
 	}
 	mapping := a.GetModelMapping()
+	if a.Platform == PlatformKiro {
+		_, matched, err := a.resolveFiniteKiroModel(requestedModel)
+		if err != nil {
+			return false
+		}
+		if matched {
+			return true
+		}
+	}
 	if len(mapping) == 0 {
 		if a.IsOpenAIOAuth() {
 			return isOpenAIOAuthServableModel(requestedModel)
@@ -1000,6 +1009,13 @@ func (a *Account) GetMappedModel(requestedModel string) string {
 // ResolveMappedModel 获取映射后的模型名，并返回是否命中了账号级映射。
 // matched=true 表示命中了精确映射或通配符映射，即使映射结果与原模型名相同。
 func (a *Account) ResolveMappedModel(requestedModel string) (mappedModel string, matched bool) {
+	if a.Platform == PlatformKiro {
+		if target, ok, err := a.resolveFiniteKiroModel(requestedModel); err == nil && ok {
+			return target, true
+		} else if err != nil {
+			return requestedModel, false
+		}
+	}
 	mapping := a.GetModelMapping()
 	if len(mapping) == 0 {
 		return requestedModel, false

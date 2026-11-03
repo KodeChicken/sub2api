@@ -12,12 +12,14 @@ const {
   getUsageSummary,
   getCapacitySummary,
   getLiveCapability,
+  listAccounts,
 } = vi.hoisted(() => ({
   listGroups: vi.fn(),
   getModelAllowlistCandidates: vi.fn(),
   getUsageSummary: vi.fn(),
   getCapacitySummary: vi.fn(),
   getLiveCapability: vi.fn(),
+  listAccounts: vi.fn(),
 }));
 
 vi.mock("@/api/admin", () => ({
@@ -36,7 +38,7 @@ vi.mock("@/api/admin", () => ({
       updateSortOrder: vi.fn(),
     },
     accounts: {
-      list: vi.fn(),
+      list: listAccounts,
       getById: vi.fn(),
     },
   },
@@ -287,6 +289,43 @@ describe("GroupsView Codex manifest binding", () => {
       }),
     );
 
+    wrapper.unmount();
+  });
+
+  it("offers only explicitly bound opted-in finite-model Kiro accounts in the mounted Anthropic route picker", async () => {
+    listGroups.mockResolvedValue({
+      items: [{ ...sourceGroup, platform: "anthropic", model_routing_enabled: true, model_routing: { "claude-*": [] } }],
+      total: 1, page: 1, page_size: 20, pages: 1,
+    });
+    const candidate = {
+      id: 17, name: "Kiro mixed", platform: "kiro", type: "oauth", group_ids: [42], status: "active", schedulable: true,
+      extra: { mixed_scheduling: true }, credentials: { model_mapping: { "claude-sonnet-4.6": "claude-sonnet-4.6" } },
+    };
+    listAccounts.mockImplementation(async (_page, _size, filter) => ({
+      items: filter.platform === "anthropic" ? [{ id: 1, name: "Native Claude" }] : [
+        candidate,
+        { ...candidate, id: 18, name: "Kiro off", extra: {} },
+        { ...candidate, id: 19, name: "Kiro other group", group_ids: [43] },
+        { ...candidate, id: 20, name: "Kiro wildcard", credentials: { model_mapping: { "*": "claude-sonnet-4.6" } } },
+      ],
+    }));
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.findAll("button").find(button => button.text().includes("common.edit"))!.trigger("click");
+    await flushPromises();
+    const search = wrapper.get('input[placeholder="admin.groups.modelRouting.searchAccountPlaceholder"]');
+    await search.trigger("focus");
+    await search.setValue("Kiro");
+    await new Promise(resolve => setTimeout(resolve, 350));
+    await flushPromises();
+    expect(listAccounts).toHaveBeenCalledWith(1, 20, {
+      search: "Kiro", platform: "kiro", group: "42", status: "active",
+    }, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(wrapper.text()).toContain("Kiro mixed");
+    expect(wrapper.text()).toContain("Native Claude");
+    expect(wrapper.text()).not.toContain("Kiro off");
+    expect(wrapper.text()).not.toContain("Kiro other group");
+    expect(wrapper.text()).not.toContain("Kiro wildcard");
     wrapper.unmount();
   });
 });

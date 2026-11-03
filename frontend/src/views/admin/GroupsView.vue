@@ -4704,6 +4704,7 @@ import type { ChannelModelPricing } from "@/api/admin/channels";
 import { VueDraggable } from "vue-draggable-plus";
 import { createStableObjectKeyResolver } from "@/utils/stableObjectKey";
 import { extractApiErrorMessage } from "@/utils/apiError";
+import { isKiroMixedCandidate } from "@/utils/kiroCredentials";
 import { useKeyedDebouncedSearch } from "@/composables/useKeyedDebouncedSearch";
 import { getPersistedPageSize } from "@/composables/usePersistedPageSize";
 import {
@@ -5565,7 +5566,7 @@ const clearAllAccountSearchState = () => {
 
 const accountSearchRunner = useKeyedDebouncedSearch<SimpleAccount[]>({
   delay: 300,
-  search: async (keyword, { signal }) => {
+  search: async (keyword, { signal, key }) => {
     const res = await adminAPI.accounts.list(
       1,
       20,
@@ -5575,7 +5576,15 @@ const accountSearchRunner = useKeyedDebouncedSearch<SimpleAccount[]>({
       },
       { signal },
     );
-    return res.items.map((account) => ({ id: account.id, name: account.name }));
+    const groupID = key.startsWith("edit-") ? editingGroup.value?.id : undefined;
+    if (!groupID || editForm.platform !== "anthropic") {
+      return res.items.map((account) => ({ id: account.id, name: account.name }));
+    }
+    const kiro = await adminAPI.accounts.list(1, 20, {
+      search: keyword, platform: "kiro", group: String(groupID), status: "active",
+    }, { signal });
+    return [...res.items, ...kiro.items.filter((account) => isKiroMixedCandidate(account, groupID))]
+      .map((account) => ({ id: account.id, name: account.name }));
   },
   onSuccess: (key, result) => {
     accountSearchResults.value[key] = result;

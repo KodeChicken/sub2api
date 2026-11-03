@@ -4,6 +4,9 @@ export default {
       description: 'Manage AI platform accounts and credentials',
       createAccount: 'Create Account',
       kiro: {
+        mixedScheduling: 'Participate in Anthropic Groups',
+        mixedSchedulingTooltip: 'Off by default. Only explicitly bound Anthropic groups and finite configured model aliases can use this Kiro account. Synchronize its available models after sign-in.',
+        mixedChannelWarning: 'Group "{groupName}" mixes {currentPlatform} and {otherPlatform} accounts. Kiro history and thinking signatures may be incompatible. Seamless continuation or automatic repair is not guaranteed. Continue?',
         signInTitle: 'Kiro Authorization',
         advanced: 'Advanced Settings',
         signInType: 'Sign-in Type',
@@ -27,6 +30,7 @@ export default {
           denied: 'Authorization denied', expired: 'Authorization expired', failed: 'Authorization failed'
         },
         errors: {
+          MIXED_CHANNEL_RISK: 'Return to account settings and confirm the Kiro mixed-channel warning before authorizing.',
           REQUEST_FAILED: 'The request failed. Retry or restart authorization.',
           CANCEL_FAILED: 'Cancellation could not be confirmed. Retry before starting another authorization.',
           INVALID_CREDENTIALS: 'Provide a complete valid Kiro credential document.',

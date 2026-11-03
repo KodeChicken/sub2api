@@ -27,7 +27,15 @@ import (
 
 type kiroOAuthTestAdmin struct {
 	AdminService
-	create func(context.Context, *CreateAccountInput) (*Account, error)
+	create     func(context.Context, *CreateAccountInput) (*Account, error)
+	checkMixed func(context.Context, int64, string, []int64) error
+}
+
+func (a *kiroOAuthTestAdmin) CheckMixedChannelRisk(ctx context.Context, id int64, platform string, groups []int64) error {
+	if a.checkMixed != nil {
+		return a.checkMixed(ctx, id, platform, groups)
+	}
+	return nil
 }
 
 func (*kiroOAuthTestAdmin) ValidateAccountGroupBindings(context.Context, []int64) error {
@@ -85,6 +93,40 @@ func kiroOAuthGuard(mock sqlmock.Sqlmock, session *kiroOAuthSession, status, bod
 		WithArgs(kiroOAuthReceiptScope, kiroOAuthReceiptKey(session.OwnerID, session.ID)).
 		WillReturnRows(sqlmock.NewRows([]string{"status", "response_body", "request_fingerprint"}).
 			AddRow(status, body, session.Binding))
+}
+
+func TestKiroOAuthMixedRiskCheckedBeforeStartAndConfirmationBound(t *testing.T) {
+	s, _, _ := newKiroOAuthTest(t)
+	checks, upstream := 0, 0
+	s.admin = &kiroOAuthTestAdmin{checkMixed: func(_ context.Context, id int64, platform string, groups []int64) error {
+		checks++
+		require.Zero(t, id)
+		require.Equal(t, PlatformKiro, platform)
+		require.Equal(t, []int64{5}, groups)
+		return &MixedChannelError{GroupID: 5, CurrentPlatform: "Kiro", OtherPlatform: "Anthropic"}
+	}}
+	s.upstream = &kiroTestTransport{call: func(*http.Request) (*http.Response, error) {
+		upstream++
+		return nil, errors.New("unexpected upstream")
+	}}
+	input := kiroOAuthCreateInput("builder_id")
+	input.Account.Extra = map[string]any{"mixed_scheduling": true}
+	_, err := s.Start(context.Background(), 7, input)
+	require.Equal(t, 409, infraerrors.Code(err))
+	require.Equal(t, "KIRO_OAUTH_MIXED_CHANNEL_RISK", infraerrors.Reason(err))
+	require.Equal(t, 1, checks)
+	require.Zero(t, upstream)
+	input.AuthType = "social"
+	input.Account.ConfirmMixedChannelRisk = true
+	result, err := s.Start(context.Background(), 7, input)
+	require.NoError(t, err)
+	data, _, err := s.sessions.Read(context.Background(), result.SessionID)
+	require.NoError(t, err)
+	var session kiroOAuthSession
+	require.NoError(t, json.Unmarshal(data, &session))
+	require.True(t, session.Draft.ConfirmMixedChannelRisk)
+	require.Equal(t, true, session.Draft.Extra["mixed_scheduling"])
+	require.Equal(t, 1, checks)
 }
 
 func TestKiroOAuthSocialStagesOnceAndValidatesState(t *testing.T) {

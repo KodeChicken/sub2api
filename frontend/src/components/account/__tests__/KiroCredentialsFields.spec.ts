@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import KiroCredentialsFields from '../KiroCredentialsFields.vue'
-import { buildKiroCredentials, kiroAccountType, parseKiroCredentialFile } from '@/utils/kiroCredentials'
+import { buildKiroCredentials, isKiroMixedCandidate, kiroAccountType, parseKiroCredentialFile } from '@/utils/kiroCredentials'
 
 vi.mock('vue-i18n', async () => ({
   ...await vi.importActual<typeof import('vue-i18n')>('vue-i18n'),
@@ -9,6 +9,18 @@ vi.mock('vue-i18n', async () => ({
 }))
 
 describe('Kiro credentials', () => {
+  it('limits route candidates to opted-in members with finite valid mappings', () => {
+    const account = { platform: 'kiro', type: 'oauth', group_ids: [10], status: 'active', schedulable: true,
+      extra: { mixed_scheduling: true }, credentials: { model_mapping: { alias: 'claude-sonnet-4.6' } } } as any
+    expect(isKiroMixedCandidate(account, 10)).toBe(true)
+    expect(isKiroMixedCandidate(account, 11)).toBe(false)
+    expect(isKiroMixedCandidate({ ...account, platform: 'antigravity' }, 10)).toBe(false)
+    expect(isKiroMixedCandidate({ ...account, extra: {} }, 10)).toBe(false)
+    expect(isKiroMixedCandidate({ ...account, schedulable: false }, 10)).toBe(false)
+    for (const mapping of [{ '*': 'claude-sonnet-4.6' }, { alias: '*' }, { alias: '' }, { alias: 'bad\nmodel' }, { alias: 'x'.repeat(257) }]) {
+      expect(isKiroMixedCandidate({ ...account, credentials: { model_mapping: mapping } }, 10)).toBe(false)
+    }
+  })
   it('normalizes native exports without mutating them', () => {
     const credentials = parseKiroCredentialFile(JSON.stringify([{
       authMethod: 'BuilderId', refreshToken: 'refresh', clientId: 'client', clientSecret: 'secret', region: 'eu-west-1'

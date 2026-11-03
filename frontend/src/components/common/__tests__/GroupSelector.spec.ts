@@ -41,3 +41,42 @@ describe('GroupSelector simple-mode binding policy', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([[[1]]])
   })
 })
+
+describe('GroupSelector Kiro mixing', () => {
+  const allGroups = [...groups,
+    { id: 3, name: 'Kiro', platform: 'kiro', status: 'active' },
+    { id: 4, name: 'Gemini', platform: 'gemini', status: 'active' },
+    { id: 5, name: 'Codex', platform: 'openai', status: 'active' }
+  ]
+  it('requires opt-in for new Anthropic bindings without widening to Gemini or OpenAI', async () => {
+    const wrapper = mountSelector()
+    await wrapper.setProps({ groups: allGroups, platform: 'kiro', mixedScheduling: false })
+    expect(wrapper.text()).toContain('Kiro')
+    expect(wrapper.text()).not.toContain('Basic')
+    await wrapper.setProps({ mixedScheduling: true })
+    expect(wrapper.text()).toContain('Basic')
+    expect(wrapper.text()).not.toContain('Gemini')
+    expect(wrapper.text()).not.toContain('Codex')
+  })
+
+  it('keeps selected Anthropic bindings visible on opt-out and allows unbinding', async () => {
+    const wrapper = mountSelector([1])
+    await wrapper.setProps({ groups: allGroups, platform: 'kiro', mixedScheduling: false })
+    expect(wrapper.get<HTMLInputElement>('input[value="1"]').element.checked).toBe(true)
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    await wrapper.get('input[value="1"]').setValue(false)
+    expect(wrapper.emitted('update:modelValue')).toEqual([[[]]])
+  })
+
+  it('preserves Antigravity Gemini eligibility and native provider isolation', async () => {
+    const wrapper = mountSelector()
+    await wrapper.setProps({ groups: allGroups, platform: 'antigravity', mixedScheduling: true })
+    expect(wrapper.text()).toContain('Basic')
+    expect(wrapper.text()).toContain('Gemini')
+    expect(wrapper.text()).not.toContain('Kiro')
+    await wrapper.setProps({ platform: 'anthropic' })
+    expect(wrapper.text()).toContain('Basic')
+    expect(wrapper.text()).not.toContain('Kiro')
+    expect(wrapper.text()).not.toContain('Gemini')
+  })
+})

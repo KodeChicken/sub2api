@@ -1,4 +1,16 @@
-import type { AccountType } from '@/types'
+import type { AccountListItem, AccountType } from '@/types'
+
+export function isKiroMixedCandidate(account: AccountListItem, groupId: number): boolean {
+  if (account.platform !== 'kiro' || account.extra?.mixed_scheduling !== true ||
+      account.status !== 'active' || !account.schedulable ||
+      !account.group_ids?.includes(groupId) || !['oauth', 'apikey'].includes(account.type)) return false
+  const mapping = account.credentials?.model_mapping
+  if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) return false
+  const concrete = (value: unknown): value is string => typeof value === 'string' &&
+    value.length > 0 && value.length <= 256 && value.trim() === value &&
+    !value.includes('*') && !Array.from(value).some(char => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+  return Object.entries(mapping).some(([key, value]) => concrete(key) && concrete(value))
+}
 
 const aliases: Record<string, string> = {
   accessToken: 'access_token',

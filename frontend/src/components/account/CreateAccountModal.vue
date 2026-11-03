@@ -3716,16 +3716,16 @@
       </div>
 
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
-        <!-- Mixed Scheduling (only for antigravity accounts) -->
-        <div v-if="form.platform === 'antigravity'" class="flex items-center gap-2">
+        <div v-if="form.platform === 'antigravity' || form.platform === 'kiro'" class="flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               v-model="mixedScheduling"
+              data-testid="mixed-scheduling"
               class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
             />
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {{ t('admin.accounts.mixedScheduling') }}
+              {{ t(form.platform === 'kiro' ? 'admin.accounts.kiro.mixedScheduling' : 'admin.accounts.mixedScheduling') }}
             </span>
           </label>
           <div class="group relative">
@@ -3738,7 +3738,7 @@
             <div
               class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded bg-gray-900 px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 dark:bg-gray-700"
             >
-              {{ t('admin.accounts.mixedSchedulingTooltip') }}
+              {{ t(form.platform === 'kiro' ? 'admin.accounts.kiro.mixedSchedulingTooltip' : 'admin.accounts.mixedSchedulingTooltip') }}
               <div
                 class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
               ></div>
@@ -4989,7 +4989,9 @@ const isOpenAIModelRestrictionDisabled = computed(() =>
 
 const mixedChannelWarningMessageText = computed(() => {
   if (mixedChannelWarningDetails.value) {
-    return t('admin.accounts.mixedChannelWarning', mixedChannelWarningDetails.value)
+    const details = mixedChannelWarningDetails.value
+    return t(details.currentPlatform === 'Kiro' || details.otherPlatform === 'Kiro'
+      ? 'admin.accounts.kiro.mixedChannelWarning' : 'admin.accounts.mixedChannelWarning', details)
   }
   return mixedChannelWarningRawMessage.value
 })
@@ -5071,6 +5073,9 @@ const form = reactive({
   group_ids: [] as number[],
   expires_at: null as number | null
 })
+watch(() => form.platform === 'kiro' ? [form.group_ids.slice(), mixedScheduling.value] : null, () => {
+  antigravityMixedChannelConfirmed.value = false
+})
 const kiroCredentials = ref<Record<string, unknown>>(normalizeKiroCredentials({}))
 const kiroAccountMode = ref<'oauth' | 'apikey'>('oauth')
 const kiroFlowRef = ref<{ saving: boolean } | null>(null)
@@ -5079,7 +5084,8 @@ const kiroAccountDraft = computed<KiroOAuthAccount>(() => ({
   name: form.name, notes: form.notes, proxy_id: form.proxy_id, concurrency: form.concurrency,
   priority: form.priority, rate_multiplier: form.rate_multiplier, load_factor: form.load_factor,
   group_ids: form.group_ids, expires_at: form.expires_at, auto_pause_on_expired: autoPauseOnExpired.value,
-  extra: withUpstreamRequestIdHeader(undefined)
+  extra: withUpstreamRequestIdHeader(mixedScheduling.value ? { mixed_scheduling: true } : undefined),
+  confirm_mixed_channel_risk: antigravityMixedChannelConfirmed.value
 }))
 
 // Helper to check if current type needs OAuth flow
@@ -5190,7 +5196,8 @@ watch(
 // Reset platform-specific settings when platform changes
 watch(
   () => form.platform,
-  (newPlatform) => {
+  (newPlatform, oldPlatform) => {
+    if (newPlatform === 'kiro' || oldPlatform === 'kiro') mixedScheduling.value = false
     // Reset base URL based on platform
     if (isMultiProtocolApiKeyPlatform(newPlatform)) {
       const mode = newPlatform === 'opencode_go' ? openCodeAccountMode.value : accountMode.value
@@ -5534,7 +5541,7 @@ const splitTempUnschedKeywords = (value: string) => {
     .filter((item) => item.length > 0)
 }
 
-const needsMixedChannelCheck = (platform: AccountPlatform) => platform === 'antigravity' || platform === 'anthropic'
+const needsMixedChannelCheck = (platform: AccountPlatform) => platform === 'antigravity' || platform === 'anthropic' || platform === 'kiro'
 
 const buildMixedChannelDetails = (resp?: CheckMixedChannelResponse) => {
   const details = resp?.details
@@ -5583,21 +5590,25 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
   if (!needsMixedChannelCheck(form.platform)) {
     return true
   }
+  if (form.platform === 'kiro' && !mixedScheduling.value) return true
   if (antigravityMixedChannelConfirmed.value) {
     return true
   }
 
+  const kiroBinding = form.platform === 'kiro' ? JSON.stringify(form.group_ids) : null
   try {
     const result = await adminAPI.accounts.checkMixedChannelRisk({
       platform: form.platform,
       group_ids: form.group_ids
     })
+    if (kiroBinding !== null && (form.platform !== 'kiro' || JSON.stringify(form.group_ids) !== kiroBinding || !mixedScheduling.value)) return false
     if (!result.has_risk) {
       return true
     }
     openMixedChannelDialog({
       response: result,
       onConfirm: async () => {
+        if (kiroBinding !== null && (form.platform !== 'kiro' || JSON.stringify(form.group_ids) !== kiroBinding || !mixedScheduling.value)) return
         antigravityMixedChannelConfirmed.value = true
         await onConfirm()
       }
@@ -5784,6 +5795,7 @@ const resetForm = () => {
   grokOAuth.resetState()
   oauthFlowRef.value?.reset()
   antigravityMixedChannelConfirmed.value = false
+  mixedScheduling.value = false
   upstreamModelsPreviewed.value = false
   clearMixedChannelDialog()
 }
@@ -6004,6 +6016,7 @@ const handleSubmit = async () => {
       appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
       return
     }
+    if (!await ensureAntigravityMixedChannelConfirmed(handleSubmit)) return
     if (kiroAccountMode.value === 'oauth') {
       const configuration: Record<string, unknown> = {}
       if (!applyTempUnschedConfig(configuration)) return
@@ -6011,7 +6024,8 @@ const handleSubmit = async () => {
       step.value = 2
       return
     }
-    await createAccountAndFinish('kiro', 'apikey', buildKiroCredentials(kiroCredentials.value))
+    await createAccountAndFinish('kiro', 'apikey', buildKiroCredentials(kiroCredentials.value),
+      mixedScheduling.value ? { mixed_scheduling: true } : undefined)
     return
   }
   // For OAuth-based type, handle OAuth flow (goes to step 2)

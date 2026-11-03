@@ -64,6 +64,59 @@ func TestKiroRefreshCASPropagatesDatabaseFailure(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestKiroMixedEmptyUnbindPublishesOldGroupsOnlyAfterCommit(t *testing.T) {
+	for _, failCommit := range []bool{false, true} {
+		t.Run(map[bool]string{false: "committed", true: "failed"}[failCommit], func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer db.Close()
+			client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+			repo := &accountRepository{client: client, sql: db}
+			mock.ExpectQuery(`SELECT .* FROM "account_groups"`).
+				WithArgs(int64(42)).
+				WillReturnRows(sqlmock.NewRows([]string{"account_id", "group_id", "priority", "created_at"}).
+					AddRow(42, 10, 1, time.Now()))
+			mock.ExpectBegin()
+			mock.ExpectExec(`DELETE FROM "account_groups"`).WithArgs(int64(42)).WillReturnResult(sqlmock.NewResult(0, 1))
+			if failCommit {
+				mock.ExpectCommit().WillReturnError(errors.New("commit failed"))
+			} else {
+				mock.ExpectCommit()
+				mock.ExpectExec("INSERT INTO scheduler_outbox").
+					WithArgs(service.SchedulerOutboxEventAccountGroupsChanged, int64(42), nil, []byte(`{"group_ids":[10]}`)).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			}
+			err = repo.BindGroups(context.Background(), 42, []int64{})
+			if failCommit {
+				require.ErrorContains(t, err, "commit failed")
+			} else {
+				require.NoError(t, err)
+			}
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestKiroMixedNonemptyBindKeepsExistingSuccessPath(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	client := dbent.NewClient(dbent.Driver(entsql.OpenDB(dialect.Postgres, db)))
+	repo := &accountRepository{client: client, sql: db}
+	mock.ExpectQuery(`SELECT .* FROM "account_groups"`).WithArgs(int64(42)).
+		WillReturnRows(sqlmock.NewRows([]string{"account_id", "group_id", "priority", "created_at"}).AddRow(42, 9, 1, time.Now()))
+	mock.ExpectBegin()
+	mock.ExpectQuery("account_group_live_group_lock").WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(10))
+	mock.ExpectExec(`DELETE FROM "account_groups"`).WithArgs(int64(42)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO "account_groups"`).WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	mock.ExpectExec("INSERT INTO scheduler_outbox").
+		WithArgs(service.SchedulerOutboxEventAccountGroupsChanged, int64(42), nil, []byte(`{"group_ids":[9,10]}`)).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	require.NoError(t, repo.BindGroups(context.Background(), 42, []int64{10}))
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestKiroOAuthReauthUsesTransactionScopedCASAndOutbox(t *testing.T) {
 	repo := &accountRepository{}
 	applied, err := repo.ApplyKiroOAuthReauthorization(context.Background(), 42, nil, nil, nil)

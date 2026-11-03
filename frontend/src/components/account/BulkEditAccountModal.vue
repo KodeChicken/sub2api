@@ -2163,7 +2163,7 @@ const canPreCheck = () =>
   enableGroups.value &&
   groupIds.value.length > 0 &&
   targetSelectedPlatforms.value.length === 1 &&
-  (targetSelectedPlatforms.value[0] === 'antigravity' || targetSelectedPlatforms.value[0] === 'anthropic')
+  ['antigravity', 'anthropic', 'kiro'].includes(targetSelectedPlatforms.value[0] || '')
 
 const handleClose = () => {
   showMixedChannelWarning.value = false
@@ -2186,7 +2186,12 @@ const preCheckMixedChannelRisk = async (built: Record<string, unknown>): Promise
     if (!result.has_risk) return true
 
     pendingUpdatesForConfirm.value = built
-    mixedChannelWarningMessage.value = result.message || t('admin.accounts.bulkEdit.failed')
+    const details = result.details
+    mixedChannelWarningMessage.value = details && (details.current_platform === 'Kiro' || details.other_platform === 'Kiro')
+      ? t('admin.accounts.kiro.mixedChannelWarning', {
+          groupName: details.group_name, currentPlatform: details.current_platform, otherPlatform: details.other_platform
+        })
+      : result.message || t('admin.accounts.bulkEdit.failed')
     showMixedChannelWarning.value = true
     return false
   } catch (error: any) {

@@ -17,6 +17,7 @@ export interface KiroOAuthAccount {
   expires_at?: number | null
   auto_pause_on_expired?: boolean
   extra?: Record<string, unknown>
+  confirm_mixed_channel_risk?: boolean
 }
 
 export interface KiroOAuthStart {

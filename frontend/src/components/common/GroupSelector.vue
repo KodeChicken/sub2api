@@ -71,7 +71,7 @@ interface Props {
   modelValue: number[]
   groups: (Group & { account_count?: number })[]
   platform?: GroupPlatform // Optional platform filter
-  mixedScheduling?: boolean // For antigravity accounts: allow anthropic/gemini groups
+  mixedScheduling?: boolean
   searchable?: boolean | 'auto'
 }
 
@@ -100,6 +100,9 @@ const filteredGroups = computed(() => {
       result = result.filter(
         (g) => g.platform === 'antigravity' || g.platform === 'anthropic' || g.platform === 'gemini' || g.platform === 'composite'
       )
+    } else if (props.platform === 'kiro') {
+      result = result.filter((g) => g.platform === 'kiro' || g.platform === 'composite' ||
+        (g.platform === 'anthropic' && (props.mixedScheduling || props.modelValue.includes(g.id))))
     } else {
       // 默认：只能选择同 platform 的分组；composite 分组可接收任意具体平台账号
       result = result.filter((g) => g.platform === props.platform || g.platform === 'composite')

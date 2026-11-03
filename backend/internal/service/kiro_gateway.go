@@ -113,7 +113,13 @@ func (s *GatewayService) forwardKiro(ctx context.Context, c *gin.Context, accoun
 	if err != nil {
 		return nil, writeKiroGatewayError(c, protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
 	}
-	request.request.Model = account.GetMappedModel(request.request.Model)
+	if _, _, err := account.resolveFiniteKiroModel(request.request.Model); err != nil {
+		return nil, writeKiroGatewayError(c, protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
+	}
+	request.request.Model, err = kiro.ModelID(account.GetMappedModel(request.request.Model))
+	if err != nil {
+		return nil, writeKiroGatewayError(c, protocol, http.StatusBadRequest, "invalid_request_error", err.Error())
+	}
 	beginUpstreamResponseModelObservation(c)
 	return s.kiroService.forward(ctx, c, account, request, parsed)
 }

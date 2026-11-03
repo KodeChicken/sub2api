@@ -77,6 +77,11 @@ func (s *GatewayService) DiagnoseModelAvailabilityForPlatform(
 	if useMixed {
 		platforms = append(platforms, PlatformAntigravity)
 	}
+	kiroGroup := s.kiroMixedRequestGroup(ctx, groupID, platform)
+	if kiroGroup != nil {
+		platforms = append(platforms, PlatformKiro)
+		ctx = s.withGroupContext(ctx, kiroGroup)
+	}
 
 	queryGroupID := groupID
 	includeGrouped := false
@@ -101,6 +106,10 @@ func (s *GatewayService) DiagnoseModelAvailabilityForPlatform(
 
 	diag := ModelAvailabilityDiagnosis{}
 	for i := range accounts {
+		if accounts[i].Platform == PlatformKiro && platform != PlatformKiro &&
+			!kiroMixedRequestAllowed(ctx, &accounts[i], kiroGroup, "") {
+			continue
+		}
 		if useMixed && accounts[i].Platform == PlatformAntigravity && !accounts[i].IsMixedSchedulingEnabled() {
 			continue
 		}

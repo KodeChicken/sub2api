@@ -1409,8 +1409,11 @@ func mixedListingModelAllowed(groupPlatform, model string) bool {
 }
 
 func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64, platform string) []string {
+	kiroGroup := s.kiroMixedRequestGroup(ctx, groupID, platform)
+	// Mixed Kiro eligibility is read fresh; the legacy TTL cache has no cross-replica revision.
+	cacheable := kiroGroup == nil
 	cacheKey := modelsListCacheKey(groupID, platform)
-	if s.modelsListCache != nil {
+	if cacheable && s.modelsListCache != nil {
 		if cached, found := s.modelsListCache.Get(cacheKey); found {
 			if models, ok := cached.([]string); ok {
 				modelsListCacheHitTotal.Add(1)
@@ -1439,7 +1442,8 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 	if platform != "" {
 		filtered := make([]Account, 0)
 		for _, acc := range accounts {
-			if acc.Platform == platform || mixedListingAccountAllowed(platform, &acc) {
+			if acc.Platform == platform || mixedListingAccountAllowed(platform, &acc) ||
+				kiroMixedRequestAllowed(ctx, &acc, kiroGroup, "") {
 				filtered = append(filtered, acc)
 			}
 		}
@@ -1461,11 +1465,15 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 		}
 
 		mapping := acc.GetModelMapping()
+		isMixedKiro := acc.Platform == PlatformKiro && platform == PlatformAnthropic
+		if isMixedKiro {
+			mapping = acc.kiroFiniteModels()
+		}
 		for model := range mapping {
 			// Accounts pulled in through mixed scheduling only contribute the
 			// models that belong to the listing platform (e.g. an antigravity
 			// account's claude-* mappings must not surface on a gemini group).
-			if platform != "" && acc.Platform != platform && !mixedListingModelAllowed(platform, model) {
+			if platform != "" && acc.Platform != platform && !isMixedKiro && !mixedListingModelAllowed(platform, model) {
 				continue
 			}
 			modelSet[model] = struct{}{}
@@ -1481,7 +1489,7 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 		}
 	}
 	if !hasAnyMapping {
-		if s.modelsListCache != nil {
+		if cacheable && s.modelsListCache != nil {
 			s.modelsListCache.Set(cacheKey, []string(nil), s.modelsListCacheTTL)
 			modelsListCacheStoreTotal.Add(1)
 		}
@@ -1505,7 +1513,7 @@ func (s *GatewayService) GetAvailableModels(ctx context.Context, groupID *int64,
 		}
 	}
 
-	if s.modelsListCache != nil {
+	if cacheable && s.modelsListCache != nil {
 		s.modelsListCache.Set(cacheKey, cloneStringSlice(models), s.modelsListCacheTTL)
 		modelsListCacheStoreTotal.Add(1)
 	}

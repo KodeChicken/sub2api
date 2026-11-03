@@ -15,6 +15,8 @@ const {
   importCodexSessionMock,
   createOpenAICodexPATMock,
   authIsSimpleMode,
+  checkMixedChannelRiskMock,
+  kiroStartMock,
 } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
   probeUpstreamBillingMock: vi.fn(),
@@ -23,6 +25,8 @@ const {
   importCodexSessionMock: vi.fn(),
   createOpenAICodexPATMock: vi.fn(),
   authIsSimpleMode: { value: true },
+  checkMixedChannelRiskMock: vi.fn().mockResolvedValue({ has_risk: false }),
+  kiroStartMock: vi.fn(),
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -40,6 +44,10 @@ vi.mock('@/stores/auth', () => ({
     },
   }),
 }))
+vi.mock('@/stores', () => ({
+  useAuthStore: () => ({ get isSimpleMode() { return authIsSimpleMode.value } })
+}))
+vi.mock('@/api/admin/kiro', () => ({ kiroAPI: { start: kiroStartMock, cancel: vi.fn().mockResolvedValue({}) } }))
 
 vi.mock('@/api/admin', () => ({
   adminAPI: {
@@ -47,7 +55,7 @@ vi.mock('@/api/admin', () => ({
       create: createAccountMock,
       probeUpstreamBilling: probeUpstreamBillingMock,
       syncUpstreamModels: syncUpstreamModelsMock,
-      checkMixedChannelRisk: vi.fn().mockResolvedValue({ has_risk: false }),
+      checkMixedChannelRisk: checkMixedChannelRiskMock,
       importCodexSession: importCodexSessionMock,
       createOpenAICodexPAT: createOpenAICodexPATMock,
     },
@@ -145,21 +153,21 @@ const ModelWhitelistSelectorStub = defineComponent({
   >models</button>`,
 })
 
-function mountModal(groups: any[] = []) {
+function mountModal(groups: any[] = [], connectedKiro = false) {
   return mount(CreateAccountModal, {
     props: { show: true, proxies: [], groups },
     global: {
       stubs: {
         BaseDialog: BaseDialogStub,
         OAuthAuthorizationFlow: OAuthAuthorizationFlowStub,
-        KiroAuthorizationFlow: KiroAuthorizationFlowStub,
+        KiroAuthorizationFlow: connectedKiro ? false : KiroAuthorizationFlowStub,
         ConfirmDialog: true,
         Select: true,
         Icon: true,
         PlatformIcon: true,
         ProxySelector: true,
         ProxyAdBanner: true,
-        GroupSelector: GroupSelectorStub,
+        GroupSelector: connectedKiro ? false : GroupSelectorStub,
         ModelWhitelistSelector: ModelWhitelistSelectorStub,
         QuotaLimitCard: true,
       },
@@ -210,6 +218,8 @@ async function openCodexImportStep(toggleClicks = 0) {
 describe('CreateAccountModal OpenAI long-context billing', () => {
   beforeEach(() => {
     authIsSimpleMode.value = true
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    kiroStartMock.mockReset().mockResolvedValue({ session_id: 's', status: 'waiting', auth_type: 'social', auth_url: 'https://app.kiro.dev/signin' })
     createAccountMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'apikey' })
     probeUpstreamBillingMock.mockReset().mockResolvedValue({})
     syncUpstreamModelsMock.mockReset().mockResolvedValue({ models: [], metadata: {} })
@@ -286,6 +296,78 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     })
     expect(wrapper.findComponent(KiroAuthorizationFlowStub).exists()).toBe(false)
     expect(probeUpstreamBillingMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('mounts real group controls and checks risk before OAuth starts, with cancellation and confirmed draft propagation', async () => {
+    authIsSimpleMode.value = false
+    const wrapper = mountModal([
+      { id: 1, name: 'Claude', platform: 'anthropic', status: 'active' },
+      { id: 2, name: 'Gemini', platform: 'gemini', status: 'active' },
+    ], true)
+    await wrapper.get('[data-testid="platform-button-kiro"]').trigger('click')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Kiro mixed')
+    expect(wrapper.find('input[value="1"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="mixed-scheduling"]').setValue(true)
+    await wrapper.get('input[value="1"]').setValue(true)
+    expect(wrapper.find('input[value="2"]').exists()).toBe(false)
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: true, details: { group_name: 'Claude', current_platform: 'Kiro', other_platform: 'Anthropic' } })
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(checkMixedChannelRiskMock).toHaveBeenCalledWith({ platform: 'kiro', group_ids: [1] })
+    const confirmation = wrapper.findComponent({ name: 'ConfirmDialog' })
+    expect(confirmation.props('message')).toBe('admin.accounts.kiro.mixedChannelWarning')
+    expect(kiroStartMock).not.toHaveBeenCalled()
+    confirmation.vm.$emit('cancel')
+    await flushPromises()
+    expect(wrapper.find('input[value="signin"]').exists()).toBe(false)
+    expect(kiroStartMock).not.toHaveBeenCalled()
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    confirmation.vm.$emit('confirm')
+    await flushPromises()
+    const generate = wrapper.findAll('button').find(button => button.text().includes('generateAuthUrl'))!
+    await generate.trigger('click')
+    await flushPromises()
+    expect(kiroStartMock.mock.calls[0]?.[0]?.account).toMatchObject({
+      group_ids: [1], extra: { mixed_scheduling: true }, confirm_mixed_channel_risk: true
+    })
+    wrapper.unmount()
+  })
+
+  it('carries Kiro opt-in through API-key create without enabling another provider', async () => {
+    const wrapper = mountModal()
+    await wrapper.get('[data-testid="platform-button-kiro"]').trigger('click')
+    await wrapper.get('[data-testid="mixed-scheduling"]').setValue(true)
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Kiro key mixed')
+    await wrapper.get('input[name="kiro-account-mode"][value="apikey"]').setValue()
+    await wrapper.get('[data-testid="kiro-credentials"] input[id$="-api_key"]').setValue('ksk_key')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(createAccountMock.mock.calls[0]?.[0]).toMatchObject({
+      platform: 'kiro', type: 'apikey', extra: { mixed_scheduling: true }
+    })
+    wrapper.unmount()
+  })
+
+  it('does not use a stale Kiro confirmation after group selection changes', async () => {
+    authIsSimpleMode.value = false
+    const wrapper = mountModal([
+      { id: 1, name: 'Claude A', platform: 'anthropic', status: 'active' },
+      { id: 2, name: 'Claude B', platform: 'anthropic', status: 'active' },
+    ], true)
+    await wrapper.get('[data-testid="platform-button-kiro"]').trigger('click')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Kiro mixed')
+    await wrapper.get('[data-testid="mixed-scheduling"]').setValue(true)
+    await wrapper.get('input[value="1"]').setValue(true)
+    checkMixedChannelRiskMock.mockResolvedValue({ has_risk: true, details: { current_platform: 'Kiro', other_platform: 'Anthropic' } })
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    await wrapper.get('input[value="2"]').setValue(true)
+    wrapper.findComponent({ name: 'ConfirmDialog' }).vm.$emit('confirm')
+    await flushPromises()
+    expect(wrapper.find('input[value="signin"]').exists()).toBe(false)
+    expect(kiroStartMock).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

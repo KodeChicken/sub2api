@@ -520,7 +520,7 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	}
 
 	// 检查混合渠道风险（除非用户已确认）
-	if len(groupIDs) > 0 && !input.SkipMixedChannelCheck {
+	if len(groupIDs) > 0 && !input.SkipMixedChannelCheck && (input.Platform != PlatformKiro || accountExtra["mixed_scheduling"] == true) {
 		if err := s.checkMixedChannelRisk(ctx, 0, input.Platform, groupIDs); err != nil {
 			return nil, err
 		}
@@ -589,6 +589,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if err != nil {
 		return nil, err
 	}
+	wasKiroMixed := account.IsKiroMixedSchedulingEnabled()
 	if account.Platform == PlatformTypeSafe && input.Type != "" && input.Type != AccountTypeAPIKey {
 		return nil, errors.New("typesafe accounts only support apikey credentials")
 	}
@@ -889,10 +890,15 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 
 		// 检查混合渠道风险（除非用户已确认）
-		if !input.SkipMixedChannelCheck {
+		if !input.SkipMixedChannelCheck && (account.Platform != PlatformKiro || account.IsKiroMixedSchedulingEnabled()) {
 			if err := s.checkMixedChannelRisk(ctx, account.ID, account.Platform, *input.GroupIDs); err != nil {
 				return nil, err
 			}
+		}
+	}
+	if input.GroupIDs == nil && !wasKiroMixed && account.IsKiroMixedSchedulingEnabled() && !input.SkipMixedChannelCheck {
+		if err := s.checkMixedChannelRisk(ctx, account.ID, PlatformKiro, account.GroupIDs); err != nil {
+			return nil, err
 		}
 	}
 
@@ -1035,7 +1041,8 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 
 	// 预取所有目标账号，供凭据守卫/代理守卫/混合渠道检查共用，避免多次 DB 查询。
 	var cachedTargets []*Account
-	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || openAISettings.any() || input.ProbeEnabled != nil || input.RateMultiplier != nil {
+	enablingKiroMixing := input.Extra["mixed_scheduling"] == true && !input.SkipMixedChannelCheck
+	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || enablingKiroMixing || openAISettings.any() || input.ProbeEnabled != nil || input.RateMultiplier != nil {
 		loaded, err := s.accountRepo.GetByIDs(ctx, input.AccountIDs)
 		if err != nil {
 			return nil, err
@@ -1098,6 +1105,15 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 			}
 		}
 	}
+	if input.GroupIDs == nil && enablingKiroMixing {
+		for _, account := range cachedTargets {
+			if account != nil && account.Platform == PlatformKiro && !account.IsKiroMixedSchedulingEnabled() {
+				if err := s.checkMixedChannelRisk(ctx, account.ID, PlatformKiro, account.GroupIDs); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 
 	// 预检查混合渠道风险：在任何写操作之前，若发现风险立即返回错误。
 	if needMixedChannelCheck {
@@ -1105,6 +1121,15 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 			platform := platformByID[accountID]
 			if platform == "" {
 				continue
+			}
+			if platform == PlatformKiro {
+				enabled := targetsByID[accountID].IsKiroMixedSchedulingEnabled()
+				if mixed, supplied := input.Extra["mixed_scheduling"]; supplied {
+					enabled = mixed == true
+				}
+				if !enabled {
+					continue
+				}
 			}
 			if err := s.checkMixedChannelRisk(ctx, accountID, platform, *input.GroupIDs); err != nil {
 				return nil, err
@@ -1570,6 +1595,9 @@ func (s *adminServiceImpl) checkMixedChannelRisk(ctx context.Context, currentAcc
 			if currentAccountID > 0 && account.ID == currentAccountID {
 				continue // 跳过当前账号
 			}
+			if account.Platform == PlatformKiro && !account.IsKiroMixedSchedulingEnabled() {
+				continue
+			}
 
 			otherPlatform := getAccountPlatform(account.Platform)
 			if otherPlatform == "" {
@@ -1667,6 +1695,8 @@ func getAccountPlatform(accountPlatform string) string {
 		return "Antigravity"
 	case PlatformAnthropic, "claude":
 		return "Anthropic"
+	case PlatformKiro:
+		return "Kiro"
 	default:
 		return ""
 	}
@@ -1681,6 +1711,10 @@ type MixedChannelError struct {
 }
 
 func (e *MixedChannelError) Error() string {
+	if e.CurrentPlatform == "Kiro" || e.OtherPlatform == "Kiro" {
+		return fmt.Sprintf("mixed_channel_warning: Group '%s' mixes %s and %s accounts. Kiro history and thinking signatures may be incompatible; seamless continuation or automatic repair is not guaranteed.",
+			e.GroupName, e.CurrentPlatform, e.OtherPlatform)
+	}
 	return fmt.Sprintf("mixed_channel_warning: Group '%s' contains both %s and %s accounts. Using mixed channels in the same context may cause thinking block signature validation issues, which will fallback to non-thinking mode for historical messages.",
 		e.GroupName, e.CurrentPlatform, e.OtherPlatform)
 }

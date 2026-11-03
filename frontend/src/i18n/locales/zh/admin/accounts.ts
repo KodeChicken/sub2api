@@ -4,6 +4,9 @@ export default {
       description: '管理 AI 平台账号和 Cookie',
       createAccount: '添加账号',
       kiro: {
+        mixedScheduling: '参与 Anthropic 分组调度',
+        mixedSchedulingTooltip: '默认关闭。仅显式绑定的 Anthropic 分组及有限、已配置的模型别名可使用此 Kiro 账号。登录后请同步可用模型。',
+        mixedChannelWarning: '分组“{groupName}”混合使用 {currentPlatform} 和 {otherPlatform} 账号。Kiro 的历史记录和 thinking 签名可能不兼容，不保证无缝续接或自动修复。是否继续？',
         signInTitle: 'Kiro 登录授权',
         advanced: '高级设置',
         signInType: '登录类型',
@@ -27,6 +30,7 @@ export default {
           denied: '授权被拒绝', expired: '授权已过期', failed: '授权失败'
         },
         errors: {
+          MIXED_CHANNEL_RISK: '请返回账号设置，确认 Kiro 混合渠道风险后再授权。',
           REQUEST_FAILED: '请求失败，请重试或重新发起授权。',
           CANCEL_FAILED: '尚未确认取消，请重试后再发起新授权。',
           INVALID_CREDENTIALS: '请提供完整有效的 Kiro 凭据。',
