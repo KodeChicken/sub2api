@@ -172,6 +172,24 @@ function buildAccount() {
   } as any
 }
 
+describe('EditAccountModal Kiro isolation', () => {
+  it('keeps redacted credentials and native model mappings when saving', async () => {
+    const account = { ...buildAccount(), platform: 'kiro', type: 'oauth',
+      credentials: { auth_method: 'idc', client_id: 'client', model_mapping: { alias: 'native-model' } } }
+    updateAccountMock.mockReset().mockResolvedValue(account)
+    checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    const wrapper = mountModal(account)
+    expect(wrapper.get('[data-testid="kiro-credentials"] input[id$="-refresh_token"]').element).toHaveProperty('value', '')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+    const payload = updateAccountMock.mock.calls[0]?.[1]
+    expect(payload.credentials).toMatchObject({ auth_method: 'idc', client_id: 'client', model_mapping: { alias: 'native-model' } })
+    expect(payload.credentials).not.toHaveProperty('refresh_token')
+    expect(payload.credentials).not.toHaveProperty('client_secret')
+    expect(payload).not.toHaveProperty('upstream_billing_probe_enabled')
+    wrapper.unmount()
+  })
+})
+
 function buildOpenAISparkShadowAccount() {
   const account = buildAccount()
   return {

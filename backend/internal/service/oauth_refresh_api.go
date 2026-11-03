@@ -350,6 +350,23 @@ func (api *OAuthRefreshAPI) RefreshIfNeeded(
 			// while the provider call was in flight. Return the durable row so
 			// post-refresh cache publication cannot restore that stale snapshot.
 			freshAccount = durableAccount
+		} else if freshAccount.Platform == PlatformKiro {
+			repo, ok := api.accountRepo.(KiroOAuthRefreshPersistence)
+			if !ok {
+				return nil, errors.New("Kiro credential CAS repository is not configured")
+			}
+			applied, err := repo.UpdateKiroOAuthCredentialsIfUnchanged(ctx, freshAccount.ID,
+				attemptedAccount.Credentials, attemptedAccount.ProxyID, newCredentials)
+			if err != nil {
+				return nil, &providerCycleContainmentRefreshError{err: fmt.Errorf("Kiro credential persistence failed: %w", err)}
+			}
+			freshAccount, err = api.accountRepo.GetByID(ctx, freshAccount.ID)
+			if err != nil || freshAccount == nil {
+				return nil, &providerCycleContainmentRefreshError{err: errors.New("Kiro account state is unavailable after credential refresh")}
+			}
+			if !applied {
+				return &OAuthRefreshResult{Account: freshAccount}, nil
+			}
 		} else if updateErr := persistAccountCredentials(ctx, api.accountRepo, freshAccount, newCredentials); updateErr != nil {
 			slog.Error("oauth_refresh_update_failed",
 				"account_id", freshAccount.ID,

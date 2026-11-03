@@ -43,6 +43,7 @@ archives:
           - zip
     files:
       - LICENSE*
+      - backend/resources/kiro.rs.NOTICE
       - README*
       - deploy/*
 

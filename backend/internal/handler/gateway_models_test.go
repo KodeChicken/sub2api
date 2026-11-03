@@ -102,6 +102,7 @@ func newGatewayModelsHandlerForTest(repo service.AccountRepository, routeRepo ..
 			repo,
 			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
 			nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, resolver, nil, nil,
+			nil,
 		),
 	}
 }
@@ -182,6 +183,33 @@ func TestDefaultModelIDsForAnthropicExcludeAntigravityGemini(t *testing.T) {
 
 	antigravityIDs := defaultModelIDsForPlatform(service.PlatformAntigravity)
 	require.Contains(t, antigravityIDs, "gemini-2.5-flash")
+}
+
+func TestKiroCatalogDoesNotAdvertiseAnotherProvidersDefaults(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	require.Empty(t, defaultModelIDsForPlatform(service.PlatformKiro))
+	for _, withMapping := range []bool{false, true} {
+		credentials := map[string]any{}
+		if withMapping {
+			credentials["model_mapping"] = map[string]any{"kiro-native-alias": "native-model"}
+		}
+		h := newGatewayModelsHandlerForTest(&gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{
+			42: {{ID: 1, Platform: service.PlatformKiro, Type: service.AccountTypeOAuth, Credentials: credentials}},
+		}})
+		recorder := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(recorder)
+		c.Request = httptest.NewRequest(http.MethodGet, "/v1/models", nil)
+		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{Group: &service.Group{ID: 42, Platform: service.PlatformKiro}})
+		h.Models(c)
+		require.Equal(t, 200, recorder.Code)
+		var got gatewayModelsResponseForTest
+		require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &got))
+		if withMapping {
+			require.Equal(t, []string{"kiro-native-alias"}, modelIDsForTest(got.Data))
+		} else {
+			require.Empty(t, got.Data)
+		}
+	}
 }
 
 // Scenario: non-OpenAI groups return a Codex manifest instead of a standard model list.

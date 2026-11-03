@@ -122,6 +122,33 @@
       </ClaudeResetCreditsCell>
     </template>
 
+    <template v-else-if="account.platform === 'kiro'">
+      <div v-if="loading" class="h-3 w-24 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
+      <div v-else-if="error || usageInfo?.error" class="max-w-[200px] truncate text-xs text-amber-600" :title="error || usageInfo?.error">
+        {{ error || usageInfo?.error }}
+      </div>
+      <div v-else-if="usageInfo" class="space-y-1">
+        <div v-if="usageInfo.subscription_tier_raw" class="text-[10px] text-gray-500">{{ usageInfo.subscription_tier_raw }}</div>
+        <UsageProgressBar
+          v-if="usageInfo.thirty_day"
+          label="Credits"
+          :utilization="usageInfo.thirty_day.utilization"
+          :resets-at="usageInfo.thirty_day.resets_at"
+          color="emerald"
+        />
+        <div v-else class="text-xs text-gray-400">-</div>
+      </div>
+      <button
+        type="button"
+        class="mt-1 inline-flex items-center gap-1 text-[10px] text-blue-600 disabled:opacity-50"
+        :disabled="activeQueryLoading"
+        @click="loadActiveUsage"
+      >
+        <Icon name="refresh" size="xs" :class="{ 'animate-spin': activeQueryLoading }" />
+        {{ t('admin.accounts.usageWindow.activeQuery') }}
+      </button>
+    </template>
+
     <!-- OpenAI OAuth accounts: single source from /usage API -->
     <template v-else-if="account.platform === 'openai' && account.type === 'oauth'">
       <div v-if="hasOpenAIUsageFallback" class="space-y-1">
@@ -713,6 +740,7 @@ import { formatCompactNumber } from '@/utils/format'
 import { isOfficialGeminiBaseUrl } from '@/utils/geminiExplicitCache'
 import { supportsAccountQuota } from '@/utils/accountQuota'
 import UsageProgressBar from './UsageProgressBar.vue'
+import Icon from '@/components/icons/Icon.vue'
 import AccountQuotaInfo from './AccountQuotaInfo.vue'
 import ClaudeResetCreditsCell from './ClaudeResetCreditsCell.vue'
 import OpenAIQuotaResetCell from './OpenAIQuotaResetCell.vue'
@@ -796,6 +824,7 @@ const isGeminiVertex = computed(() => {
 
 // Show usage windows for OAuth and Setup Token accounts
 const showUsageWindows = computed(() => {
+  if (props.account.platform === 'kiro') return true
   // Gemini: we can always compute local usage windows from DB logs (simulated quotas).
   // 第三方上游 API Key 没有模拟配额，按普通 Key 账号展示今日统计与额度进度条。
   if (props.account.platform === 'gemini') return !isGeminiThirdPartyApiKey.value
@@ -808,6 +837,7 @@ const showUsageWindows = computed(() => {
 })
 
 const shouldFetchUsage = computed(() => {
+  if (props.account.platform === 'kiro') return true
   if (props.account.platform === 'anthropic') {
     return props.account.type === 'oauth' || props.account.type === 'setup-token'
   }

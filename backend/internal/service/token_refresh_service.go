@@ -985,6 +985,21 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 		// 不可重试错误（invalid_grant/invalid_client 等）直接标记 error 状态并返回
 		if isNonRetryableRefreshError(err) {
 			errorMsg := "Token refresh failed (non-retryable): " + logredact.RedactText(err.Error())
+			if account.Platform == PlatformKiro {
+				repo, ok := s.accountRepo.(KiroOAuthRefreshPersistence)
+				if !ok {
+					return &providerConfigurationRefreshError{err: errors.New("Kiro credential CAS repository is not configured")}
+				}
+				applied, persistErr := repo.SetKiroOAuthRefreshFailureIfUnchanged(ctx, account.ID, account.Credentials, account.ProxyID, nil, errorMsg)
+				if persistErr != nil {
+					return &providerCycleContainmentRefreshError{err: persistErr}
+				}
+				if !applied {
+					return errRefreshSkipped
+				}
+				s.notifyAccountSchedulingBlocked(account, time.Time{}, "token_refresh_non_retryable")
+				return &accountPermanentRefreshError{err: err, persistentlyBlocked: true}
+			}
 			isGrokOAuth := account.IsGrokOAuth()
 			if !isGrokOAuth {
 				s.notifyAccountSchedulingBlocked(account, time.Time{}, "token_refresh_non_retryable")
@@ -1086,6 +1101,21 @@ func (s *TokenRefreshService) refreshWithRetryWithRateGate(
 	reason := "token refresh retry exhausted"
 	if lastErr != nil {
 		reason += ": " + logredact.RedactText(lastErr.Error())
+	}
+	if account.Platform == PlatformKiro {
+		repo, ok := s.accountRepo.(KiroOAuthRefreshPersistence)
+		if !ok {
+			return &providerConfigurationRefreshError{err: errors.New("Kiro credential CAS repository is not configured")}
+		}
+		applied, err := repo.SetKiroOAuthRefreshFailureIfUnchanged(ctx, account.ID, account.Credentials, account.ProxyID, &until, reason)
+		if err != nil {
+			return &providerCycleContainmentRefreshError{err: err}
+		}
+		if !applied {
+			return errRefreshSkipped
+		}
+		s.notifyAccountSchedulingBlocked(account, until, "token_refresh_retry_exhausted")
+		return lastErr
 	}
 	if account.IsGrokOAuth() {
 		conditionalRepo, ok := s.accountRepo.(GrokOAuthRefreshMutationRepository)

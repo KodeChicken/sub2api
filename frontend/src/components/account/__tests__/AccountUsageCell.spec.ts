@@ -130,6 +130,20 @@ describe('AccountUsageCell', () => {
     })
   })
 
+  it('shows Kiro credits from the native quota API without another provider usage window', async () => {
+    getUsage.mockResolvedValue({ source: 'active', subscription_tier_raw: 'KIRO PRO',
+      thirty_day: { utilization: 25 }, ai_credits: [{ credit_type: 'Kiro Credits', amount: 75 }] })
+    const wrapper = mount(AccountUsageCell, {
+      props: { account: makeAccount({ id: 42, platform: 'kiro', type: 'oauth' }) },
+      global: { stubs: { UsageProgressBar: true, AccountQuotaInfo: true } }
+    })
+    await flushPromises()
+    expect(getUsage).toHaveBeenCalledWith(42)
+    expect(wrapper.text()).toContain('KIRO PRO')
+    expect(wrapper.getComponent({ name: 'UsageProgressBar' }).props('utilization')).toBe(25)
+    wrapper.unmount()
+  })
+
   it('renders eligible Ollama Cloud state and forwards query updates', async () => {
     const wrapper = mount(AccountUsageCell, {
       props: {

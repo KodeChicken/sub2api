@@ -246,6 +246,24 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
     wrapper.unmount()
   })
 
+  it('creates Kiro natively without using another provider OAuth flow or billing probe', async () => {
+    createAccountMock.mockResolvedValue({ id: 42, platform: 'kiro', type: 'oauth' })
+    const wrapper = mountModal()
+    await wrapper.get('[data-testid="platform-button-kiro"]').trigger('click')
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('Kiro account')
+    await wrapper.get('[data-testid="kiro-credentials"] input[id$="-refresh_token"]').setValue('kiro-refresh')
+    expect(wrapper.findComponent(OAuthAuthorizationFlowStub).exists()).toBe(false)
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(createAccountMock).toHaveBeenCalledOnce()
+    expect(createAccountMock.mock.calls[0]?.[0]).toMatchObject({
+      platform: 'kiro', type: 'oauth', credentials: { auth_method: 'social', refresh_token: 'kiro-refresh', endpoint: 'ide' }
+    })
+    expect(createAccountMock.mock.calls[0]?.[0]?.credentials).not.toHaveProperty('base_url')
+    expect(probeUpstreamBillingMock).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('allows a manually entered expiry to override a preset before account creation', async () => {
     const wrapper = mountModal()
     await selectButtonByText(wrapper, 'OpenAI')

@@ -16,6 +16,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/kiro"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 )
@@ -411,6 +412,13 @@ func normalizeOpenAILongContextBillingUpdateExtra(account *Account, input *Updat
 // Grok media eligibility helpers live in account_grok_media_eligibility.go.
 
 func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]any) (*Account, error) {
+	if input.Platform == PlatformKiro {
+		credentials, err := kiro.Normalize(input.Credentials, input.Type)
+		if err != nil {
+			return nil, infraerrors.BadRequest("INVALID_KIRO_CREDENTIALS", err.Error())
+		}
+		input.Credentials = credentials
+	}
 	if input.Platform == PlatformTypeSafe && input.Type != AccountTypeAPIKey {
 		return nil, errors.New("typesafe accounts only support apikey credentials")
 	}
@@ -652,7 +660,20 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	} else if len(input.Credentials) > 0 {
 		// 敏感子键采用"incoming 没提供就保留"的合并语义：前端响应已脱敏，
 		// 全对象 PUT 编辑时不会再带回 token，避免覆盖时清空已有凭证。
-		account.Credentials = MergePreservingSensitiveCreds(account.Credentials, input.Credentials)
+		incoming := input.Credentials
+		if account.Platform == PlatformKiro {
+			incoming = kiro.Canonicalize(incoming)
+		}
+		previousRefreshToken := account.GetCredential("refresh_token")
+		account.Credentials = MergePreservingSensitiveCreds(account.Credentials, incoming)
+		if account.Platform == PlatformKiro && account.Type == AccountTypeOAuth {
+			if refresh, ok := incoming["refresh_token"].(string); ok && refresh != previousRefreshToken {
+				if _, supplied := incoming["access_token"]; !supplied {
+					delete(account.Credentials, "access_token")
+					delete(account.Credentials, "expires_at")
+				}
+			}
+		}
 		// 校验并规范化请求头覆写配置（header 名小写化、格式检查）
 		if err := NormalizeHeaderOverrideCredentials(account.Credentials); err != nil {
 			return nil, err
@@ -662,6 +683,13 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 		// Strip SSO/password residue that must never sit next to OAuth tokens.
 		account.Credentials = SanitizeStoredCredentials(account.Platform, account.Credentials)
+		if account.Platform == PlatformKiro {
+			normalized, err := kiro.Normalize(account.Credentials, account.Type)
+			if err != nil {
+				return nil, infraerrors.BadRequest("INVALID_KIRO_CREDENTIALS", err.Error())
+			}
+			account.Credentials = normalized
+		}
 	}
 	// Extra 使用 map：需要区分“未提供(nil)”与“显式清空({})”。
 	// 关闭配额限制时前端会删除 quota_* 键并提交 extra:{}，此时也必须落库。

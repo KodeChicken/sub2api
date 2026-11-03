@@ -134,8 +134,10 @@ func ProvideTokenRefreshService(
 	proxyRepo ProxyRepository,
 	refreshAPI *OAuthRefreshAPI,
 	runtimeBlocker AccountRuntimeBlocker,
+	kiroService *KiroService,
 ) *TokenRefreshService {
 	svc := NewTokenRefreshService(accountRepo, oauthService, openaiOAuthService, geminiOAuthService, antigravityOAuthService, cacheInvalidator, schedulerCache, cfg, tempUnschedCache, grokOAuthService)
+	svc.registrations = append(svc.registrations, tokenRefreshRegistration{platform: PlatformKiro, refresher: kiroService, executor: kiroService})
 	// 注入 OpenAI privacy opt-out 依赖
 	svc.SetPrivacyDeps(privacyClientFactory, proxyRepo)
 	// 注入统一 OAuth 刷新 API（消除 TokenRefreshService 与 TokenProvider 之间的竞争条件）
@@ -237,6 +239,7 @@ func ProvideAccountUsageService(
 	tlsFPProfileService *TLSFingerprintProfileService,
 	openAIGatewayService *OpenAIGatewayService,
 	subscriptionService *SubscriptionService,
+	kiroService *KiroService,
 ) *AccountUsageService {
 	service := NewAccountUsageService(
 		accountRepo,
@@ -252,6 +255,7 @@ func ProvideAccountUsageService(
 		tlsFPProfileService,
 	)
 	service.agentIdentityWS = openAIGatewayService
+	service.kiroService = kiroService
 	service.SetCarpoolSubscriptionService(subscriptionService)
 	return service
 }
@@ -268,6 +272,7 @@ func ProvideAccountTestService(
 	openAIGatewayService *OpenAIGatewayService,
 	settingService *SettingService,
 	pluginManager *PluginManager,
+	kiroService *KiroService,
 ) *AccountTestService {
 	service := NewAccountTestService(
 		accountRepo,
@@ -280,6 +285,7 @@ func ProvideAccountTestService(
 		tlsFPProfileService,
 	)
 	service.agentIdentityWS = openAIGatewayService
+	service.kiroService = kiroService
 	service.SetOpenAIGatewayService(openAIGatewayService)
 	service.SetSettingService(settingService)
 	service.SetPluginManager(pluginManager)
@@ -861,6 +867,7 @@ func ProvideAPIKeyService(
 
 // ProviderSet is the Wire provider set for all services
 var ProviderSet = wire.NewSet(
+	NewKiroService,
 	// Core services
 	ProvideAuthService,
 	NewPasskeyService,
