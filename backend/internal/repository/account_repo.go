@@ -682,7 +682,8 @@ func lockAndMergeAccountProbeExtra(
 			extra -> 'opencode_go_usage_auto_refresh',
 			extra -> 'opencode_go_usage_snapshot',
 			extra -> 'grok_observed_models',
-			extra -> 'upstream_model_metadata'
+			extra -> 'upstream_model_metadata',
+			extra
 		FROM accounts
 		WHERE id = $1 AND deleted_at IS NULL
 		FOR NO KEY UPDATE
@@ -713,6 +714,7 @@ func lockAndMergeAccountProbeExtra(
 		currentOpenCodeSnapshot        []byte
 		currentGrokObservedModels      []byte
 		currentUpstreamModelMetadata   []byte
+		currentExtra                   []byte
 	)
 	if err := rows.Scan(
 		&identityUnchanged,
@@ -729,6 +731,7 @@ func lockAndMergeAccountProbeExtra(
 		&currentOpenCodeSnapshot,
 		&currentGrokObservedModels,
 		&currentUpstreamModelMetadata,
+		&currentExtra,
 	); err != nil {
 		return nil, err
 	}
@@ -737,6 +740,27 @@ func lockAndMergeAccountProbeExtra(
 	}
 
 	extra := copyJSONMap(normalizeJSONMap(account.Extra))
+	var latestExtra map[string]any
+	if len(currentExtra) > 0 {
+		if err := json.Unmarshal(currentExtra, &latestExtra); err != nil {
+			return nil, err
+		}
+	}
+	for _, key := range []string{service.OpenAIAutoResetCreditStateExtraKey, "codex_reset_credit_snapshot", service.OpenAIAutoResetCreditExpiryEnabledExtraKey} {
+		delete(extra, key)
+		if value, ok := latestExtra[key]; ok {
+			extra[key] = value
+		}
+	}
+	if enabled, supplied := service.OpenAIAutoResetCreditExpiryUpdate(ctx); supplied {
+		wasEnabled, _ := latestExtra[service.OpenAIAutoResetCreditExpiryEnabledExtraKey].(bool)
+		extra[service.OpenAIAutoResetCreditExpiryEnabledExtraKey] = enabled
+		if enabled && !wasEnabled {
+			if state, ok := extra[service.OpenAIAutoResetCreditStateExtraKey].(map[string]any); ok {
+				state["expiry_initialized"] = false
+			}
+		}
+	}
 	for _, key := range []string{
 		service.UpstreamBillingProbeEnabledExtraKey,
 		service.UpstreamBillingRateSyncEnabledExtraKey,

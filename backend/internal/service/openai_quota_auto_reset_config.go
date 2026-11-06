@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"math"
 	"net/http"
@@ -10,11 +11,26 @@ import (
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
+type openAIAutoResetExpiryUpdateKey struct{}
+
+// WithOpenAIAutoResetCreditExpiryUpdate distinguishes an explicit switch edit from replacement OAuth metadata.
+func WithOpenAIAutoResetCreditExpiryUpdate(ctx context.Context, enabled bool) context.Context {
+	return context.WithValue(ctx, openAIAutoResetExpiryUpdateKey{}, enabled)
+}
+
+// OpenAIAutoResetCreditExpiryUpdate identifies an explicit admin configuration
+// edit so a reauthorization's replacement extra cannot restore a stale switch.
+func OpenAIAutoResetCreditExpiryUpdate(ctx context.Context) (bool, bool) {
+	value, ok := ctx.Value(openAIAutoResetExpiryUpdateKey{}).(bool)
+	return value, ok
+}
+
 const (
-	OpenAIAutoResetCreditEnabledExtraKey     = "auto_reset_credit_enabled"
-	OpenAIAutoResetCredit5hThresholdExtraKey = "auto_reset_credit_5h_threshold"
-	OpenAIAutoResetCredit7dThresholdExtraKey = "auto_reset_credit_7d_threshold"
-	OpenAIAutoResetCreditStateExtraKey       = "codex_auto_reset_credit_state"
+	OpenAIAutoResetCreditEnabledExtraKey       = "auto_reset_credit_enabled"
+	OpenAIAutoResetCreditExpiryEnabledExtraKey = "auto_reset_credit_expiry_enabled"
+	OpenAIAutoResetCredit5hThresholdExtraKey   = "auto_reset_credit_5h_threshold"
+	OpenAIAutoResetCredit7dThresholdExtraKey   = "auto_reset_credit_7d_threshold"
+	OpenAIAutoResetCreditStateExtraKey         = "codex_auto_reset_credit_state"
 
 	openAIAutoResetCreditDefaultThreshold = 1.0
 	openAIAutoResetCreditMinimumThreshold = 0.001
@@ -23,9 +39,10 @@ const (
 // OpenAIAutoResetCreditConfig 是账号级自动用卡配置。阈值采用 0-1 比例，
 // 避免后端调度与前端百分比展示混用同一数值语义。
 type OpenAIAutoResetCreditConfig struct {
-	Enabled     bool
-	Threshold5h float64
-	Threshold7d float64
+	Enabled       bool
+	ExpiryEnabled bool
+	Threshold5h   float64
+	Threshold7d   float64
 }
 
 // ResolveOpenAIAutoResetCreditConfig 只接受 OpenAI OAuth 母账号；历史账号未配置时
@@ -39,6 +56,7 @@ func ResolveOpenAIAutoResetCreditConfig(account *Account) OpenAIAutoResetCreditC
 		return config
 	}
 	config.Enabled = resolveAccountExtraBool(account.Extra, OpenAIAutoResetCreditEnabledExtraKey)
+	config.ExpiryEnabled, _ = account.Extra[OpenAIAutoResetCreditExpiryEnabledExtraKey].(bool)
 	if value, ok := resolveAccountExtraNumber(account.Extra, OpenAIAutoResetCredit5hThresholdExtraKey); ok && isValidOpenAIAutoResetThreshold(value) {
 		config.Threshold5h = value
 	}
@@ -60,11 +78,13 @@ func normalizeOpenAIAutoResetCreditExtra(platform, accountType string, isShadow 
 	}
 	normalized := cloneOpenAIAutoResetExtra(extra)
 	delete(normalized, OpenAIAutoResetCreditStateExtraKey)
+	delete(normalized, openaiQuotaResetCreditsKey)
 
 	_, hasEnabled := normalized[OpenAIAutoResetCreditEnabledExtraKey]
+	_, hasExpiryEnabled := normalized[OpenAIAutoResetCreditExpiryEnabledExtraKey]
 	_, has5h := normalized[OpenAIAutoResetCredit5hThresholdExtraKey]
 	_, has7d := normalized[OpenAIAutoResetCredit7dThresholdExtraKey]
-	if !hasEnabled && !has5h && !has7d {
+	if !hasEnabled && !hasExpiryEnabled && !has5h && !has7d {
 		return normalized, nil
 	}
 	if platform != PlatformOpenAI || accountType != AccountTypeOAuth || isShadow {
@@ -72,6 +92,11 @@ func normalizeOpenAIAutoResetCreditExtra(platform, accountType string, isShadow 
 	}
 
 	enabled := false
+	if hasExpiryEnabled {
+		if _, ok := normalized[OpenAIAutoResetCreditExpiryEnabledExtraKey].(bool); !ok {
+			return nil, infraerrors.BadRequest("OPENAI_AUTO_RESET_CREDIT_EXPIRY_ENABLED_INVALID", "auto_reset_credit_expiry_enabled must be a boolean")
+		}
+	}
 	if hasEnabled {
 		value, ok := normalized[OpenAIAutoResetCreditEnabledExtraKey].(bool)
 		if !ok {
@@ -103,8 +128,10 @@ func stripOpenAIAutoResetCreditManagedExtra(extra map[string]any, stripConfig bo
 		return nil
 	}
 	delete(extra, OpenAIAutoResetCreditStateExtraKey)
+	delete(extra, openaiQuotaResetCreditsKey)
 	if stripConfig {
 		delete(extra, OpenAIAutoResetCreditEnabledExtraKey)
+		delete(extra, OpenAIAutoResetCreditExpiryEnabledExtraKey)
 		delete(extra, OpenAIAutoResetCredit5hThresholdExtraKey)
 		delete(extra, OpenAIAutoResetCredit7dThresholdExtraKey)
 	}

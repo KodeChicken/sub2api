@@ -109,7 +109,9 @@
       >
         {{ autoResetStateLabel }}
         <span v-if="autoResetState.trigger_window" class="ml-1 tabular-nums">
-          {{ autoResetState.trigger_window }}
+          {{ autoResetState.trigger_window === 'expiry'
+            ? t('admin.accounts.openaiQuotaReset.expiryTrigger')
+            : autoResetState.trigger_window }}
         </span>
       </span>
       <span v-if="autoResetState.checked_at" class="text-gray-500 dark:text-gray-400">
@@ -251,6 +253,7 @@ const resetting = ref(false)
 const error = ref<string | null>(null)
 const data = ref<OpenAIQuotaUsage | null>(null)
 const cachedData = ref<OpenAIQuotaUsage | null>(null)
+const resetCreditQueryRequired = ref(false)
 const resetMessage = ref<string | null>(null)
 const resetWarning = ref<string | null>(null)
 const showResetConfirm = ref(false)
@@ -296,7 +299,8 @@ const updateCredits = (usage: OpenAIQuotaUsage | null) => {
 type AutoResetCreditState = NonNullable<NonNullable<Account['extra']>['codex_auto_reset_credit_state']>
 const validAutoResetStatuses = new Set(['checking', 'available', 'resetting', 'success', 'no_credit', 'failed'])
 const autoResetState = computed<AutoResetCreditState | null>(() => {
-  if (props.account.extra?.auto_reset_credit_enabled !== true) return null
+  if (props.account.extra?.auto_reset_credit_enabled !== true &&
+      props.account.extra?.auto_reset_credit_expiry_enabled !== true) return null
   const state = props.account.extra?.codex_auto_reset_credit_state
   if (!state || typeof state !== 'object' || !validAutoResetStatuses.has(String(state.status))) return null
   return state
@@ -480,6 +484,7 @@ const toggleResetCreditDetails = () => {
 const handleQuery = async () => {
   if (loading.value || resetting.value) return
   const accountID = props.account.id
+  const cachedBeforeRequest = cachedData.value
   loading.value = true
   creditsCacheWarning.value = false
   error.value = null
@@ -489,6 +494,7 @@ const handleQuery = async () => {
   try {
     const result = await refreshOpenAIQuota(accountID)
     if (props.account.id !== accountID) return
+    resetCreditQueryRequired.value = false
     updateCredits(result)
     creditsCacheWarning.value = result.credits_cache_persisted === false
     // The upstream read succeeded even when the snapshot write was rejected, so
@@ -502,6 +508,7 @@ const handleQuery = async () => {
     }
   } catch (e) {
     if (props.account.id !== accountID) return
+    if (!resetCreditQueryRequired.value && cachedData.value !== cachedBeforeRequest) data.value = cachedData.value
     error.value = extractErrorMessage(e)
   } finally {
     if (props.account.id === accountID) loading.value = false
@@ -526,6 +533,7 @@ const confirmReset = async () => {
   }
   resetting.value = true
   const accountID = props.account.id
+  const cachedBeforeRequest = cachedData.value
   creditsCacheWarning.value = false
   error.value = null
   resetMessage.value = null
@@ -536,12 +544,14 @@ const confirmReset = async () => {
     updateCredits(result.quota ?? null)
     showResetCreditDetails.value = false
     if (result.cache_refreshed && result.quota) {
+      resetCreditQueryRequired.value = false
       data.value = result.quota
       cachedData.value = result.quota
     } else {
       // A credit was consumed but the post-reset count could not be read back.
       // Whatever we still hold is one generation stale, so report the count as
       // unknown instead of letting a second consumption start from stale data.
+      resetCreditQueryRequired.value = true
       data.value = null
     }
     if (result.account) emit('account-updated', result.account)
@@ -566,6 +576,7 @@ const confirmReset = async () => {
     }
   } catch (e) {
     if (props.account.id !== accountID) return
+    if (cachedData.value !== cachedBeforeRequest) data.value = cachedData.value
     error.value = extractErrorMessage(e)
   } finally {
     if (props.account.id === accountID) resetting.value = false
@@ -627,12 +638,22 @@ const confirmCarpoolUndo = async () => {
   }
 }
 
+// Compare contents so unchanged list refreshes cannot replace a newer live result.
+watch(
+  () => JSON.stringify(props.account.extra?.codex_reset_credit_snapshot),
+  () => {
+    cachedData.value = readCachedResetCredits(props.account)
+    if (!loading.value && !resetting.value && !resetCreditQueryRequired.value) data.value = cachedData.value
+  }
+)
+
 watch(
   () => props.account.id,
   () => {
     // Account row may be reused across paginated lists; reset local state.
     cachedData.value = readCachedResetCredits(props.account)
     data.value = cachedData.value
+    resetCreditQueryRequired.value = false
     creditsData.value = readCachedCredits(props.account)
     creditsCacheWarning.value = false
     error.value = null

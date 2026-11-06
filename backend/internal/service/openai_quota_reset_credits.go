@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type openAIRateLimitResetCreditDetailPayload struct {
@@ -25,6 +26,9 @@ type openAIRateLimitResetCreditDetailsPayload struct {
 	RateLimitResetCredits json.RawMessage `json:"rate_limit_reset_credits,omitempty"`
 	Items                 json.RawMessage `json:"items,omitempty"`
 	Data                  json.RawMessage `json:"data,omitempty"`
+	HasMore               json.RawMessage `json:"has_more,omitempty"`
+	NextCursor            json.RawMessage `json:"next_cursor,omitempty"`
+	TotalCount            json.RawMessage `json:"total_count,omitempty"`
 }
 
 type openAIRateLimitResetCreditDetails struct {
@@ -33,6 +37,7 @@ type openAIRateLimitResetCreditDetails struct {
 	CreditListPresent    bool
 	Credits              []OpenAIRateLimitResetCreditDetail
 	AutoResetCandidates  []openAIAutoResetCreditCandidate
+	AutoResetInvalid     bool
 }
 
 // openAIAutoResetCreditCandidate 仅在服务内部流转。上游卡 ID 不进入 API DTO、
@@ -51,6 +56,7 @@ func parseOpenAIRateLimitResetCreditDetails(body []byte) (openAIRateLimitResetCr
 	var rawCredits []*openAIRateLimitResetCreditDetailPayload
 	var availableCount *int
 	var creditListPresent bool
+	autoResetInvalid := false
 	if trimmed[0] == '[' {
 		if err := json.Unmarshal(trimmed, &rawCredits); err != nil {
 			return openAIRateLimitResetCreditDetails{}, err
@@ -62,6 +68,20 @@ func parseOpenAIRateLimitResetCreditDetails(body []byte) (openAIRateLimitResetCr
 			return openAIRateLimitResetCreditDetails{}, err
 		}
 		availableCount = parseOpenAIResetCreditAvailableCount(payload.AvailableCount, payload.AvailableCountCamel)
+		for _, raw := range []json.RawMessage{payload.AvailableCount, payload.AvailableCountCamel} {
+			if resetCreditCountPresent(raw) && parseOpenAIResetCreditAvailableCount(raw) == nil {
+				autoResetInvalid = true
+			}
+		}
+		if left, right := parseOpenAIResetCreditAvailableCount(payload.AvailableCount), parseOpenAIResetCreditAvailableCount(payload.AvailableCountCamel); left != nil && right != nil && *left != *right {
+			autoResetInvalid = true
+		}
+		if resetCreditCountPresent(payload.HasMore) && !bytes.Equal(bytes.TrimSpace(payload.HasMore), []byte("false")) {
+			autoResetInvalid = true
+		}
+		if resetCreditCountPresent(payload.NextCursor) && !bytes.Equal(bytes.TrimSpace(payload.NextCursor), []byte(`""`)) {
+			autoResetInvalid = true
+		}
 		var err error
 		rawCredits, creditListPresent, err = firstPresentResetCreditPayload(
 			payload.Credits,
@@ -72,6 +92,12 @@ func parseOpenAIRateLimitResetCreditDetails(body []byte) (openAIRateLimitResetCr
 		if err != nil {
 			return openAIRateLimitResetCreditDetails{AvailableCount: availableCount}, err
 		}
+		if resetCreditCountPresent(payload.TotalCount) {
+			total := parseOpenAIResetCreditAvailableCount(payload.TotalCount)
+			if total == nil || *total != len(rawCredits) {
+				autoResetInvalid = true
+			}
+		}
 	}
 
 	credits := make([]OpenAIRateLimitResetCreditDetail, 0, len(rawCredits))
@@ -79,6 +105,7 @@ func parseOpenAIRateLimitResetCreditDetails(body []byte) (openAIRateLimitResetCr
 	availableCreditCount := 0
 	for _, raw := range rawCredits {
 		if raw == nil {
+			autoResetInvalid = true
 			continue
 		}
 		resetType := strings.TrimSpace(raw.ResetType)
@@ -96,16 +123,24 @@ func parseOpenAIRateLimitResetCreditDetails(body []byte) (openAIRateLimitResetCr
 		if expiresAt == "" {
 			expiresAt = strings.TrimSpace(raw.ExpiresAtCamel)
 		}
-		if expiresAt == "" {
-			continue
+		if expiresAt != "" {
+			credits = append(credits, OpenAIRateLimitResetCreditDetail{ExpiresAt: expiresAt})
 		}
-		credits = append(credits, OpenAIRateLimitResetCreditDetail{ExpiresAt: expiresAt})
-		creditID := strings.TrimSpace(raw.ID)
-		if creditID == "" {
-			creditID = strings.TrimSpace(raw.CreditID)
+		if raw.ExpiresAt != "" && raw.ExpiresAtCamel != "" {
+			left, leftErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(raw.ExpiresAt))
+			right, rightErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(raw.ExpiresAtCamel))
+			autoResetInvalid = autoResetInvalid || leftErr != nil || rightErr != nil || !left.Equal(right)
 		}
-		if creditID == "" {
-			creditID = strings.TrimSpace(raw.CreditIDCamel)
+		creditID := ""
+		for _, value := range []string{raw.CreditID, raw.CreditIDCamel, raw.ID} {
+			value = strings.TrimSpace(value)
+			if value == "" {
+				continue
+			}
+			if creditID != "" && creditID != value {
+				autoResetInvalid = true
+			}
+			creditID = value
 		}
 		autoResetCandidates = append(autoResetCandidates, openAIAutoResetCreditCandidate{
 			ID:        creditID,
@@ -118,7 +153,13 @@ func parseOpenAIRateLimitResetCreditDetails(body []byte) (openAIRateLimitResetCr
 		CreditListPresent:    creditListPresent,
 		Credits:              credits,
 		AutoResetCandidates:  autoResetCandidates,
+		AutoResetInvalid:     autoResetInvalid,
 	}, nil
+}
+
+func resetCreditCountPresent(value json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(value)
+	return len(trimmed) > 0 && !bytes.Equal(trimmed, []byte("null"))
 }
 
 func parseOpenAIResetCreditAvailableCount(values ...json.RawMessage) *int {

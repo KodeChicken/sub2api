@@ -1927,6 +1927,10 @@ describe('EditAccountModal OpenAI 自动使用重置卡', () => {
   it('仅对 OpenAI OAuth 母账号显示，默认关闭且阈值为 100/100', () => {
     const parent = mountModal(buildOpenAIOAuthParentAccount())
     expect(parent.find('[data-testid="auto-reset-credit-settings"]').exists()).toBe(true)
+    const expiryToggle = parent.get('[data-testid="auto-reset-credit-expiry-enabled"]')
+    expect(expiryToggle.attributes('role')).toBe('switch')
+    expect(expiryToggle.attributes('aria-checked')).toBe('false')
+    expect(expiryToggle.attributes('aria-label')).toBe('admin.accounts.autoResetCredit.expiryTitle')
     expect((parent.get('[data-testid="auto-reset-credit-5h-threshold"]').element as HTMLInputElement).value).toBe('100')
     expect((parent.get('[data-testid="auto-reset-credit-7d-threshold"]').element as HTMLInputElement).value).toBe('100')
     expect(parent.get('[data-testid="auto-reset-credit-5h-threshold"]').attributes('disabled')).toBeDefined()
@@ -1935,8 +1939,74 @@ describe('EditAccountModal OpenAI 自动使用重置卡', () => {
     for (const account of [buildAccount(), buildOpenAISetupTokenAccount(), buildOpenAISparkShadowAccount()]) {
       const wrapper = mountModal(account)
       expect(wrapper.find('[data-testid="auto-reset-credit-settings"]').exists()).toBe(false)
+      expect(wrapper.find('[data-testid="auto-reset-credit-expiry-enabled"]').exists()).toBe(false)
       wrapper.unmount()
     }
+  })
+
+  it.each([
+    [false, false],
+    [false, true],
+    [true, false],
+    [true, true]
+  ])('临期与阈值开关独立回填和保存：阈值 %s，临期 %s', async (thresholdEnabled, expiryEnabled) => {
+    const account = buildOpenAIOAuthParentAccount()
+    account.extra = {
+      auto_reset_credit_enabled: thresholdEnabled,
+      auto_reset_credit_expiry_enabled: expiryEnabled,
+      auto_reset_credit_5h_threshold: 0.755,
+      auto_reset_credit_7d_threshold: 0.92
+    }
+    updateAccountMock.mockResolvedValue(account)
+    const wrapper = mountModal(account)
+
+    expect(wrapper.get('[data-testid="auto-reset-credit-expiry-enabled"]').attributes('aria-checked'))
+      .toBe(String(expiryEnabled))
+    expect(wrapper.get('[data-testid="auto-reset-credit-5h-threshold"]').attributes('disabled') !== undefined)
+      .toBe(!thresholdEnabled)
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toMatchObject({
+      auto_reset_credit_enabled: thresholdEnabled,
+      auto_reset_credit_expiry_enabled: expiryEnabled,
+      auto_reset_credit_5h_threshold: 0.755,
+      auto_reset_credit_7d_threshold: 0.92
+    })
+    wrapper.unmount()
+  })
+
+  it('关闭临期开关显式保存 false，不改变阈值开关', async () => {
+    const account = buildOpenAIOAuthParentAccount()
+    account.extra = { auto_reset_credit_enabled: true, auto_reset_credit_expiry_enabled: true }
+    updateAccountMock.mockResolvedValue(account)
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="auto-reset-credit-expiry-enabled"]').trigger('click')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toMatchObject({
+      auto_reset_credit_enabled: true,
+      auto_reset_credit_expiry_enabled: false
+    })
+    wrapper.unmount()
+  })
+
+  it('仅开启临期时不执行旧阈值校验', async () => {
+    const account = buildOpenAIOAuthParentAccount()
+    updateAccountMock.mockResolvedValue(account)
+    const wrapper = mountModal(account)
+
+    await wrapper.get('[data-testid="auto-reset-credit-expiry-enabled"]').trigger('click')
+    await wrapper.get('[data-testid="auto-reset-credit-5h-threshold"]').setValue('0')
+    await wrapper.get('form#edit-account-form').trigger('submit.prevent')
+
+    expect(updateAccountMock).toHaveBeenCalledTimes(1)
+    expect(updateAccountMock.mock.calls[0]?.[1]?.extra).toMatchObject({
+      auto_reset_credit_enabled: false,
+      auto_reset_credit_expiry_enabled: true
+    })
+    wrapper.unmount()
   })
 
   it('独立保存两个阈值，并禁止把运行态回写到管理请求', async () => {

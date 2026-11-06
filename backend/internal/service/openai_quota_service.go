@@ -95,16 +95,17 @@ type openAICreditsSnapshot struct {
 // Fields not relevant to the quota card are intentionally omitted to keep the
 // surface narrow; full upstream payload preservation is unnecessary.
 type OpenAIQuotaUsage struct {
-	UserID                string                       `json:"user_id,omitempty"`
-	AccountID             string                       `json:"account_id,omitempty"`
-	Email                 string                       `json:"email,omitempty"`
-	PlanType              string                       `json:"plan_type,omitempty"`
-	RateLimit             *OpenAIRateLimit             `json:"rate_limit,omitempty"`
-	AdditionalRateLimits  []OpenAIAdditionalRateLimit  `json:"additional_rate_limits,omitempty"`
-	RateLimitResetCredits *OpenAIRateLimitResetCredits `json:"rate_limit_reset_credits,omitempty"`
-	Credits               *OpenAICredits               `json:"credits,omitempty"`
-	FetchedAt             int64                        `json:"fetched_at"`
-	autoResetCandidates   []openAIAutoResetCreditCandidate
+	UserID                   string                       `json:"user_id,omitempty"`
+	AccountID                string                       `json:"account_id,omitempty"`
+	Email                    string                       `json:"email,omitempty"`
+	PlanType                 string                       `json:"plan_type,omitempty"`
+	RateLimit                *OpenAIRateLimit             `json:"rate_limit,omitempty"`
+	AdditionalRateLimits     []OpenAIAdditionalRateLimit  `json:"additional_rate_limits,omitempty"`
+	RateLimitResetCredits    *OpenAIRateLimitResetCredits `json:"rate_limit_reset_credits,omitempty"`
+	Credits                  *OpenAICredits               `json:"credits,omitempty"`
+	FetchedAt                int64                        `json:"fetched_at"`
+	autoResetCandidates      []openAIAutoResetCreditCandidate
+	autoResetDetailsComplete bool
 }
 
 // OpenAIQuotaResetCredit captures the redeemed credit metadata returned by the
@@ -229,6 +230,10 @@ func (s *OpenAIQuotaService) queryUsage(ctx context.Context, accountID int64, in
 	}
 	details := s.queryResetCreditDetails(callCtx, client, accessToken, chatGPTAccountID, fedRAMP, accountID)
 	if details != nil {
+		usageCount, hasUsageCount := 0, payload.RateLimitResetCredits != nil
+		if hasUsageCount {
+			usageCount = payload.RateLimitResetCredits.AvailableCount
+		}
 		payload.autoResetCandidates = details.AutoResetCandidates
 		hasDetailCount := details.AvailableCount != nil
 		if payload.RateLimitResetCredits == nil {
@@ -242,6 +247,11 @@ func (s *OpenAIQuotaService) queryUsage(ctx context.Context, accountID int64, in
 			payload.RateLimitResetCredits.AvailableCount = *details.AvailableCount
 		case details.CreditListPresent:
 			payload.RateLimitResetCredits.AvailableCount = details.AvailableCreditCount
+		}
+		payload.autoResetDetailsComplete = details.CreditListPresent && !details.AutoResetInvalid &&
+			len(details.AutoResetCandidates) == payload.RateLimitResetCredits.AvailableCount
+		if hasUsageCount && usageCount != payload.RateLimitResetCredits.AvailableCount {
+			payload.autoResetDetailsComplete = false
 		}
 	}
 	return &payload, nil
@@ -296,7 +306,7 @@ func (s *OpenAIQuotaService) CachePostResetSnapshot(ctx context.Context, account
 }
 
 func (s *OpenAIQuotaService) cacheResetCreditsSnapshot(ctx context.Context, accountID int64, credits *OpenAIRateLimitResetCredits, updates map[string]any) error {
-	if credits == nil || (credits.AvailableCount > 0 && len(credits.Credits) == 0) {
+	if _, err := openAIAutoResetSnapshotExpiry(credits, time.Now()); err != nil {
 		return infraerrors.New(
 			http.StatusBadGateway,
 			"OPENAI_QUOTA_RESET_CREDITS_REFRESH_FAILED",

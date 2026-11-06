@@ -555,6 +555,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	}
 
 	AfterAccountCommit(ctx, func(_ context.Context) {
+		if ResolveOpenAIAutoResetCreditConfig(account).ExpiryEnabled {
+			notifyOpenAIAutoReset(account.ID)
+		}
 		// OAuth 账号：创建后异步设置隐私。
 		// 使用 Ensure（幂等）而非 Force：新建账号 Extra 为空时效果相同，但更安全。
 		if account.Type == AccountTypeOAuth {
@@ -589,6 +592,7 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	if err != nil {
 		return nil, err
 	}
+	wasExpiryEnabled := ResolveOpenAIAutoResetCreditConfig(account).ExpiryEnabled
 	wasKiroMixed := account.IsKiroMixedSchedulingEnabled()
 	if account.Platform == PlatformTypeSafe && input.Type != "" && input.Type != AccountTypeAPIKey {
 		return nil, errors.New("typesafe accounts only support apikey credentials")
@@ -610,6 +614,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		normalizedExtra, err = normalizeOpenAIAutoResetCreditExtra(account.Platform, effectiveType, account.IsShadow(), normalizedExtra)
 		if err != nil {
 			return nil, err
+		}
+		if value, supplied := normalizedExtra[OpenAIAutoResetCreditExpiryEnabledExtraKey].(bool); supplied {
+			ctx = WithOpenAIAutoResetCreditExpiryUpdate(ctx, value)
 		}
 		if err := ValidateUpstreamRequestIDHeaderExtra(normalizedExtra); err != nil {
 			return nil, err
@@ -736,11 +743,25 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 			OllamaCloudUsageAutoRefreshExtraKey,
 			OllamaCloudUsageSnapshotExtraKey,
 			OpenAIAutoResetCreditStateExtraKey,
+			openaiQuotaResetCreditsKey,
 			OpenCodeGoUsageAutoRefreshExtraKey,
 			OpenCodeGoUsageSnapshotExtraKey,
 		} {
 			if v, ok := account.Extra[key]; ok {
 				normalizedExtra[key] = v
+			}
+		}
+		if _, supplied := normalizedExtra[OpenAIAutoResetCreditExpiryEnabledExtraKey]; !supplied {
+			if value, ok := account.Extra[OpenAIAutoResetCreditExpiryEnabledExtraKey]; ok {
+				normalizedExtra[OpenAIAutoResetCreditExpiryEnabledExtraKey] = value
+			}
+		}
+		if !wasExpiryEnabled {
+			if enabled, _ := normalizedExtra[OpenAIAutoResetCreditExpiryEnabledExtraKey].(bool); enabled {
+				if state := openAIAutoResetStateFromExtra(normalizedExtra); state != nil {
+					state.ExpiryInitialized = false
+					normalizedExtra[OpenAIAutoResetCreditStateExtraKey] = state
+				}
 			}
 		}
 		normalizedExtra = prepareCodexFingerprintExtraForUpdate(account, normalizedExtra)
@@ -960,6 +981,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	updated, err := s.accountRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
+	}
+	if !wasExpiryEnabled && ResolveOpenAIAutoResetCreditConfig(updated).ExpiryEnabled {
+		AfterAccountCommit(ctx, func(context.Context) { notifyOpenAIAutoReset(updated.ID) })
 	}
 	return updated, nil
 }

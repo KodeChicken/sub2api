@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { nextTick, reactive } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import OpenAIQuotaResetCell from '../OpenAIQuotaResetCell.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import type { Account } from '@/types'
-import { refreshOpenAIQuota, resetOpenAIQuota, type OpenAIQuotaRefreshResult } from '@/api/admin/accounts'
+import { refreshOpenAIQuota, resetOpenAIQuota, type OpenAIQuotaRefreshResult, type OpenAIQuotaResetResult } from '@/api/admin/accounts'
 
 vi.mock('@/api/admin/accounts', () => ({
   refreshOpenAIQuota: vi.fn(),
@@ -233,6 +234,213 @@ describe('OpenAIQuotaResetCell — 外审 F6:影子禁用重置', () => {
     wrapper.unmount()
   })
 
+  it('同 ID 后台快照更新时同步次数，不发起上游查询', async () => {
+    const wrapper = mount(OpenAIQuotaResetCell, { props: { account: makeAccount({
+      extra: {
+        codex_reset_credit_snapshot: {
+          available_count: 2,
+          credits: [{ expires_at: FUTURE_EXPIRY_EARLY }, { expires_at: FUTURE_EXPIRY_LATE }],
+        },
+      },
+    }) } })
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count2')
+
+    await wrapper.setProps({ account: makeAccount({
+      extra: { codex_reset_credit_snapshot: { available_count: 0, credits: [] } },
+    }) })
+
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count0')
+    expect(wrapper.text()).not.toContain('admin.accounts.openaiQuotaReset.expiresAt:')
+    expect(resetButton(wrapper).attributes('disabled')).toBeDefined()
+    expect(refreshOpenAIQuota).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('同 ID 快照原地更新时同步次数', async () => {
+    const account = reactive(makeAccount({
+      extra: {
+        codex_reset_credit_snapshot: {
+          available_count: 1, credits: [{ expires_at: FUTURE_EXPIRY_EARLY }],
+        },
+      },
+    }))
+    const wrapper = mount(OpenAIQuotaResetCell, { props: { account } })
+
+    account.extra!.codex_reset_credit_snapshot!.available_count = 0
+    account.extra!.codex_reset_credit_snapshot!.credits = []
+    await nextTick()
+
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count0')
+    expect(resetButton(wrapper).attributes('disabled')).toBeDefined()
+    expect(refreshOpenAIQuota).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('同 ID 快照内容不变时保留手动查询的实时次数', async () => {
+    const snapshot = { available_count: 1, credits: [{ expires_at: FUTURE_EXPIRY_EARLY }] }
+    const wrapper = mount(OpenAIQuotaResetCell, { props: { account: makeAccount({
+      extra: { codex_reset_credit_snapshot: snapshot },
+    }) } })
+    vi.mocked(refreshOpenAIQuota).mockResolvedValue({
+      rate_limit_reset_credits: { available_count: 2 },
+      fetched_at: 1770000000,
+      cache_persisted: false,
+    })
+    await wrapper.findAll('button')[0].trigger('click')
+    await flushPromises()
+
+    await wrapper.setProps({ account: makeAccount({
+      extra: { codex_reset_credit_snapshot: structuredClone(snapshot) },
+    }) })
+
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count2')
+    expect(refreshOpenAIQuota).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('查询期间快照变化不覆盖实时响应，失败时采用更新的快照', async () => {
+    const wrapper = mount(OpenAIQuotaResetCell, { props: { account: makeAccount({
+      extra: {
+        codex_reset_credit_snapshot: {
+          available_count: 1, credits: [{ expires_at: FUTURE_EXPIRY_EARLY }],
+        },
+      },
+    }) } })
+    let resolve!: (value: OpenAIQuotaRefreshResult) => void
+    vi.mocked(refreshOpenAIQuota).mockReturnValueOnce(new Promise((done) => { resolve = done }))
+    await wrapper.findAll('button')[0].trigger('click')
+    await wrapper.setProps({ account: makeAccount({
+      extra: { codex_reset_credit_snapshot: { available_count: 0, credits: [] } },
+    }) })
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count1')
+    resolve({
+      rate_limit_reset_credits: { available_count: 2 },
+      fetched_at: 1770000000,
+      cache_persisted: false,
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count2')
+
+    let reject!: (reason: Error) => void
+    vi.mocked(refreshOpenAIQuota).mockReturnValueOnce(new Promise((_, fail) => { reject = fail }))
+    await wrapper.findAll('button')[0].trigger('click')
+    await wrapper.setProps({ account: makeAccount({
+      extra: {
+        codex_reset_credit_snapshot: {
+          available_count: 1, credits: [{ expires_at: FUTURE_EXPIRY_LATE }],
+        },
+      },
+    }) })
+    reject(new Error('query failed'))
+    await flushPromises()
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count1')
+    expect(wrapper.text()).toContain('query failed')
+    wrapper.unmount()
+  })
+
+  it('重置期间快照变化不启用入口或覆盖重置后的未知次数', async () => {
+    const wrapper = mount(OpenAIQuotaResetCell, { props: { account: makeAccount({
+      extra: {
+        codex_reset_credit_snapshot: {
+          available_count: 1, credits: [{ expires_at: FUTURE_EXPIRY_EARLY }],
+        },
+      },
+    }) } })
+    let resolve!: (value: OpenAIQuotaResetResult) => void
+    vi.mocked(resetOpenAIQuota).mockReturnValueOnce(new Promise((done) => { resolve = done }))
+    await resetButton(wrapper).trigger('click')
+    wrapper.findComponent(ConfirmDialog).vm.$emit('confirm')
+    await wrapper.setProps({ account: makeAccount({
+      extra: {
+        codex_reset_credit_snapshot: {
+          available_count: 2,
+          credits: [{ expires_at: FUTURE_EXPIRY_EARLY }, { expires_at: FUTURE_EXPIRY_LATE }],
+        },
+      },
+    }) })
+    expect(resetButton(wrapper).attributes('disabled')).toBeDefined()
+    resolve({
+      code: 'success',
+      windows_reset: 1,
+      cache_refreshed: false,
+      account_state_recovered: true,
+      warning_code: 'reset_credit_cache_refresh_failed',
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain('admin.accounts.openaiQuotaReset.count2')
+    expect(resetButton(wrapper).attributes('disabled')).toBeDefined()
+    expect(resetOpenAIQuota).toHaveBeenCalledTimes(1)
+    expect(refreshOpenAIQuota).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('重置失败时采用请求期间更新的同 ID 快照', async () => {
+    const wrapper = mount(OpenAIQuotaResetCell, { props: { account: makeAccount({
+      extra: {
+        codex_reset_credit_snapshot: {
+          available_count: 1, credits: [{ expires_at: FUTURE_EXPIRY_EARLY }],
+        },
+      },
+    }) } })
+    let reject!: (reason: Error) => void
+    vi.mocked(resetOpenAIQuota).mockReturnValueOnce(new Promise((_, fail) => { reject = fail }))
+    await resetButton(wrapper).trigger('click')
+    wrapper.findComponent(ConfirmDialog).vm.$emit('confirm')
+    await wrapper.setProps({ account: makeAccount({
+      extra: { codex_reset_credit_snapshot: { available_count: 0, credits: [] } },
+    }) })
+    reject(new Error('reset failed'))
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count0')
+    expect(wrapper.text()).toContain('reset failed')
+    expect(resetButton(wrapper).attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+
+  it('重置次数回读失败后，快照更新不能重新启用入口，必须重新查询', async () => {
+    const wrapper = mount(OpenAIQuotaResetCell, { props: { account: makeAccount({
+      extra: {
+        codex_reset_credit_snapshot: {
+          available_count: 1, credits: [{ expires_at: FUTURE_EXPIRY_EARLY }],
+        },
+      },
+    }) } })
+    vi.mocked(resetOpenAIQuota).mockResolvedValueOnce({
+      code: 'success',
+      windows_reset: 1,
+      cache_refreshed: false,
+      account_state_recovered: true,
+      warning_code: 'reset_credit_cache_refresh_failed',
+    })
+    await resetButton(wrapper).trigger('click')
+    wrapper.findComponent(ConfirmDialog).vm.$emit('confirm')
+    await flushPromises()
+    await wrapper.setProps({ account: makeAccount({
+      extra: {
+        codex_reset_credit_snapshot: {
+          available_count: 2,
+          credits: [{ expires_at: FUTURE_EXPIRY_EARLY }, { expires_at: FUTURE_EXPIRY_LATE }],
+        },
+      },
+    }) })
+
+    expect(wrapper.text()).not.toContain('admin.accounts.openaiQuotaReset.count2')
+    expect(resetButton(wrapper).attributes('disabled')).toBeDefined()
+
+    vi.mocked(refreshOpenAIQuota).mockResolvedValueOnce({
+      rate_limit_reset_credits: { available_count: 1, credits: [{ expires_at: FUTURE_EXPIRY_LATE }] },
+      fetched_at: 1770000000,
+      cache_persisted: true,
+    })
+    await wrapper.findAll('button')[0].trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('admin.accounts.openaiQuotaReset.count1')
+    expect(resetButton(wrapper).attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('查询后默认折叠为最早到期时间,点击 +N 展开完整列表', async () => {
     vi.mocked(refreshOpenAIQuota).mockResolvedValue({
       rate_limit_reset_credits: {
@@ -433,6 +641,28 @@ describe('OpenAIQuotaResetCell — 外审 F6:影子禁用重置', () => {
 })
 
 describe('OpenAIQuotaResetCell 自动用卡运行态', () => {
+  it.each([
+    [false, false, false],
+    [false, true, true],
+    [true, false, true],
+    [true, true, true],
+  ])('状态展示兼容阈值 %s、临期 %s 两个独立开关', (thresholdEnabled, expiryEnabled, visible) => {
+    const wrapper = mount(OpenAIQuotaResetCell, { props: { account: makeAccount({
+      extra: {
+        auto_reset_credit_enabled: thresholdEnabled,
+        auto_reset_credit_expiry_enabled: expiryEnabled,
+        codex_auto_reset_credit_state: { status: 'success', trigger_window: 'expiry' },
+      },
+    }) } })
+
+    expect(wrapper.find('[data-testid="auto-reset-credit-state"]').exists()).toBe(visible)
+    if (visible) {
+      expect(wrapper.get('[data-testid="auto-reset-credit-state"]').text())
+        .toContain('admin.accounts.openaiQuotaReset.expiryTrigger')
+    }
+    wrapper.unmount()
+  })
+
   it.each([
     ['checking', 'checking'],
     ['available', 'available'],

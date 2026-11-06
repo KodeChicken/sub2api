@@ -190,3 +190,40 @@ func TestQueryUsageResetCreditCountPrecedence(t *testing.T) {
 		})
 	}
 }
+
+func TestQueryUsageAutoResetRequiresCompleteTrustworthyDetails(t *testing.T) {
+	for _, body := range []string{
+		`{"available_count":2,"credits":[{"id":"A","expires_at":"2026-11-06T05:00:00Z"}]}`,
+		`{"available_count":1}`,
+		`{"available_count":-1,"credits":[{"id":"A","expires_at":"2026-11-06T05:00:00Z"}]}`,
+		`{"available_count":"bad","availableCount":1,"credits":[{"id":"A","expires_at":"2026-11-06T05:00:00Z"}]}`,
+		`{"available_count":1,"availableCount":2,"credits":[{"id":"A","expires_at":"2026-11-06T05:00:00Z"}]}`,
+		`{"credits":[{"id":"A","expires_at":"2026-11-06T05:00:00Z"}],"has_more":true}`,
+		`{"credits":[{"id":"A","expires_at":"2026-11-06T05:00:00Z"}],"next_cursor":"next"}`,
+		`{"credits":[{"id":"A","expires_at":"2026-11-06T05:00:00Z"}],"total_count":2}`,
+		`{"credits":[null]}`,
+		`{"credits":[{"id":"A","credit_id":"B","expires_at":"2026-11-06T05:00:00Z"}]}`,
+		`{"credits":[{"id":"A","expires_at":"2026-11-06T05:00:00Z","expiresAt":"2026-11-06T06:00:00Z"}]}`,
+		`{"available_count":2,"credits":[{"id":"A","expires_at":"2026-11-06T05:00:00Z"},{"id":"B","expires_at":"2026-11-06T05:05:00Z"}]}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			account := &Account{ID: 100, Platform: PlatformOpenAI, Type: AccountTypeOAuth,
+				Credentials: map[string]any{"chatgpt_account_id": "local-test"}}
+			repo := &stubQuotaAccountRepo{accounts: map[int64]*Account{100: account}}
+			tokens := &stubQuotaTokenCache{tokens: map[string]string{OpenAITokenCacheKey(account): "fake-token"}}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("content-type", "application/json")
+				if r.URL.Path == "/backend-api/wham/usage" {
+					_, _ = w.Write([]byte(`{"rate_limit_reset_credits":{"available_count":1}}`))
+					return
+				}
+				_, _ = w.Write([]byte(body))
+			}))
+			defer server.Close()
+			svc := NewOpenAIQuotaService(repo, nil, NewOpenAITokenProvider(repo, tokens, nil), newQuotaRedirectingFactory(server), nil)
+			usage, err := svc.QueryUsage(context.Background(), 100)
+			require.NoError(t, err)
+			require.False(t, usage.autoResetDetailsComplete)
+		})
+	}
+}

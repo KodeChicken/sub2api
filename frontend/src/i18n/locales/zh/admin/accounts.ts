@@ -682,6 +682,7 @@ export default {
         resetAccountRecoveryFailed: '窗口已重置，但账号状态恢复失败，请手动恢复账号状态。',
         resetAccountRefreshFailed: '窗口、账号状态和重置次数缓存已更新，但无法加载最新账号显示。',
         refreshCachePersistFailed: '已显示实时次数，但到期明细获取失败，仍保留原有缓存明细。',
+        expiryTrigger: '临期',
         autoStatus: {
           checking: '检测中',
           available: '卡可用',
@@ -1246,6 +1247,8 @@ export default {
       autoResetCredit: {
 	    title: '自动使用重置卡',
 	    hint: '仅在实际用量达到阈值时使用最早到期的可用卡；默认关闭。无卡或失败时账号保持暂停。',
+	    expiryTitle: '临期自动使用重置卡',
+	    expiryHint: '到期前 10 分钟使用已知的最早到期卡，不受用量阈值开关影响；默认关闭。',
 	    threshold5h: '5h 自动用卡阈值(%)',
 	    threshold7d: '7d 自动用卡阈值(%)',
 	    thresholdHint: '两个窗口独立判断，任一达到自身阈值即触发。可填写 0.1–100，默认均为 100。',

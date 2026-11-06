@@ -1131,6 +1131,8 @@ export default {
       autoResetCredit: {
 	    title: 'Automatically use reset credits',
 	    hint: 'Uses the earliest-expiring available credit only when actual usage reaches a threshold. Off by default; the account remains paused if no credit is available or reset fails.',
+	    expiryTitle: 'Automatically use expiring reset credits',
+	    expiryHint: 'Uses the earliest-expiring known credit 10 minutes before expiry, independently of usage thresholds. Off by default.',
 	    threshold5h: '5h auto-reset threshold (%)',
 	    threshold7d: '7d auto-reset threshold (%)',
 	    thresholdHint: 'Each window is evaluated independently. Enter 0.1–100; both default to 100.',
@@ -1877,6 +1879,7 @@ export default {
         resetAccountRecoveryFailed: 'The window was reset, but account state recovery failed. Recover the account state manually.',
         resetAccountRefreshFailed: 'The window, account state, and reset-credit cache were updated, but the latest account display could not be loaded.',
         refreshCachePersistFailed: 'Showing the live count, but its expiration details were unavailable, so the cached details were kept.',
+        expiryTrigger: 'Expiring credit',
         autoStatus: {
           checking: 'Checking',
           available: 'Credit available',

@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/pagination"
 	"github.com/stretchr/testify/require"
 )
 
@@ -139,22 +141,23 @@ func TestNotifyOpenAIAutoResetFromScheduler_CoolsDownPerAccount(t *testing.T) {
 }
 
 func TestSelectOpenAIAutoResetCandidate_FailsClosed(t *testing.T) {
+	now := time.Date(2026, 8, 31, 0, 0, 0, 0, time.UTC)
 	candidates := []openAIAutoResetCreditCandidate{
 		{ID: "later", ExpiresAt: "2026-09-02T00:00:00Z"},
 		{ID: "earlier", ExpiresAt: "2026-09-01T00:00:00Z"},
 	}
-	selected, err := selectOpenAIAutoResetCandidate(candidates, 2, nil, "cycle-a")
+	selected, err := selectOpenAIAutoResetCandidate(candidates, 2, nil, now)
 	require.NoError(t, err)
 	require.Equal(t, "earlier", selected.ID)
 
 	_, err = selectOpenAIAutoResetCandidate([]openAIAutoResetCreditCandidate{
 		{ExpiresAt: "2026-09-01T00:00:00Z"},
-	}, 1, nil, "cycle-a")
+	}, 1, nil, now)
 	require.Error(t, err)
 
 	_, err = selectOpenAIAutoResetCandidate(candidates, 2, &OpenAIAutoResetCreditState{
 		AttemptCycleHash: "cycle-a", AttemptCreditHash: shortOpenAIAutoResetHash("missing"),
-	}, "cycle-a")
+	}, now)
 	require.Error(t, err, "模糊结果后原卡消失时不得切换下一张卡")
 }
 
@@ -186,13 +189,24 @@ func TestOpenAIQuotaAutoResetService_AssessesIndependentWindows(t *testing.T) {
 
 type autoResetTestAccountRepo struct {
 	AccountRepository
-	mu      sync.Mutex
-	account *Account
+	mu          sync.Mutex
+	account     *Account
+	getCalls    atomic.Int32
+	extraWrites atomic.Int32
+	beforeGet   func(int32)
+	updateErr   func(map[string]any) error
 }
 
 func (r *autoResetTestAccountRepo) GetByID(_ context.Context, id int64) (*Account, error) {
+	call := r.getCalls.Add(1)
+	if r.beforeGet != nil {
+		r.beforeGet(call)
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.account == nil {
+		return nil, ErrAccountNotFound
+	}
 	copy := *r.account
 	copy.Extra = cloneOpenAIAutoResetExtra(r.account.Extra)
 	return &copy, nil
@@ -201,13 +215,52 @@ func (r *autoResetTestAccountRepo) GetByID(_ context.Context, id int64) (*Accoun
 func (r *autoResetTestAccountRepo) UpdateExtra(_ context.Context, id int64, updates map[string]any) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.extraWrites.Add(1)
+	if r.account == nil {
+		return ErrAccountNotFound
+	}
+	if r.updateErr != nil {
+		if err := r.updateErr(updates); err != nil {
+			return err
+		}
+	}
 	if r.account.Extra == nil {
 		r.account.Extra = make(map[string]any)
 	}
 	for key, value := range updates {
+		if state, ok := value.(*OpenAIAutoResetCreditState); ok {
+			copy := *state
+			value = &copy
+		}
 		r.account.Extra[key] = value
 	}
 	return nil
+}
+
+func (r *autoResetTestAccountRepo) ListWithFilters(context.Context, pagination.PaginationParams, string, string, string, string, int64, string) ([]Account, *pagination.PaginationResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.account == nil {
+		return nil, nil, nil
+	}
+	copy := *r.account
+	copy.Extra = cloneOpenAIAutoResetExtra(copy.Extra)
+	return []Account{copy}, nil, nil
+}
+
+func (r *inMemoryIdempotencyRepo) TryLockOpenAIAutoResetCredit(_ context.Context, accountID int64) (func(), bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key := fmt.Sprintf("auto-reset-lock:%d", accountID)
+	if r.data[key] != nil {
+		return nil, false, nil
+	}
+	r.data[key] = &IdempotencyRecord{}
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		delete(r.data, key)
+	}, true, nil
 }
 
 type autoResetTestQuota struct {
@@ -221,10 +274,19 @@ type autoResetTestQuota struct {
 	failFirst    bool
 	queryCalls   atomic.Int32
 	queryErr     error
+	query        func(int32) (*OpenAIQuotaUsage, error)
+	repo         *autoResetTestAccountRepo
+	cacheErr     error
+	postCacheErr error
+	resetErr     error
+	resetResult  *OpenAIQuotaResetResult
 }
 
 func (q *autoResetTestQuota) QueryUsage(context.Context, int64) (*OpenAIQuotaUsage, error) {
-	q.queryCalls.Add(1)
+	call := q.queryCalls.Add(1)
+	if q.query != nil {
+		return q.query(call)
+	}
 	if q.queryErr != nil {
 		return nil, q.queryErr
 	}
@@ -232,12 +294,21 @@ func (q *autoResetTestQuota) QueryUsage(context.Context, int64) (*OpenAIQuotaUsa
 	return &copy, nil
 }
 
-func (q *autoResetTestQuota) CacheResetCreditsSnapshot(context.Context, int64, *OpenAIRateLimitResetCredits) error {
+func (q *autoResetTestQuota) CacheResetCreditsSnapshot(ctx context.Context, id int64, credits *OpenAIRateLimitResetCredits) error {
+	if q.cacheErr != nil {
+		return q.cacheErr
+	}
+	if q.repo != nil {
+		return q.repo.UpdateExtra(ctx, id, map[string]any{openaiQuotaResetCreditsKey: credits})
+	}
 	return nil
 }
 
-func (q *autoResetTestQuota) CachePostResetSnapshot(context.Context, int64, *OpenAIQuotaUsage) error {
-	return nil
+func (q *autoResetTestQuota) CachePostResetSnapshot(ctx context.Context, id int64, usage *OpenAIQuotaUsage) error {
+	if q.postCacheErr != nil {
+		return q.postCacheErr
+	}
+	return q.CacheResetCreditsSnapshot(ctx, id, usage.RateLimitResetCredits)
 }
 
 func (q *autoResetTestQuota) ResetCreditTargeted(_ context.Context, _ int64, creditID, redeemRequestID string) (*OpenAIQuotaResetResult, error) {
@@ -251,13 +322,19 @@ func (q *autoResetTestQuota) ResetCreditTargeted(_ context.Context, _ int64, cre
 	if q.failFirst && call == 1 {
 		return nil, context.DeadlineExceeded
 	}
+	if q.resetErr != nil {
+		return nil, q.resetErr
+	}
 	if q.resetEntered != nil {
 		q.enterOnce.Do(func() { close(q.resetEntered) })
 	}
 	if q.releaseReset != nil {
 		<-q.releaseReset
 	}
-	return &OpenAIQuotaResetResult{Code: "ok", WindowsReset: 2}, nil
+	if q.resetResult != nil {
+		return q.resetResult, nil
+	}
+	return &OpenAIQuotaResetResult{Code: "ok", WindowsReset: 2, Credit: &OpenAIQuotaResetCredit{ID: creditID, Status: "redeemed"}}, nil
 }
 
 type autoResetTestRecoverer struct{}
@@ -284,7 +361,8 @@ func TestOpenAIQuotaAutoResetService_ConcurrentInstancesConsumeOnce(t *testing.T
 	}
 	repo := &autoResetTestAccountRepo{account: account}
 	usage := &OpenAIQuotaUsage{
-		FetchedAt: now.Unix(),
+		autoResetDetailsComplete: true,
+		FetchedAt:                now.Unix(),
 		RateLimit: &OpenAIRateLimit{
 			PrimaryWindow:   &OpenAIRateLimitWindow{UsedPercent: 100, LimitWindowSeconds: 5 * 60 * 60, ResetAfterSeconds: 3600, ResetAt: now.Add(time.Hour).Unix()},
 			SecondaryWindow: &OpenAIRateLimitWindow{UsedPercent: 10, LimitWindowSeconds: 7 * 24 * 60 * 60, ResetAfterSeconds: 86400, ResetAt: now.Add(24 * time.Hour).Unix()},
@@ -348,7 +426,8 @@ func TestOpenAIQuotaAutoResetService_TimeoutRetryReusesRequestBody(t *testing.T)
 	quota := &autoResetTestQuota{
 		failFirst: true,
 		usage: &OpenAIQuotaUsage{
-			FetchedAt: now.Unix(),
+			autoResetDetailsComplete: true,
+			FetchedAt:                now.Unix(),
 			RateLimit: &OpenAIRateLimit{
 				PrimaryWindow: &OpenAIRateLimitWindow{UsedPercent: 100, LimitWindowSeconds: 5 * 60 * 60, ResetAfterSeconds: 3600, ResetAt: now.Add(time.Hour).Unix()},
 			},
@@ -397,7 +476,8 @@ func newResetThresholdTestFixture(t *testing.T, state *OpenAIAutoResetCreditStat
 	account := &Account{ID: 501, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Status: StatusActive, Schedulable: true, Extra: extra}
 	repo := &autoResetTestAccountRepo{account: account}
 	quota := &autoResetTestQuota{usage: &OpenAIQuotaUsage{
-		FetchedAt: now.Unix(),
+		autoResetDetailsComplete: true,
+		FetchedAt:                now.Unix(),
 		RateLimit: &OpenAIRateLimit{
 			SecondaryWindow: &OpenAIRateLimitWindow{UsedPercent: 99, LimitWindowSeconds: 7 * 24 * 60 * 60, ResetAfterSeconds: 48 * 3600, ResetAt: now.Add(48 * time.Hour).Unix()},
 		},
