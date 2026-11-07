@@ -16,6 +16,7 @@ func TestAuthSnapshotPreservesImageCountBillingAndTemporaryDispatch(t *testing.T
 		User: &User{ID: 1},
 		Group: &Group{
 			ImageCountBilling:                 true,
+			RequirePrivacySet:                 true,
 			TemporaryDispatchAccountIDs:       []int64{17, 23},
 			TemporaryDispatchAccountDeadlines: map[string]time.Time{"17": deadline},
 		},
@@ -27,11 +28,14 @@ func TestAuthSnapshotPreservesImageCountBillingAndTemporaryDispatch(t *testing.T
 	require.NoError(t, json.Unmarshal(data, &cached))
 	restored := svc.snapshotToAPIKey("key", &cached)
 	require.True(t, restored.Group.ImageCountBilling)
+	require.True(t, restored.Group.RequirePrivacySet)
 	require.Equal(t, key.Group.TemporaryDispatchAccountIDs, restored.Group.TemporaryDispatchAccountIDs)
 	require.Equal(t, key.Group.TemporaryDispatchAccountDeadlines, restored.Group.TemporaryDispatchAccountDeadlines)
 
-	cached.Version = 25
-	_, accepted, err := svc.applyAuthCacheEntry("key", &APIKeyAuthCacheEntry{Snapshot: &cached})
-	require.NoError(t, err)
-	require.False(t, accepted, "v25 predates image count billing in this fork")
+	for _, version := range []int{25, 26, 27} {
+		cached.Version = version
+		_, accepted, err := svc.applyAuthCacheEntry("key", &APIKeyAuthCacheEntry{Snapshot: &cached})
+		require.NoError(t, err)
+		require.False(t, accepted, "v%d predates the combined dispatch and privacy snapshot", version)
+	}
 }

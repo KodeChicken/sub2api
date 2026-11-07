@@ -135,6 +135,26 @@ func TestRewriteOpenAIImagesRequestPreservesNonGPTImageFields(t *testing.T) {
 	require.Equal(t, "16:9", gjson.GetBytes(rewritten, "aspect_ratio").String())
 }
 
+func TestRewriteOpenAIImagesRequestKeepsNativeMarkup(t *testing.T) {
+	body := []byte(`{"model":"gpt-image-2.6-flare","prompt":"edit","images":[{"file_id":"file-source"}],"markup":{"image_url":"data:image/png;base64,AA=="},"custom":"drop"}`)
+	rewritten, _, err := rewriteOpenAIImagesRequest(body, "application/json", "gpt-image-2.6-flare", openAIImagesEditsEndpoint, true)
+	require.NoError(t, err)
+	require.Equal(t, "file-source", gjson.GetBytes(rewritten, "images.0.file_id").String())
+	require.Equal(t, "data:image/png;base64,AA==", gjson.GetBytes(rewritten, "markup.image_url").String())
+	require.False(t, gjson.GetBytes(rewritten, "custom").Exists())
+	require.True(t, isOfficialOpenAIImagesField(openAIImagesEditsEndpoint, "markup", true))
+	require.False(t, isOfficialOpenAIImagesField(openAIImagesGenerationsEndpoint, "markup", true))
+}
+
+func TestOpenAIImagesLegacyModelsRejectNewOutputFormats(t *testing.T) {
+	for _, format := range []string{"gif", "svg"} {
+		err := validateOpenAIImagesParameters(&OpenAIImagesRequest{
+			Model: "gpt-image-2", Prompt: "draw", N: 1, OutputFormat: format,
+		})
+		require.ErrorContains(t, err, "output_format")
+	}
+}
+
 func TestParseOpenAIImagesEditSupportsFileIDs(t *testing.T) {
 	body := []byte(`{"model":"gpt-image-2","prompt":"edit","images":[{"file_id":"file-source"}],"mask":{"file_id":"file-mask"},"input_fidelity":"high","user":"user-1"}`)
 	c, _ := newOpenAIImagesTestContext(t, body)
