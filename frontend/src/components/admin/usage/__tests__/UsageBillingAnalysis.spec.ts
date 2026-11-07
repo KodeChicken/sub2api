@@ -19,8 +19,9 @@ const BaseDialogStub = defineComponent({
   template: '<div v-if="show"><slot /><slot name="footer" /></div>'
 })
 const billingRow = (row: Omit<BillingAnalysisRow,
-  'non_image_requests' | 'non_image_priced_requests' | 'non_image_user_cost' | 'non_image_official_reference_cost'
->): BillingAnalysisRow => ({
+  'priced_user_cost' | 'non_image_requests' | 'non_image_priced_requests' | 'non_image_user_cost' | 'non_image_official_reference_cost'
+> & { priced_user_cost?: number }): BillingAnalysisRow => ({
+  priced_user_cost: row.priced_requests === row.requests ? row.user_cost : 0,
   ...row,
   non_image_requests: row.requests,
   non_image_priced_requests: row.priced_requests,
@@ -201,13 +202,22 @@ describe('UsageBillingAnalysis', () => {
     expect(wrapper.get('tbody').text()).toContain('$1.0000')
   })
 
-  it('does not mix all user charges with a partially covered reference cost', () => {
-    const wrapper = mountAnalysis({
-      total: billingRow({ requests: 2, priced_requests: 1, user_cost: 2, account_cost: 4, official_reference_cost: 1 }),
-      models: [billingRow({ model: 'partial', requests: 2, priced_requests: 1, user_cost: 2, account_cost: 4, official_reference_cost: 1 })]
+  it('excludes three missing-price requests from the ratio without changing charges or profit', () => {
+    const row = billingRow({
+      model: 'partial', requests: 5, priced_requests: 2,
+      user_cost: 5, priced_user_cost: 2, account_cost: 20, official_reference_cost: 10
     })
-    expect(wrapper.get('tbody').text()).toContain('usage.realRatioMissing:1')
-    expect(wrapper.get('tbody').text()).not.toContain('2.0000x')
+    const wrapper = mountAnalysis({ total: row, models: [row] })
+    const cells = wrapper.findAll('tbody td')
+    expect(cells.slice(1, 5).map((cell) => cell.text())).toEqual([
+      '$5.0000', '$20.0000', '$3.4000', '$1.6000'
+    ])
+    expect(cells[5].text()).toContain('0.2000x')
+    expect(cells[5].text()).toContain('usage.realRatioExcluded:3')
+    expect(cells[5].text()).not.toContain('0.5000x')
+    expect(cells[5].attributes('title')).toBe('usage.realRatioCoverage:2/5')
+    expect(wrapper.text()).toContain('$3.4000')
+    expect(wrapper.text()).toContain('$1.6000')
   })
 
   it('uses the same token-scoped costs for model and user amounts, profit and real ratios', async () => {
@@ -246,20 +256,34 @@ describe('UsageBillingAnalysis', () => {
     expect(cells[5].attributes('title')).toBe('usage.realRatioCoverage:1/1')
   })
 
-  it('shows missing reference counts for both model and user rows', async () => {
-    const row = billingRow({ model: 'mixed', requests: 3, priced_requests: 1, user_cost: 5, account_cost: 20, official_reference_cost: 10 })
+  it('shows partial ratios and excluded counts for both model and user rows', async () => {
+    const row = billingRow({ model: 'mixed', requests: 3, priced_requests: 1, user_cost: 5, priced_user_cost: 2, account_cost: 20, official_reference_cost: 10 })
     getUsers.mockResolvedValueOnce({
       users: [{ user_id: 42, username: '', email: 'missing@example.com', ...row }],
       has_more: false
     })
     const wrapper = mountAnalysis({ total: row, models: [row] })
     const cell = wrapper.findAll('tbody td')[5]
-    expect(cell.text()).toBe('usage.realRatioMissing:2')
+    expect(cell.text()).toContain('0.2000x')
+    expect(cell.text()).toContain('usage.realRatioExcluded:2')
     expect(cell.attributes('title')).toBe('usage.realRatioCoverage:1/3')
     await wrapper.get('[data-testid="billing-expand-mixed"]').trigger('click')
     await flushPromises()
     const userCells = wrapper.get('td[title="missing@example.com"]').element.parentElement!.querySelectorAll('td')
-    expect(userCells[5].textContent?.trim()).toBe('usage.realRatioMissing:2')
+    expect(userCells[5].textContent).toContain('0.2000x')
+    expect(userCells[5].textContent).toContain('usage.realRatioExcluded:2')
     expect(userCells[5].getAttribute('title')).toBe('usage.realRatioCoverage:1/3')
+  })
+
+  it('shows a zero ratio for covered free requests and never divides by a zero partial reference', () => {
+    const row = billingRow({ model: 'partial', requests: 2, priced_requests: 1, user_cost: 1, priced_user_cost: 0, account_cost: 4, official_reference_cost: 2 })
+    const wrapper = mountAnalysis({ total: row, models: [row] })
+    expect(wrapper.findAll('tbody td')[5].text()).toContain('0.0000x')
+    expect(wrapper.findAll('tbody td')[5].text()).toContain('usage.realRatioExcluded:1')
+
+    const zeroReference = { ...row, official_reference_cost: 0 }
+    const zeroWrapper = mountAnalysis({ total: zeroReference, models: [zeroReference] })
+    expect(zeroWrapper.findAll('tbody td')[5].text()).toContain('usage.unavailable')
+    expect(zeroWrapper.findAll('tbody td')[5].text()).not.toMatch(/NaN|Infinity/)
   })
 })

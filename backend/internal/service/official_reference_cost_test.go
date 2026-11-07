@@ -225,3 +225,46 @@ func TestApplyBillingAnalysisReferenceCostsExcludesImagesFromRealRatio(t *testin
 	require.Equal(t, 1.05, users.Users[0].UserCost)
 	require.Equal(t, float64(2), users.Users[0].AccountCost)
 }
+
+func TestBillingAnalysisRecoversOnlyPricedUserCharges(t *testing.T) {
+	billingService := NewBillingService(nil, nil)
+	tokenMode := string(BillingModeToken)
+	logs := []UsageLog{
+		{
+			UserID: 1, Model: "gpt-6-sol", BillingMode: &tokenMode, ActualCost: 2,
+			InputTokens: 467, OutputTokens: 968, CacheReadTokens: 161024,
+			OfficialReferenceLongContextEnabled: boolPtr(false),
+			CreatedAt:                           time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC),
+		},
+		{UserID: 1, Model: "gpt-6-sol", ActualCost: 4},
+		{UserID: 1, Model: "gpt-6-sol", ActualCost: 4},
+		{UserID: 1, Model: "gpt-6-sol", ActualCost: 4},
+	}
+	row := usagestats.BillingAnalysisRow{
+		Model: "gpt-6-sol", Requests: 5, PricedRequests: 1,
+		UserCost: 15, AccountCost: 30, OfficialReferenceCost: 0.04, PricedUserCost: 1,
+	}
+	analysis := &usagestats.BillingAnalysis{
+		Total: row, Models: []usagestats.BillingAnalysisRow{row},
+	}
+	users := &usagestats.BillingAnalysisUsers{Users: []usagestats.BillingAnalysisUserRow{{
+		UserID: 1, Requests: 5, PricedRequests: 1,
+		UserCost: 15, AccountCost: 30, OfficialReferenceCost: 0.04, PricedUserCost: 1,
+	}}}
+
+	applyBillingAnalysisReferenceCosts(analysis, logs, billingService)
+	applyBillingAnalysisUserReferenceCosts(users, logs, billingService)
+
+	for _, got := range []usagestats.BillingAnalysisRow{analysis.Total, analysis.Models[0]} {
+		require.Equal(t, int64(3), got.Requests-got.PricedRequests)
+		require.Equal(t, float64(3), got.PricedUserCost)
+		require.InDelta(t, 0.0828188, got.OfficialReferenceCost, 1e-12)
+		require.Equal(t, float64(15), got.UserCost)
+		require.Equal(t, float64(30), got.AccountCost)
+	}
+	require.Equal(t, analysis.Total.PricedRequests, users.Users[0].PricedRequests)
+	require.Equal(t, analysis.Total.PricedUserCost, users.Users[0].PricedUserCost)
+	require.Equal(t, analysis.Total.OfficialReferenceCost, users.Users[0].OfficialReferenceCost)
+	require.Equal(t, analysis.Total.UserCost, users.Users[0].UserCost)
+	require.Equal(t, analysis.Total.AccountCost, users.Users[0].AccountCost)
+}

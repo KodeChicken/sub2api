@@ -315,6 +315,7 @@ type BillingAnalysisRow struct {
 	UserCost              float64 `json:"user_cost"`
 	AccountCost           float64 `json:"account_cost"`
 	OfficialReferenceCost float64 `json:"official_reference_cost"`
+	PricedUserCost        float64 `json:"priced_user_cost"`
 
 	// Real-ratio statistics exclude image generation; the totals above include it.
 	NonImageRequests              int64   `json:"non_image_requests"`
@@ -337,6 +338,7 @@ type BillingAnalysisUserRow struct {
 	UserCost              float64 `json:"user_cost"`
 	AccountCost           float64 `json:"account_cost"`
 	OfficialReferenceCost float64 `json:"official_reference_cost"`
+	PricedUserCost        float64 `json:"priced_user_cost"`
 
 	// Real-ratio statistics exclude image generation; the totals above include it.
 	NonImageRequests              int64   `json:"non_image_requests"`

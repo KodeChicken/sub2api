@@ -33,6 +33,7 @@ export interface BillingAnalysisRow {
   user_cost: number
   account_cost: number
   official_reference_cost: number
+  priced_user_cost: number
   non_image_requests: number
   non_image_priced_requests: number
   non_image_user_cost: number
@@ -53,6 +54,7 @@ export interface BillingAnalysisUserRow {
   user_cost: number
   account_cost: number
   official_reference_cost: number
+  priced_user_cost: number
   non_image_requests: number
   non_image_priced_requests: number
   non_image_user_cost: number

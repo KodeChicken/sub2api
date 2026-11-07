@@ -84,7 +84,12 @@
                 <td class="py-1.5 text-right font-medium tabular-nums" :class="coefficient == null ? '' : profitColor(row.user_cost - row.account_cost * coefficient)">
                   {{ coefficient == null ? '-' : formatAmount(row.user_cost - row.account_cost * coefficient) }}
                 </td>
-                <td class="py-1.5 text-right font-medium tabular-nums" :title="coverageTitle(row)">{{ realRatio(row) }}</td>
+                <td class="py-1.5 text-right font-medium tabular-nums" :title="coverageTitle(row)">
+                  <span>{{ realRatio(row) }}</span>
+                  <span v-if="row.priced_requests > 0 && row.priced_requests < row.requests" class="block font-normal text-gray-500 dark:text-gray-400">
+                    {{ t('usage.realRatioExcluded', { count: row.requests - row.priced_requests }) }}
+                  </span>
+                </td>
               </tr>
               <tr v-if="expandedModel === modelKey(row)" class="bg-gray-50/60 dark:bg-dark-700/30">
                 <td colspan="6" class="p-0">
@@ -111,7 +116,12 @@
                           <td class="py-1.5 text-right font-medium tabular-nums" :class="coefficient == null ? '' : profitColor(user.user_cost - user.account_cost * coefficient)">
                             {{ coefficient == null ? '-' : formatAmount(user.user_cost - user.account_cost * coefficient) }}
                           </td>
-                          <td class="py-1.5 text-right font-medium tabular-nums" :title="coverageTitle(user)">{{ realRatio(user) }}</td>
+                          <td class="py-1.5 text-right font-medium tabular-nums" :title="coverageTitle(user)">
+                            <span>{{ realRatio(user) }}</span>
+                            <span v-if="user.priced_requests > 0 && user.priced_requests < user.requests" class="block font-normal text-gray-500 dark:text-gray-400">
+                              {{ t('usage.realRatioExcluded', { count: user.requests - user.priced_requests }) }}
+                            </span>
+                          </td>
                         </tr>
                       </tbody>
                     </table>
@@ -217,11 +227,11 @@ const draftCoefficient = computed(() => {
 const sortedModels = computed(() => [...(props.analysis?.models || [])].sort((a, b) => b.account_cost - a.account_cost))
 const modelKey = (row: BillingAnalysisRow) => row.model || ''
 const realRatio = (row: BillingAnalysisRow | BillingAnalysisUserRow) => {
-  if (row.priced_requests < row.requests) {
+  if (row.priced_requests === 0 && row.requests > 0) {
     return t('usage.realRatioMissing', { count: row.requests - row.priced_requests })
   }
-  return row.requests > 0 && row.priced_requests === row.requests && row.official_reference_cost > 0
-    ? `${(row.user_cost / row.official_reference_cost).toFixed(4)}x`
+  return row.priced_requests > 0 && row.official_reference_cost > 0
+    ? `${(row.priced_user_cost / row.official_reference_cost).toFixed(4)}x`
     : t('usage.unavailable')
 }
 const coverageTitle = (row: BillingAnalysisRow | BillingAnalysisUserRow) =>

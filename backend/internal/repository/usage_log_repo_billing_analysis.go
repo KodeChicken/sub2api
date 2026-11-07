@@ -67,6 +67,7 @@ func (r *usageLogRepository) GetBillingAnalysis(ctx context.Context, filters usa
 			COUNT(*), COUNT(official_reference_cost),
 			COALESCE(SUM(user_cost), 0), COALESCE(SUM(account_cost), 0),
 			COALESCE(SUM(official_reference_cost), 0),
+			COALESCE(SUM(user_cost) FILTER (WHERE official_reference_cost IS NOT NULL), 0),
 			COUNT(*) FILTER (WHERE is_non_image),
 			COUNT(official_reference_cost) FILTER (WHERE is_non_image),
 			COALESCE(SUM(user_cost) FILTER (WHERE is_non_image), 0),
@@ -87,7 +88,7 @@ func (r *usageLogRepository) GetBillingAnalysis(ctx context.Context, filters usa
 		var modelGrouped int
 		var model *string
 		var row usagestats.BillingAnalysisRow
-		if err := rows.Scan(&modelGrouped, &model, &row.Requests, &row.PricedRequests, &row.UserCost, &row.AccountCost, &row.OfficialReferenceCost,
+		if err := rows.Scan(&modelGrouped, &model, &row.Requests, &row.PricedRequests, &row.UserCost, &row.AccountCost, &row.OfficialReferenceCost, &row.PricedUserCost,
 			&row.NonImageRequests, &row.NonImagePricedRequests, &row.NonImageUserCost, &row.NonImageOfficialReferenceCost); err != nil {
 			return nil, err
 		}
@@ -128,6 +129,7 @@ func (r *usageLogRepository) GetBillingAnalysisUsers(ctx context.Context, filter
 				COALESCE(SUM(user_cost), 0) AS user_cost,
 				COALESCE(SUM(account_cost), 0) AS account_cost,
 				COALESCE(SUM(official_reference_cost), 0) AS official_reference_cost,
+				COALESCE(SUM(user_cost) FILTER (WHERE official_reference_cost IS NOT NULL), 0) AS priced_user_cost,
 				COUNT(*) FILTER (WHERE is_non_image) AS non_image_requests,
 				COUNT(official_reference_cost) FILTER (WHERE is_non_image) AS non_image_priced_requests,
 				COALESCE(SUM(user_cost) FILTER (WHERE is_non_image), 0) AS non_image_user_cost,
@@ -136,7 +138,7 @@ func (r *usageLogRepository) GetBillingAnalysisUsers(ctx context.Context, filter
 			GROUP BY user_id
 		)
 		SELECT g.user_id, COALESCE(u.username, ''), COALESCE(u.email, ''),
-			g.requests, g.priced_requests, g.user_cost, g.account_cost, g.official_reference_cost,
+			g.requests, g.priced_requests, g.user_cost, g.account_cost, g.official_reference_cost, g.priced_user_cost,
 			g.non_image_requests, g.non_image_priced_requests, g.non_image_user_cost, g.non_image_official_reference_cost
 		FROM grouped g
 		LEFT JOIN users u ON u.id = g.user_id
@@ -152,7 +154,7 @@ func (r *usageLogRepository) GetBillingAnalysisUsers(ctx context.Context, filter
 	result := &usagestats.BillingAnalysisUsers{Users: make([]usagestats.BillingAnalysisUserRow, 0)}
 	for rows.Next() {
 		var user usagestats.BillingAnalysisUserRow
-		if err := rows.Scan(&user.UserID, &user.Username, &user.Email, &user.Requests, &user.PricedRequests, &user.UserCost, &user.AccountCost, &user.OfficialReferenceCost,
+		if err := rows.Scan(&user.UserID, &user.Username, &user.Email, &user.Requests, &user.PricedRequests, &user.UserCost, &user.AccountCost, &user.OfficialReferenceCost, &user.PricedUserCost,
 			&user.NonImageRequests, &user.NonImagePricedRequests, &user.NonImageUserCost, &user.NonImageOfficialReferenceCost); err != nil {
 			return nil, err
 		}

@@ -55,6 +55,7 @@ func TestBillingAnalysisIncludesOnlyTokenBilledRequests(t *testing.T) {
 		require.InDelta(t, 1.9, row.UserCost, 1e-9)
 		require.InDelta(t, 4.8, row.AccountCost, 1e-9)
 		require.InDelta(t, 3, row.OfficialReferenceCost, 1e-9)
+		require.InDelta(t, 1.6, row.PricedUserCost, 1e-9)
 		require.Equal(t, int64(3), row.NonImageRequests)
 		require.Equal(t, int64(2), row.NonImagePricedRequests)
 		require.InDelta(t, 1.7, row.NonImageUserCost, 1e-9)
@@ -72,6 +73,7 @@ func TestBillingAnalysisIncludesOnlyTokenBilledRequests(t *testing.T) {
 	require.Equal(t, analysis.Total.UserCost, row.UserCost)
 	require.Equal(t, analysis.Total.AccountCost, row.AccountCost)
 	require.Equal(t, analysis.Total.OfficialReferenceCost, row.OfficialReferenceCost)
+	require.Equal(t, analysis.Total.PricedUserCost, row.PricedUserCost)
 
 	missing, err := repo.ListMissingBillingReferenceUsageLogs(ctx, filters)
 	require.NoError(t, err)
