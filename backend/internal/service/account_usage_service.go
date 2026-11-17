@@ -108,6 +108,7 @@ type antigravityUsageCache struct {
 }
 
 const (
+	errorCodeQuotaRefreshFailed = "quota_refresh_failed"
 	apiCacheTTL         = 3 * time.Minute
 	apiErrorCacheTTL    = 1 * time.Minute        // 负缓存 TTL：429 等错误缓存 1 分钟
 	antigravityErrorTTL = 1 * time.Minute        // Antigravity 错误缓存 TTL（可恢复错误）
@@ -150,6 +151,7 @@ type WindowStats struct {
 // UsageProgress 使用量进度
 type UsageProgress struct {
 	Utilization      float64      `json:"utilization"`            // 使用率百分比 (0-100+，100表示100%)
+	UtilizationUnknown bool       `json:"utilization_unknown,omitempty"`
 	ResetsAt         *time.Time   `json:"resets_at"`              // 重置时间
 	RemainingSeconds int          `json:"remaining_seconds"`      // 距重置剩余秒数
 	WindowStats      *WindowStats `json:"window_stats,omitempty"` // 窗口期统计（从窗口开始到当前的使用量）
