@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 28 // v28: group force_openai_ultrafast (OpenAI gateway reads it from ctx)
+const apiKeyAuthSnapshotVersion = 29 // v29: temporary dispatch fields in the auth snapshot
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -440,6 +440,12 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			ProfitSafetyBuffer:              apiKey.Group.ProfitSafetyBuffer,
 			RequirePrivacySet:               apiKey.Group.RequirePrivacySet,
 		}
+		snapshot.Group.TemporaryDispatchAccountID = apiKey.Group.TemporaryDispatchAccountID
+		snapshot.Group.TemporaryDispatchAccountIDs = append([]int64(nil), apiKey.Group.TemporaryDispatchAccountIDs...)
+		snapshot.Group.TemporaryDispatchAccountDeadlines = cloneTimeMap(apiKey.Group.TemporaryDispatchAccountDeadlines)
+		snapshot.Group.TemporaryDispatchID = apiKey.Group.TemporaryDispatchID
+		snapshot.Group.TemporaryDispatchStartedAt = apiKey.Group.TemporaryDispatchStartedAt
+		snapshot.Group.TemporaryDispatchExpiresAt = apiKey.Group.TemporaryDispatchExpiresAt
 	}
 	return snapshot
 }
@@ -546,7 +552,24 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			ProfitSafetyBuffer:              snapshot.Group.ProfitSafetyBuffer,
 			RequirePrivacySet:               snapshot.Group.RequirePrivacySet,
 		}
+		apiKey.Group.TemporaryDispatchAccountID = snapshot.Group.TemporaryDispatchAccountID
+		apiKey.Group.TemporaryDispatchAccountIDs = append([]int64(nil), snapshot.Group.TemporaryDispatchAccountIDs...)
+		apiKey.Group.TemporaryDispatchAccountDeadlines = cloneTimeMap(snapshot.Group.TemporaryDispatchAccountDeadlines)
+		apiKey.Group.TemporaryDispatchID = snapshot.Group.TemporaryDispatchID
+		apiKey.Group.TemporaryDispatchStartedAt = snapshot.Group.TemporaryDispatchStartedAt
+		apiKey.Group.TemporaryDispatchExpiresAt = snapshot.Group.TemporaryDispatchExpiresAt
 	}
 	s.compileAPIKeyIPRules(apiKey)
 	return apiKey
+}
+
+func cloneTimeMap(in map[string]time.Time) map[string]time.Time {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]time.Time, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
 }
