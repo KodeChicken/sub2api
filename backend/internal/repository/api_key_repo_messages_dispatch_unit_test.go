@@ -3,11 +3,44 @@ package repository
 import (
 	"context"
 	"testing"
+	"time"
 
 	dbent "github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGroupEntityToServicePreservesTemporaryDispatch(t *testing.T) {
+	accountID := int64(42)
+	startedAt := time.Date(2026, 11, 18, 10, 0, 0, 0, time.UTC)
+	expiresAt := startedAt.Add(time.Hour)
+	dispatchID := "td_repo_test"
+	mode := service.TemporaryDispatchModeTime
+	metric := service.TemporaryDispatchUsageQuotaPercent
+	window := service.TemporaryDispatchQuotaWindow7d
+
+	got := groupEntityToService(&dbent.Group{
+		TemporaryDispatchAccountID:        &accountID,
+		TemporaryDispatchAccountIds:       []int64{accountID},
+		TemporaryDispatchAccountDeadlines: map[string]time.Time{"42": expiresAt},
+		TemporaryDispatchID:               &dispatchID,
+		TemporaryDispatchStartedAt:        &startedAt,
+		TemporaryDispatchExpiresAt:        &expiresAt,
+		TemporaryDispatchMode:             &mode,
+		TemporaryDispatchUsageMetric:      &metric,
+		TemporaryDispatchQuotaWindow:      &window,
+	})
+
+	require.Equal(t, &accountID, got.TemporaryDispatchAccountID)
+	require.Equal(t, []int64{accountID}, got.TemporaryDispatchAccountIDs)
+	require.Equal(t, expiresAt, got.TemporaryDispatchAccountDeadlines["42"])
+	require.Equal(t, dispatchID, got.TemporaryDispatchID)
+	require.Equal(t, startedAt, *got.TemporaryDispatchStartedAt)
+	require.Equal(t, expiresAt, *got.TemporaryDispatchExpiresAt)
+	require.Equal(t, mode, got.TemporaryDispatchMode)
+	require.Equal(t, metric, got.TemporaryDispatchUsageMetric)
+	require.Equal(t, window, got.TemporaryDispatchQuotaWindow)
+}
 
 func TestGroupEntityToService_PreservesMessagesDispatchModelConfig(t *testing.T) {
 	group := &dbent.Group{

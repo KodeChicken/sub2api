@@ -232,6 +232,19 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldProfitControlEnabled,
 				group.FieldProfitMinMargin,
 				group.FieldProfitSafetyBuffer,
+				group.FieldTemporaryDispatchAccountID,
+				group.FieldTemporaryDispatchAccountIds,
+				group.FieldTemporaryDispatchAccountDeadlines,
+				group.FieldTemporaryDispatchID,
+				group.FieldTemporaryDispatchStartedAt,
+				group.FieldTemporaryDispatchExpiresAt,
+				group.FieldTemporaryDispatchMode,
+				group.FieldTemporaryDispatchUsageMetric,
+				group.FieldTemporaryDispatchQuotaWindow,
+				group.FieldTemporaryDispatchBaselinePercent,
+				group.FieldTemporaryDispatchTargetPercent,
+				group.FieldTemporaryDispatchCurrentPercent,
+				group.FieldTemporaryDispatchQuotaResetAt,
 				// OpenAI 选号从 ctx 分组读取隐私门，漏选会放行未设置隐私的账号。
 				group.FieldRequirePrivacySet,
 			)
@@ -979,7 +992,7 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 			modelPricing = nil
 		}
 	}
-	return &service.Group{
+	out := &service.Group{
 		ID:                              g.ID,
 		Name:                            g.Name,
 		Description:                     derefString(g.Description),
@@ -1051,6 +1064,20 @@ func groupEntityToService(g *dbent.Group) *service.Group {
 		CreatedAt:                       g.CreatedAt,
 		UpdatedAt:                       g.UpdatedAt,
 	}
+	out.TemporaryDispatchAccountID = g.TemporaryDispatchAccountID
+	out.TemporaryDispatchAccountIDs = append([]int64(nil), g.TemporaryDispatchAccountIds...)
+	out.TemporaryDispatchAccountDeadlines = cloneTemporaryDispatchDeadlines(g.TemporaryDispatchAccountDeadlines)
+	out.TemporaryDispatchID = derefString(g.TemporaryDispatchID)
+	out.TemporaryDispatchStartedAt = g.TemporaryDispatchStartedAt
+	out.TemporaryDispatchExpiresAt = g.TemporaryDispatchExpiresAt
+	out.TemporaryDispatchMode = derefString(g.TemporaryDispatchMode)
+	out.TemporaryDispatchUsageMetric = derefString(g.TemporaryDispatchUsageMetric)
+	out.TemporaryDispatchQuotaWindow = derefString(g.TemporaryDispatchQuotaWindow)
+	out.TemporaryDispatchBaselinePercent = g.TemporaryDispatchBaselinePercent
+	out.TemporaryDispatchTargetPercent = g.TemporaryDispatchTargetPercent
+	out.TemporaryDispatchCurrentPercent = g.TemporaryDispatchCurrentPercent
+	out.TemporaryDispatchQuotaResetAt = g.TemporaryDispatchQuotaResetAt
+	return out
 }
 
 func derefString(s *string) string {
@@ -1058,4 +1085,15 @@ func derefString(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+func cloneTemporaryDispatchDeadlines(in map[string]time.Time) map[string]time.Time {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]time.Time, len(in))
+	for accountID, deadline := range in {
+		out[accountID] = deadline
+	}
+	return out
 }
