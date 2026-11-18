@@ -12,7 +12,7 @@ FROM ${POSTGRES_IMAGE} AS pg-client
 
 FROM ${ALPINE_IMAGE}
 
-ARG TARGETPLATFORM
+ARG TARGETARCH
 
 LABEL maintainer="KodeChicken <github.com/KodeChicken>"
 LABEL description="Sub2API - AI API Gateway Platform"
@@ -45,7 +45,7 @@ RUN addgroup -g 1000 sub2api && \
 WORKDIR /app
 
 # Copy the platform-specific pre-built binary and runtime fallback resources from GoReleaser
-COPY $TARGETPLATFORM/sub2api /app/sub2api
+COPY $TARGETARCH/sub2api /app/sub2api
 COPY --chown=sub2api:sub2api backend/resources /app/resources
 
 # Create data directory
