@@ -969,11 +969,11 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},
 			sql.NullString{},
 			sql.NullFloat64{},
-			sql.NullFloat64{}, // official_reference_cost
-			sql.NullBool{},    // official_reference_long_context_enabled
-			sql.NullBool{},    // official_reference_long_context_applied
-			sql.NullTime{},    // official_reference_pricing_at
-			sql.NullString{},  // upstream_request_id
+			sql.NullFloat64{Float64: 0.42, Valid: true}, // official_reference_cost
+			sql.NullBool{Bool: true, Valid: true},       // official_reference_long_context_enabled
+			sql.NullBool{Bool: false, Valid: true},      // official_reference_long_context_applied
+			sql.NullTime{Time: now, Valid: true},        // official_reference_pricing_at
+			sql.NullString{},                            // upstream_request_id
 			sql.NullString{},
 			false, // native_compaction_v2
 			0,     // cache_creation_30m_tokens
@@ -991,6 +991,14 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 		require.NotNil(t, log.ImageSizeSource)
 		require.Equal(t, "output", *log.ImageSizeSource)
 		require.Equal(t, map[string]int{"4K": 2}, log.ImageSizeBreakdown)
+		require.NotNil(t, log.OfficialReferenceCost)
+		require.Equal(t, 0.42, *log.OfficialReferenceCost)
+		require.NotNil(t, log.OfficialReferenceLongContextEnabled)
+		require.True(t, *log.OfficialReferenceLongContextEnabled)
+		require.NotNil(t, log.OfficialReferenceLongContextApplied)
+		require.False(t, *log.OfficialReferenceLongContextApplied)
+		require.NotNil(t, log.OfficialReferencePricingAt)
+		require.Equal(t, now, *log.OfficialReferencePricingAt)
 	})
 
 	t.Run("request_type_ws_v2_overrides_legacy", func(t *testing.T) {

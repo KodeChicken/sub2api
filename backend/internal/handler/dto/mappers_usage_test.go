@@ -3,6 +3,7 @@ package dto
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/stretchr/testify/require"
@@ -327,6 +328,32 @@ func TestUsageLogFromService_PreservesHistoricalMissingImageSize(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(body), `"image_size":null`)
 	require.NotContains(t, string(body), `"image_size":"2K"`)
+}
+
+func TestUsageLogFromService_PreservesOfficialReferenceEvidence(t *testing.T) {
+	t.Parallel()
+
+	officialCost := 0.42
+	enabled := true
+	applied := false
+	pricingAt := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	log := &service.UsageLog{
+		RequestID:                           "req_official_reference",
+		Model:                               "gpt-5",
+		OfficialReferenceCost:               &officialCost,
+		OfficialReferenceLongContextEnabled: &enabled,
+		OfficialReferenceLongContextApplied: &applied,
+		OfficialReferencePricingAt:          &pricingAt,
+	}
+
+	for _, got := range []any{UsageLogFromService(log), UsageLogFromServiceAdmin(log)} {
+		body, err := json.Marshal(got)
+		require.NoError(t, err)
+		require.Contains(t, string(body), `"official_reference_cost":0.42`)
+		require.Contains(t, string(body), `"official_reference_long_context_enabled":true`)
+		require.Contains(t, string(body), `"official_reference_long_context_applied":false`)
+		require.Contains(t, string(body), `"official_reference_pricing_at":"2026-09-02T12:00:00Z"`)
+	}
 }
 
 func f64Ptr(value float64) *float64 {

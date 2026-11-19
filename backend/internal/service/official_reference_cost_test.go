@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -139,132 +140,81 @@ func TestCalculateOfficialReferenceCostUsesCatalogServiceTier(t *testing.T) {
 	require.Less(t, flex.Cost, standard.Cost)
 }
 
-func TestApplyBillingAnalysisReferenceCostsUsesPerRequestEvidence(t *testing.T) {
+func TestOfficialReferenceCostForUsageLogUsesHistoricalEvidence(t *testing.T) {
 	billingService := NewBillingService(nil, nil)
-	persistedReference := 0.04
-	tokenMode := string(BillingModeToken)
-	ambiguousUpstream := "gpt-6-luna"
-	logs := []UsageLog{
-		{
-			UserID: 1, Model: "gpt-6-sol", RequestedModel: "gpt-6-sol",
-			OfficialReferenceCost: &persistedReference,
-		},
-		{
-			UserID: 1, Model: "gpt-6-sol", RequestedModel: "gpt-6-sol", BillingMode: &tokenMode,
-			InputTokens: 467, OutputTokens: 968, CacheReadTokens: 161024,
-			OfficialReferenceLongContextEnabled: boolPtr(false),
-			CreatedAt:                           time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC),
-		},
-		{
-			UserID: 1, Model: "gpt-6-sol", RequestedModel: "gpt-6-sol", UpstreamModel: &ambiguousUpstream,
-			BillingMode: &tokenMode, InputTokens: 1000,
-			CreatedAt: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC),
-		},
-	}
-	analysis := &usagestats.BillingAnalysis{
-		Total:  usagestats.BillingAnalysisRow{Requests: 3, NonImageRequests: 3},
-		Models: []usagestats.BillingAnalysisRow{{Model: "gpt-6-sol", Requests: 3, NonImageRequests: 3}},
-	}
+	persisted := 0.04
+	require.Equal(t, &persisted, officialReferenceCostForUsageLog(&UsageLog{OfficialReferenceCost: &persisted}, billingService))
 
-	applyBillingAnalysisReferenceCosts(analysis, logs, billingService)
-
-	require.Equal(t, int64(2), analysis.Total.PricedRequests)
-	require.InDelta(t, 0.0828188, analysis.Total.OfficialReferenceCost, 1e-12)
-	require.Equal(t, analysis.Total.PricedRequests, analysis.Models[0].PricedRequests)
-	require.Equal(t, analysis.Total.OfficialReferenceCost, analysis.Models[0].OfficialReferenceCost)
-	require.Equal(t, analysis.Total.PricedRequests, analysis.Total.NonImagePricedRequests)
-	require.Equal(t, analysis.Total.OfficialReferenceCost, analysis.Total.NonImageOfficialReferenceCost)
-	require.Equal(t, analysis.Total.NonImagePricedRequests, analysis.Models[0].NonImagePricedRequests)
-	require.Equal(t, analysis.Total.NonImageOfficialReferenceCost, analysis.Models[0].NonImageOfficialReferenceCost)
-}
-
-func TestApplyBillingAnalysisReferenceCostsExcludesImagesFromRealRatio(t *testing.T) {
-	billingService := NewBillingService(nil, nil)
-	tokenMode := string(BillingModeToken)
+	otherModel := "gpt-6-luna"
+	log := UsageLog{Model: "gpt-6-sol", InputTokens: 1000, CreatedAt: time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC)}
+	require.Nil(t, officialReferenceCostForUsageLog(&log, billingService))
+	log.OfficialReferenceLongContextEnabled = boolPtr(false)
+	log.UpstreamModel = &otherModel
+	require.Nil(t, officialReferenceCostForUsageLog(&log, billingService))
+	log.UpstreamModel = nil
 	imageMode := string(BillingModeImage)
-	imageReference := 0.5
-	logs := []UsageLog{
-		{
-			UserID: 1, Model: "gpt-6-sol", BillingMode: &tokenMode,
-			InputTokens: 467, OutputTokens: 968, CacheReadTokens: 161024,
-			OfficialReferenceLongContextEnabled: boolPtr(false),
-			CreatedAt:                           time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC),
-		},
-		{UserID: 1, Model: "gpt-6-sol", BillingMode: &imageMode, ActualCost: 0.05},
-		{UserID: 1, Model: "gpt-6-sol", ImageCount: 1, OfficialReferenceCost: &imageReference},
-	}
-	row := usagestats.BillingAnalysisRow{
-		Requests: 3, UserCost: 1.05, AccountCost: 2,
-		NonImageRequests: 1, NonImageUserCost: 1,
-	}
-	analysis := &usagestats.BillingAnalysis{
-		Total: row, Models: []usagestats.BillingAnalysisRow{row},
-	}
-	analysis.Models[0].Model = "gpt-6-sol"
-	users := &usagestats.BillingAnalysisUsers{Users: []usagestats.BillingAnalysisUserRow{{
-		UserID: 1, Requests: 3, UserCost: 1.05, AccountCost: 2,
-		NonImageRequests: 1, NonImageUserCost: 1,
-	}}}
-
-	applyBillingAnalysisReferenceCosts(analysis, logs, billingService)
-	applyBillingAnalysisUserReferenceCosts(users, logs, billingService)
-
-	for _, got := range []usagestats.BillingAnalysisRow{analysis.Total, analysis.Models[0]} {
-		require.Equal(t, int64(3), got.Requests)
-		require.Equal(t, 1.05, got.UserCost)
-		require.Equal(t, float64(2), got.AccountCost)
-		require.Equal(t, int64(2), got.PricedRequests)
-		require.InDelta(t, 0.5428188, got.OfficialReferenceCost, 1e-12)
-		require.Equal(t, int64(1), got.NonImageRequests)
-		require.Equal(t, int64(1), got.NonImagePricedRequests)
-		require.Equal(t, float64(1), got.NonImageUserCost)
-		require.InDelta(t, 0.0428188, got.NonImageOfficialReferenceCost, 1e-12)
-	}
-	require.Equal(t, int64(1), users.Users[0].NonImagePricedRequests)
-	require.InDelta(t, 0.0428188, users.Users[0].NonImageOfficialReferenceCost, 1e-12)
-	require.Equal(t, 1.05, users.Users[0].UserCost)
-	require.Equal(t, float64(2), users.Users[0].AccountCost)
+	log.BillingMode = &imageMode
+	require.Nil(t, officialReferenceCostForUsageLog(&log, billingService))
 }
 
-func TestBillingAnalysisRecoversOnlyPricedUserCharges(t *testing.T) {
-	billingService := NewBillingService(nil, nil)
+type billingAnalysisUsageRepoStub struct {
+	usageBatchLogRepoStub
+	analysis     *usagestats.BillingAnalysis
+	users        *usagestats.BillingAnalysisUsers
+	missing      []UsageLog
+	missingCalls int
+}
+
+func (r *billingAnalysisUsageRepoStub) GetBillingAnalysis(context.Context, usagestats.UsageLogFilters) (*usagestats.BillingAnalysis, error) {
+	return r.analysis, nil
+}
+
+func (r *billingAnalysisUsageRepoStub) GetBillingAnalysisUsers(context.Context, usagestats.UsageLogFilters, int, int) (*usagestats.BillingAnalysisUsers, error) {
+	return r.users, nil
+}
+
+func (r *billingAnalysisUsageRepoStub) ListMissingBillingReferenceUsageLogs(context.Context, usagestats.UsageLogFilters) ([]UsageLog, error) {
+	r.missingCalls++
+	return r.missing, nil
+}
+
+func TestBillingAnalysisUsesOnlyPersistedReferenceCosts(t *testing.T) {
 	tokenMode := string(BillingModeToken)
-	logs := []UsageLog{
-		{
-			UserID: 1, Model: "gpt-6-sol", BillingMode: &tokenMode, ActualCost: 2,
-			InputTokens: 467, OutputTokens: 968, CacheReadTokens: 161024,
-			OfficialReferenceLongContextEnabled: boolPtr(false),
-			CreatedAt:                           time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC),
-		},
-		{UserID: 1, Model: "gpt-6-sol", ActualCost: 4},
-		{UserID: 1, Model: "gpt-6-sol", ActualCost: 4},
-		{UserID: 1, Model: "gpt-6-sol", ActualCost: 4},
+	missingReferenceLog := UsageLog{
+		UserID: 1, Model: "gpt-6-sol", BillingMode: &tokenMode, ActualCost: 2,
+		InputTokens: 467, OutputTokens: 968, CacheReadTokens: 161024,
+		OfficialReferenceLongContextEnabled: boolPtr(false),
+		CreatedAt:                           time.Date(2026, 9, 28, 0, 0, 0, 0, time.UTC),
 	}
-	row := usagestats.BillingAnalysisRow{
-		Model: "gpt-6-sol", Requests: 5, PricedRequests: 1,
-		UserCost: 15, AccountCost: 30, OfficialReferenceCost: 0.04, PricedUserCost: 1,
+	total := usagestats.BillingAnalysisRow{
+		Requests: 5, PricedRequests: 1, UserCost: 15, AccountCost: 30, OfficialReferenceCost: 0.04, PricedUserCost: 1,
 	}
-	analysis := &usagestats.BillingAnalysis{
-		Total: row, Models: []usagestats.BillingAnalysisRow{row},
+	model := total
+	model.Model = missingReferenceLog.Model
+	user := usagestats.BillingAnalysisUserRow{
+		UserID: 1, Requests: 5, PricedRequests: 1, UserCost: 15, AccountCost: 30, OfficialReferenceCost: 0.04, PricedUserCost: 1,
 	}
-	users := &usagestats.BillingAnalysisUsers{Users: []usagestats.BillingAnalysisUserRow{{
-		UserID: 1, Requests: 5, PricedRequests: 1,
-		UserCost: 15, AccountCost: 30, OfficialReferenceCost: 0.04, PricedUserCost: 1,
-	}}}
+	repo := &billingAnalysisUsageRepoStub{
+		analysis: &usagestats.BillingAnalysis{Total: total, Models: []usagestats.BillingAnalysisRow{model}},
+		users:    &usagestats.BillingAnalysisUsers{Users: []usagestats.BillingAnalysisUserRow{user}},
+		missing:  []UsageLog{missingReferenceLog},
+	}
+	billingService := NewBillingService(nil, nil)
+	recovered := officialReferenceCostForUsageLog(&missingReferenceLog, billingService)
+	require.NotNil(t, recovered)
+	require.InDelta(t, 0.0428188, *recovered, 1e-12)
+	svc := NewUsageService(repo, nil, nil, nil, billingService)
 
-	applyBillingAnalysisReferenceCosts(analysis, logs, billingService)
-	applyBillingAnalysisUserReferenceCosts(users, logs, billingService)
+	analysis, err := svc.GetBillingAnalysis(context.Background(), usagestats.UsageLogFilters{})
+	require.NoError(t, err)
+	users, err := svc.GetBillingAnalysisUsers(context.Background(), usagestats.UsageLogFilters{Model: model.Model}, 1, 20)
+	require.NoError(t, err)
+	require.Zero(t, repo.missingCalls, "billing analysis must use persisted aggregates only")
 
-	for _, got := range []usagestats.BillingAnalysisRow{analysis.Total, analysis.Models[0]} {
-		require.Equal(t, int64(3), got.Requests-got.PricedRequests)
-		require.Equal(t, float64(3), got.PricedUserCost)
-		require.InDelta(t, 0.0828188, got.OfficialReferenceCost, 1e-12)
-		require.Equal(t, float64(15), got.UserCost)
-		require.Equal(t, float64(30), got.AccountCost)
-	}
-	require.Equal(t, analysis.Total.PricedRequests, users.Users[0].PricedRequests)
-	require.Equal(t, analysis.Total.PricedUserCost, users.Users[0].PricedUserCost)
-	require.Equal(t, analysis.Total.OfficialReferenceCost, users.Users[0].OfficialReferenceCost)
-	require.Equal(t, analysis.Total.UserCost, users.Users[0].UserCost)
-	require.Equal(t, analysis.Total.AccountCost, users.Users[0].AccountCost)
+	require.Equal(t, total, analysis.Total)
+	require.Equal(t, []usagestats.BillingAnalysisRow{model}, analysis.Models)
+	require.Equal(t, []usagestats.BillingAnalysisUserRow{user}, users.Users)
+	require.InDelta(t, 25.0, analysis.Total.PricedUserCost/analysis.Total.OfficialReferenceCost, 1e-12, "total ratio")
+	require.InDelta(t, 25.0, analysis.Models[0].PricedUserCost/analysis.Models[0].OfficialReferenceCost, 1e-12, "model ratio")
+	require.InDelta(t, 25.0, users.Users[0].PricedUserCost/users.Users[0].OfficialReferenceCost, 1e-12, "user ratio")
 }

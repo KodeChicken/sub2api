@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -42,6 +43,7 @@ func requireStaticInsertMatchesArgTypes(t *testing.T, query string) {
 	m := usageLogStaticInsertShapeRe.FindStringSubmatch(query)
 	require.Len(t, m, 3, "unrecognised INSERT shape:\n%s", query)
 
+	require.Equal(t, strings.TrimPrefix(usageLogSelectColumns, "id, "), strings.Join(strings.Fields(m[1]), " "))
 	want := len(usageLogInsertArgTypes)
 	columns := 0
 	for _, col := range strings.Split(m[1], ",") {
@@ -115,6 +117,26 @@ func TestUsageLogStaticInsertShape_PlaceholdersMatchArgTypes(t *testing.T) {
 	})
 }
 
+func TestUsageLogGeneratedInsertPathsIncludeOfficialReferenceFields(t *testing.T) {
+	prepared := prepareUsageLogInsert(&service.UsageLog{
+		UserID:    1,
+		APIKeyID:  2,
+		RequestID: "client:official-reference-paths",
+		Model:     "gpt-5",
+		CreatedAt: time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC),
+	})
+	key := usageLogBatchKey(prepared.requestID, 2)
+	batchQuery, batchArgs := buildUsageLogBatchInsertQuery([]string{key}, map[string]usageLogInsertPrepared{key: prepared})
+	bestEffortQuery, bestEffortArgs := buildUsageLogBestEffortInsertQuery([]usageLogInsertPrepared{prepared})
+
+	columns := strings.TrimPrefix(usageLogSelectColumns, "id, ")
+	// Each query repeats these columns in the input CTE, INSERT and SELECT.
+	require.Equal(t, 3, strings.Count(strings.Join(strings.Fields(batchQuery), " "), columns))
+	require.Equal(t, 3, strings.Count(strings.Join(strings.Fields(bestEffortQuery), " "), columns))
+	require.Len(t, batchArgs, len(prepared.args)+1)
+	require.Len(t, bestEffortArgs, len(prepared.args))
+}
+
 // TestPrepareUsageLogInsert_UpstreamRequestIDArgWiring 把 upstream_request_id 钉在
 // session_id 之前，与参数类型表保持同位；缺失时落 NULL 而不是空串。
 func TestPrepareUsageLogInsert_UpstreamRequestIDArgWiring(t *testing.T) {
@@ -142,4 +164,30 @@ func TestPrepareUsageLogInsert_UpstreamRequestIDArgWiring(t *testing.T) {
 	require.False(t, nullArg.Valid, "absent upstream request id must be NULL")
 
 	require.Contains(t, usageLogSelectColumns, "upstream_request_id")
+}
+
+func TestPrepareUsageLogInsert_OfficialReferenceArgWiring(t *testing.T) {
+	officialCost := 0.42
+	enabled := true
+	applied := false
+	pricingAt := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	prepared := prepareUsageLogInsert(&service.UsageLog{
+		UserID:                              1,
+		APIKeyID:                            2,
+		RequestID:                           "client:official-reference",
+		Model:                               "gpt-5",
+		OfficialReferenceCost:               &officialCost,
+		OfficialReferenceLongContextEnabled: &enabled,
+		OfficialReferenceLongContextApplied: &applied,
+		OfficialReferencePricingAt:          &pricingAt,
+		CreatedAt:                           pricingAt,
+	})
+
+	require.Len(t, prepared.args, len(usageLogInsertArgTypes))
+	columns := strings.Split(strings.TrimPrefix(usageLogSelectColumns, "id, "), ", ")
+	start := slices.Index(columns, "official_reference_cost")
+	require.NotEqual(t, -1, start)
+	require.Equal(t, []string{"official_reference_cost", "official_reference_long_context_enabled", "official_reference_long_context_applied", "official_reference_pricing_at"}, columns[start:start+4])
+	require.Equal(t, []any{&officialCost, &enabled, &applied, &pricingAt}, prepared.args[start:start+4])
+	require.Equal(t, []string{"numeric", "boolean", "boolean", "timestamptz"}, usageLogInsertArgTypes[start:start+4])
 }

@@ -761,6 +761,11 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		APIKey:                    APIKeyFromService(l.APIKey),
 		Group:                     GroupFromServiceShallow(l.Group),
 		Subscription:              UserSubscriptionFromService(l.Subscription),
+
+		OfficialReferenceCost:               l.OfficialReferenceCost,
+		OfficialReferenceLongContextEnabled: l.OfficialReferenceLongContextEnabled,
+		OfficialReferenceLongContextApplied: l.OfficialReferenceLongContextApplied,
+		OfficialReferencePricingAt:          l.OfficialReferencePricingAt,
 	}
 }
 
