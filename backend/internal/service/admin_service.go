@@ -725,6 +725,7 @@ type adminServiceImpl struct {
 	compositeRouteRepo       CompositeModelRouteRepository
 	compositeResolver        *CompositeRouteResolver
 	temporaryDispatchRuntime *TemporaryDispatchRuntime
+	userPlatformQuotaRepo    UserPlatformQuotaRepository
 	// 分组平台变更后用来失效渠道缓存；可为 nil（缓存会在 TTL 到期后自然重建）
 	channelCacheInvalidator ChannelCacheInvalidator
 }
@@ -769,6 +770,7 @@ func NewAdminService(
 	compositeResolver *CompositeRouteResolver,
 	channelCacheInvalidator ChannelCacheInvalidator,
 	temporaryDispatchRuntime *TemporaryDispatchRuntime,
+	userPlatformQuotaRepo UserPlatformQuotaRepository,
 ) AdminService {
 	return &adminServiceImpl{
 		cfg:                      cfg,
@@ -800,5 +802,6 @@ func NewAdminService(
 		temporaryDispatchRuntime: temporaryDispatchRuntime,
 
 		channelCacheInvalidator: channelCacheInvalidator,
+		userPlatformQuotaRepo:   userPlatformQuotaRepo,
 	}
 }
