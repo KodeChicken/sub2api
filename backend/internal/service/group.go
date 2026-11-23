@@ -216,7 +216,7 @@ func IsGroupBindableInSimpleMode(group *Group) bool {
 }
 
 func (g *Group) IsActive() bool {
-	return g.Status == StatusActive
+	return g.Status == StatusActive && g.Platform != PlatformKiro
 }
 
 func (g *Group) IsSubscriptionType() bool {

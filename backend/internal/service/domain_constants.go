@@ -53,7 +53,8 @@ const (
 	PlatformCommandCode = domain.PlatformCommandCode
 	PlatformCline       = domain.PlatformCline
 	PlatformComposite   = domain.PlatformComposite
-	PlatformKiro        = domain.PlatformKiro
+	// PlatformKiro identifies retired accounts still present in databases or caches.
+	PlatformKiro = "kiro"
 )
 
 // 账号接入模式（国产供应商）：按量付费 vs Coding Plan。

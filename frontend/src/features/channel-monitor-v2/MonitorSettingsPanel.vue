@@ -416,7 +416,6 @@ function platformLabel(value: string) {
       anthropic: 'Claude',
       openai: 'OpenAI',
       grok: 'Grok',
-      kiro: 'Kiro',
       gemini: 'Gemini',
       antigravity: 'Antigravity',
       kimi: 'Kimi',

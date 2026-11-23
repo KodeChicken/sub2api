@@ -333,7 +333,6 @@ type ClaudeUsageFetcher interface {
 
 // AccountUsageService 账号使用量查询服务
 type AccountUsageService struct {
-	kiroService                *KiroService
 	accountRepo                AccountRepository
 	usageLogRepo               UsageLogRepository
 	usageFetcher               ClaudeUsageFetcher
@@ -403,10 +402,10 @@ func (s *AccountUsageService) getUsageForAccount(ctx context.Context, account *A
 	if account == nil {
 		return nil, fmt.Errorf("account is required")
 	}
-	if account.Platform == PlatformKiro {
-		return s.getKiroUsage(ctx, account, forceProbe)
-	}
 	accountID := account.ID
+	if account.Platform == PlatformKiro {
+		return nil, ErrKiroRetired
+	}
 
 	// Dedicated UI load-test accounts must remain fully interactive without ever
 	// contacting Anthropic with synthetic credentials. Reuse the same persisted

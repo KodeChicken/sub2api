@@ -765,6 +765,9 @@ func normalizeChannelMonitorV2Config(cfg *ChannelMonitorV2Config) error {
 	for i := range cfg.Platforms {
 		p := &cfg.Platforms[i]
 		p.Platform = strings.ToLower(strings.TrimSpace(p.Platform))
+		if p.Platform == PlatformKiro {
+			return fmt.Errorf("%w: %s", ErrChannelMonitorV2InvalidConfig, ErrKiroRetired.Message)
+		}
 		if p.Platform == "" {
 			return fmt.Errorf("%w: empty platform", ErrChannelMonitorV2InvalidConfig)
 		}

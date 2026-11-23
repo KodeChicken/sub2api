@@ -45,25 +45,25 @@ func TestGatewayService_ListSchedulableAccounts_DoesNotFilterUnsupportedThreshol
 		accounts: []Account{
 			{
 				ID:          3101,
-				Platform:    PlatformKiro,
+				Platform:    PlatformTypeSafe,
 				Status:      StatusActive,
 				Schedulable: true,
 				Credentials: map[string]any{
 					"account_scheduling_threshold": 1,
 				},
 				Extra: map[string]any{
-					"kiro_sched_utilization": 95.0,
-					"kiro_sched_reset_at":    time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339),
+					"legacy_sched_utilization": 95.0,
+					"legacy_sched_reset_at":    time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339),
 				},
 			},
 			{
 				ID:          3102,
-				Platform:    PlatformKiro,
+				Platform:    PlatformTypeSafe,
 				Status:      StatusActive,
 				Schedulable: true,
 				Extra: map[string]any{
-					"kiro_sched_utilization": 42.0,
-					"kiro_sched_reset_at":    time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339),
+					"legacy_sched_utilization": 42.0,
+					"legacy_sched_reset_at":    time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339),
 				},
 			},
 		},
@@ -77,7 +77,7 @@ func TestGatewayService_ListSchedulableAccounts_DoesNotFilterUnsupportedThreshol
 		rateLimitService: rateLimitService,
 	}
 
-	accounts, useMixed, err := svc.listSchedulableAccounts(context.Background(), nil, PlatformKiro, false)
+	accounts, useMixed, err := svc.listSchedulableAccounts(context.Background(), nil, PlatformTypeSafe, false)
 
 	require.NoError(t, err)
 	require.False(t, useMixed)

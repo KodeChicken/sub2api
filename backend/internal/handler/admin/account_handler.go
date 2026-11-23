@@ -1419,10 +1419,7 @@ func (h *AccountHandler) refreshSingleAccount(ctx context.Context, account *serv
 
 	var newCredentials map[string]any
 
-	if account.Platform == service.PlatformKiro {
-		updated, err := h.accountTestService.RefreshKiroAccount(ctx, account)
-		return updated, "", err
-	} else if account.IsOpenAI() {
+	if account.IsOpenAI() {
 		tokenInfo, err := h.openaiOAuthService.RefreshAccountToken(ctx, account)
 		if err != nil {
 			// 刷新失败但 access_token 可能仍有效，尝试设置隐私
@@ -2822,6 +2819,10 @@ func (h *AccountHandler) GetAvailableModels(c *gin.Context) {
 }
 
 func (h *AccountHandler) respondAvailableModels(c *gin.Context, account *service.Account) {
+	if account.Platform == service.PlatformKiro {
+		response.BadRequest(c, service.ErrKiroRetired.Message)
+		return
+	}
 	// Handle OpenAI accounts
 	if account.IsOpenAI() {
 		// Prefer the shared, account-keyed upstream catalog. If discovery fails,
@@ -2963,24 +2964,6 @@ func (h *AccountHandler) respondAvailableModels(c *gin.Context, account *service
 				OwnedBy:     "xai",
 				DisplayName: requestedModel,
 			})
-		}
-		response.Success(c, models)
-		return
-	}
-
-	if account.Platform == service.PlatformKiro {
-		models := make([]claude.Model, 0)
-		if h.accountTestService == nil {
-			response.InternalError(c, "Kiro model discovery is not configured")
-			return
-		}
-		ids, err := h.accountTestService.FetchUpstreamSupportedModels(c.Request.Context(), account)
-		if err != nil {
-			response.Error(c, http.StatusBadGateway, "Failed to discover available Kiro models")
-			return
-		}
-		for _, id := range ids {
-			models = append(models, claude.Model{ID: id, Type: "model", DisplayName: id})
 		}
 		response.Success(c, models)
 		return

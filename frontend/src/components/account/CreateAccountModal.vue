@@ -173,20 +173,6 @@
             <PlatformIcon platform="typesafe" size="sm" />
             TypeSafe / Jev
           </button>
-          <button
-            type="button"
-            data-testid="platform-button-kiro"
-            @click="form.platform = 'kiro'"
-            :class="[
-              'flex flex-1 items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all',
-              form.platform === 'kiro'
-                ? 'bg-white text-teal-700 shadow-sm dark:bg-dark-600 dark:text-teal-300'
-                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-200'
-            ]"
-          >
-            <Icon name="cloud" size="sm" />
-            Kiro
-          </button>
         </div>
         <!-- 国产厂商：Kimi / Zhipu GLM / DeepSeek / MiniMax -->
         <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-testid="platform-row-cn">
@@ -2309,17 +2295,6 @@
         </div>
       </div>
 
-      <template v-if="form.platform === 'kiro'">
-        <fieldset>
-          <legend class="input-label">{{ t('admin.accounts.accountType') }}</legend>
-          <div class="flex flex-wrap gap-5 text-sm">
-            <label class="flex items-center gap-2"><input v-model="kiroAccountMode" type="radio" value="oauth" name="kiro-account-mode" />{{ t('admin.accounts.kiro.signInTitle') }}</label>
-            <label class="flex items-center gap-2"><input v-model="kiroAccountMode" type="radio" value="apikey" name="kiro-account-mode" />Kiro API Key</label>
-          </div>
-        </fieldset>
-        <KiroCredentialsFields v-if="kiroAccountMode === 'apikey'" v-model="kiroCredentials" account-type="apikey" />
-      </template>
-
       <!-- 配额控制 (Anthropic apikey/bedrock: 配额限制 + 亲和) -->
       <div
         v-if="form.platform === 'anthropic' && (form.type === 'apikey' || form.type === 'bedrock')"
@@ -3739,16 +3714,16 @@
       </div>
 
       <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
-        <div v-if="form.platform === 'antigravity' || form.platform === 'kiro'" class="flex items-center gap-2">
+        <!-- Mixed Scheduling (only for antigravity accounts) -->
+        <div v-if="form.platform === 'antigravity'" class="flex items-center gap-2">
           <label class="flex cursor-pointer items-center gap-2">
             <input
               type="checkbox"
               v-model="mixedScheduling"
-              data-testid="mixed-scheduling"
               class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
             />
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {{ t(form.platform === 'kiro' ? 'admin.accounts.kiro.mixedScheduling' : 'admin.accounts.mixedScheduling') }}
+              {{ t('admin.accounts.mixedScheduling') }}
             </span>
           </label>
           <div class="group relative">
@@ -3761,7 +3736,7 @@
             <div
               class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded bg-gray-900 px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 dark:bg-gray-700"
             >
-              {{ t(form.platform === 'kiro' ? 'admin.accounts.kiro.mixedSchedulingTooltip' : 'admin.accounts.mixedSchedulingTooltip') }}
+              {{ t('admin.accounts.mixedSchedulingTooltip') }}
               <div
                 class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
               ></div>
@@ -3810,15 +3785,7 @@
 
     <!-- Step 2: OAuth Authorization -->
     <div v-else class="space-y-5">
-      <KiroAuthorizationFlow
-        v-if="form.platform === 'kiro'"
-        ref="kiroFlowRef"
-        :draft="kiroAccountDraft"
-        :configuration="kiroOAuthConfiguration"
-        @authorized="handleKiroAuthorized"
-      />
       <OAuthAuthorizationFlow
-        v-else
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
         :auth-url="currentAuthUrl"
@@ -3897,11 +3864,11 @@
         </button>
       </div>
       <div v-else class="flex justify-between gap-3">
-        <button type="button" class="btn btn-secondary" :disabled="kiroFlowRef?.saving" @click="goBackToBasicInfo">
+        <button type="button" class="btn btn-secondary" @click="goBackToBasicInfo">
           {{ t('common.back') }}
         </button>
         <button
-          v-if="form.platform !== 'kiro' && isManualInputMethod"
+          v-if="isManualInputMethod"
           type="button"
           :disabled="!canExchangeCode"
           class="btn btn-primary"
@@ -4217,10 +4184,6 @@ import {
   type OpenAIImageSizeTier
 } from '@/components/account/openaiImageSizeTiers'
 import PlatformIcon from '@/components/common/PlatformIcon.vue'
-import KiroCredentialsFields from '@/components/account/KiroCredentialsFields.vue'
-import { buildKiroCredentials, normalizeKiroCredentials } from '@/utils/kiroCredentials'
-import type { KiroOAuthAccount } from '@/api/admin/kiro'
-import KiroAuthorizationFlow from './KiroAuthorizationFlow.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import ProxyAdBanner from '@/components/common/ProxyAdBanner.vue'
@@ -4303,7 +4266,6 @@ const { t } = useI18n()
 const browserTimeZone = getBrowserTimeZone()
 
 const oauthStepTitle = computed(() => {
-  if (form.platform === 'kiro') return t('admin.accounts.kiro.signInTitle')
   if (form.platform === 'openai') return t('admin.accounts.oauth.openai.title')
   if (form.platform === 'gemini') return t('admin.accounts.oauth.gemini.title')
   if (form.platform === 'antigravity') return t('admin.accounts.oauth.antigravity.title')
@@ -5020,9 +4982,7 @@ const isOpenAIModelRestrictionDisabled = computed(() =>
 
 const mixedChannelWarningMessageText = computed(() => {
   if (mixedChannelWarningDetails.value) {
-    const details = mixedChannelWarningDetails.value
-    return t(details.currentPlatform === 'Kiro' || details.otherPlatform === 'Kiro'
-      ? 'admin.accounts.kiro.mixedChannelWarning' : 'admin.accounts.mixedChannelWarning', details)
+    return t('admin.accounts.mixedChannelWarning', mixedChannelWarningDetails.value)
   }
   return mixedChannelWarningRawMessage.value
 })
@@ -5104,24 +5064,9 @@ const form = reactive({
   group_ids: [] as number[],
   expires_at: null as number | null
 })
-watch(() => form.platform === 'kiro' ? [form.group_ids.slice(), mixedScheduling.value] : null, () => {
-  antigravityMixedChannelConfirmed.value = false
-})
-const kiroCredentials = ref<Record<string, unknown>>(normalizeKiroCredentials({}))
-const kiroAccountMode = ref<'oauth' | 'apikey'>('oauth')
-const kiroFlowRef = ref<{ saving: boolean } | null>(null)
-const kiroOAuthConfiguration = ref<Record<string, unknown>>({})
-const kiroAccountDraft = computed<KiroOAuthAccount>(() => ({
-  name: form.name, notes: form.notes, proxy_id: form.proxy_id, concurrency: form.concurrency,
-  priority: form.priority, rate_multiplier: form.rate_multiplier, load_factor: form.load_factor,
-  group_ids: form.group_ids, expires_at: form.expires_at, auto_pause_on_expired: autoPauseOnExpired.value,
-  extra: withUpstreamRequestIdHeader(mixedScheduling.value ? { mixed_scheduling: true } : undefined),
-  confirm_mixed_channel_risk: antigravityMixedChannelConfirmed.value
-}))
 
 // Helper to check if current type needs OAuth flow
 const isOAuthFlow = computed(() => {
-  if (form.platform === 'kiro') return kiroAccountMode.value === 'oauth'
   // Antigravity upstream 类型不需要 OAuth 流程
   if (form.platform === 'antigravity' && antigravityAccountType.value === 'upstream') {
     return false
@@ -5194,15 +5139,8 @@ watch(
 
 // Sync form.type based on accountCategory, addMethod, and platform-specific type
 watch(
-  [accountCategory, addMethod, antigravityAccountType, () => form.platform, () => kiroCredentials.value.auth_method, kiroAccountMode],
+  [accountCategory, addMethod, antigravityAccountType, () => form.platform],
   ([category, method, agType]) => {
-    if (form.platform === 'kiro') {
-      form.type = kiroAccountMode.value
-      if (form.type === 'apikey' && kiroCredentials.value.auth_method !== 'api_key') {
-        kiroCredentials.value = normalizeKiroCredentials({ auth_method: 'api_key' })
-      }
-      return
-    }
     // Antigravity upstream 类型（实际创建为 apikey）
     if (form.platform === 'antigravity' && agType === 'upstream') {
       form.type = 'apikey'
@@ -5227,8 +5165,7 @@ watch(
 // Reset platform-specific settings when platform changes
 watch(
   () => form.platform,
-  (newPlatform, oldPlatform) => {
-    if (newPlatform === 'kiro' || oldPlatform === 'kiro') mixedScheduling.value = false
+  (newPlatform) => {
     // Reset base URL based on platform
     if (isMultiProtocolApiKeyPlatform(newPlatform)) {
       const mode = newPlatform === 'opencode_go' ? openCodeAccountMode.value : accountMode.value
@@ -5574,7 +5511,7 @@ const splitTempUnschedKeywords = (value: string) => {
     .filter((item) => item.length > 0)
 }
 
-const needsMixedChannelCheck = (platform: AccountPlatform) => platform === 'antigravity' || platform === 'anthropic' || platform === 'kiro'
+const needsMixedChannelCheck = (platform: AccountPlatform) => platform === 'antigravity' || platform === 'anthropic'
 
 const buildMixedChannelDetails = (resp?: CheckMixedChannelResponse) => {
   const details = resp?.details
@@ -5623,25 +5560,21 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
   if (!needsMixedChannelCheck(form.platform)) {
     return true
   }
-  if (form.platform === 'kiro' && !mixedScheduling.value) return true
   if (antigravityMixedChannelConfirmed.value) {
     return true
   }
 
-  const kiroBinding = form.platform === 'kiro' ? JSON.stringify(form.group_ids) : null
   try {
     const result = await adminAPI.accounts.checkMixedChannelRisk({
       platform: form.platform,
       group_ids: form.group_ids
     })
-    if (kiroBinding !== null && (form.platform !== 'kiro' || JSON.stringify(form.group_ids) !== kiroBinding || !mixedScheduling.value)) return false
     if (!result.has_risk) {
       return true
     }
     openMixedChannelDialog({
       response: result,
       onConfirm: async () => {
-        if (kiroBinding !== null && (form.platform !== 'kiro' || JSON.stringify(form.group_ids) !== kiroBinding || !mixedScheduling.value)) return
         antigravityMixedChannelConfirmed.value = true
         await onConfirm()
       }
@@ -5709,9 +5642,6 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
 
 // Methods
 const resetForm = () => {
-  kiroCredentials.value = normalizeKiroCredentials({})
-  kiroAccountMode.value = 'oauth'
-  kiroOAuthConfiguration.value = {}
   step.value = 1
   form.name = ''
   form.notes = ''
@@ -5830,13 +5760,11 @@ const resetForm = () => {
   grokOAuth.resetState()
   oauthFlowRef.value?.reset()
   antigravityMixedChannelConfirmed.value = false
-  mixedScheduling.value = false
   upstreamModelsPreviewed.value = false
   clearMixedChannelDialog()
 }
 
 const handleClose = () => {
-  if (kiroFlowRef.value?.saving) return
   antigravityMixedChannelConfirmed.value = false
   clearMixedChannelDialog()
   emit('close')
@@ -6052,23 +5980,6 @@ const handleVertexServiceAccountDrop = async (event: DragEvent) => {
 }
 
 const handleSubmit = async () => {
-  if (form.platform === 'kiro') {
-    if (!form.name.trim()) {
-      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
-      return
-    }
-    if (!await ensureAntigravityMixedChannelConfirmed(handleSubmit)) return
-    if (kiroAccountMode.value === 'oauth') {
-      const configuration: Record<string, unknown> = {}
-      if (!applyTempUnschedConfig(configuration)) return
-      kiroOAuthConfiguration.value = configuration
-      step.value = 2
-      return
-    }
-    await createAccountAndFinish('kiro', 'apikey', buildKiroCredentials(kiroCredentials.value),
-      mixedScheduling.value ? { mixed_scheduling: true } : undefined)
-    return
-  }
   // For OAuth-based type, handle OAuth flow (goes to step 2)
   if (isOAuthFlow.value) {
     if (!isGrokSSOInputMethod.value && !form.name.trim()) {
@@ -6358,7 +6269,6 @@ const handleSubmit = async () => {
 }
 
 const goBackToBasicInfo = () => {
-  if (kiroFlowRef.value?.saving) return
   step.value = 1
   oauth.resetState()
   openaiOAuth.resetState()
@@ -6366,13 +6276,6 @@ const goBackToBasicInfo = () => {
   antigravityOAuth.resetState()
   grokOAuth.resetState()
   oauthFlowRef.value?.reset()
-}
-
-const handleKiroAuthorized = () => {
-  if (form.platform !== 'kiro' || step.value !== 2 || !props.show) return
-  appStore.showSuccess(t('admin.accounts.accountCreated'))
-  emit('created')
-  handleClose()
 }
 
 const handleGenerateUrl = async () => {
@@ -6491,7 +6394,7 @@ const createAccountAndFinish = async (
     expires_at: form.expires_at,
     // 上游倍率探测对全部 API-key 平台开放（antigravity upstream 走本 helper）；
     // 非 apikey 类型（bedrock/oauth）不传，后端不动作。
-    upstream_billing_probe_enabled: type === 'apikey' && platform !== 'kiro' ? upstreamBillingAutoProbeEnabled.value : undefined,
+    upstream_billing_probe_enabled: type === 'apikey' ? upstreamBillingAutoProbeEnabled.value : undefined,
     auto_pause_on_expired: autoPauseOnExpired.value
   })
 }

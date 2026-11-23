@@ -27,14 +27,7 @@
       </div>
 
       <!-- API Key fields (only for apikey type) -->
-      <KiroCredentialsFields
-        v-if="account.platform === 'kiro'"
-        v-model="kiroCredentials"
-        :account-type="account.type"
-        :account-id="account.id"
-        editing
-      />
-      <div v-if="account.type === 'apikey' && account.platform !== 'kiro'" class="space-y-4">
+      <div v-if="account.type === 'apikey'" class="space-y-4">
         <div v-if="!isCNApiKeyAccount || editApiProtocol !== 'adaptive'">
           <label class="input-label">{{ t('admin.accounts.baseUrl') }}</label>
           <input
@@ -3318,17 +3311,17 @@
           <Select v-model="form.status" :options="statusOptions" />
         </div>
 
-        <div v-if="account?.platform === 'antigravity' || account?.platform === 'kiro'" class="flex items-center gap-2">
-          <label class="flex items-center gap-2" :class="account.platform === 'kiro' ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'">
+        <!-- Mixed Scheduling (only for antigravity accounts, read-only in edit mode) -->
+        <div v-if="account?.platform === 'antigravity'" class="flex items-center gap-2">
+          <label class="flex cursor-not-allowed items-center gap-2 opacity-60">
             <input
               type="checkbox"
               v-model="mixedScheduling"
-              data-testid="mixed-scheduling"
-              :disabled="account.platform !== 'kiro'"
-              class="h-4 w-4 rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
+              disabled
+              class="h-4 w-4 cursor-not-allowed rounded border-gray-300 text-primary-500 focus:ring-primary-500 dark:border-dark-500"
             />
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-              {{ t(account.platform === 'kiro' ? 'admin.accounts.kiro.mixedScheduling' : 'admin.accounts.mixedScheduling') }}
+              {{ t('admin.accounts.mixedScheduling') }}
             </span>
           </label>
           <div class="group relative">
@@ -3341,7 +3334,7 @@
             <div
               class="pointer-events-none absolute left-0 top-full z-[100] mt-1.5 w-72 rounded bg-gray-900 px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100 dark:bg-gray-700"
             >
-              {{ t(account.platform === 'kiro' ? 'admin.accounts.kiro.mixedSchedulingTooltip' : 'admin.accounts.mixedSchedulingTooltip') }}
+              {{ t('admin.accounts.mixedSchedulingTooltip') }}
               <div
                 class="absolute bottom-full left-3 border-4 border-transparent border-b-gray-900 dark:border-b-gray-700"
               ></div>
@@ -3464,8 +3457,6 @@ import type {
   TempUnschedulableScope
 } from '@/types'
 import BaseDialog from '@/components/common/BaseDialog.vue'
-import KiroCredentialsFields from '@/components/account/KiroCredentialsFields.vue'
-import { buildKiroCredentials, normalizeKiroCredentials } from '@/utils/kiroCredentials'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
@@ -4553,9 +4544,7 @@ const defaultBaseUrl = computed(() => {
 
 const mixedChannelWarningMessageText = computed(() => {
   if (mixedChannelWarningDetails.value) {
-    const details = mixedChannelWarningDetails.value
-    return t(details.currentPlatform === 'Kiro' || details.otherPlatform === 'Kiro'
-      ? 'admin.accounts.kiro.mixedChannelWarning' : 'admin.accounts.mixedChannelWarning', details)
+    return t('admin.accounts.mixedChannelWarning', mixedChannelWarningDetails.value)
   }
   return mixedChannelWarningRawMessage.value
 })
@@ -4572,10 +4561,6 @@ const form = reactive({
   group_ids: [] as number[],
   expires_at: null as number | null
 })
-watch(() => props.account?.platform === 'kiro' ? [props.account.id, form.group_ids.slice(), mixedScheduling.value] : null, () => {
-  antigravityMixedChannelConfirmed.value = false
-})
-const kiroCredentials = ref<Record<string, unknown>>({})
 
 const handleUpstreamBillingRateSyncChange = (enabled: boolean) => {
   upstreamBillingRateSyncEnabled.value = enabled
@@ -4688,14 +4673,6 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 
   // Load intercept warmup requests setting (applies to all account types)
   const credentials = newAccount.credentials as Record<string, unknown> | undefined
-  if (newAccount.platform === 'kiro') {
-    kiroCredentials.value = normalizeKiroCredentials({
-      ...credentials,
-      auth_method: newAccount.type === 'apikey' ? 'api_key' : credentials?.auth_method
-    })
-  } else {
-    kiroCredentials.value = {}
-  }
   interceptWarmupRequests.value = credentials?.intercept_warmup_requests === true
   autoPauseOnExpired.value = newAccount.auto_pause_on_expired === true
   editVertexProjectId.value = ''
@@ -5564,7 +5541,7 @@ function toPositiveNumber(value: unknown) {
   return Math.trunc(num)
 }
 
-const needsMixedChannelCheck = () => ['antigravity', 'anthropic', 'kiro'].includes(props.account?.platform || '')
+const needsMixedChannelCheck = () => props.account?.platform === 'antigravity' || props.account?.platform === 'anthropic'
 
 const buildMixedChannelDetails = (resp?: CheckMixedChannelResponse) => {
   const details = resp?.details
@@ -5613,7 +5590,6 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
   if (!needsMixedChannelCheck()) {
     return true
   }
-  if (props.account?.platform === 'kiro' && !mixedScheduling.value) return true
   if (antigravityMixedChannelConfirmed.value) {
     return true
   }
@@ -5621,21 +5597,18 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
     return false
   }
 
-  const kiroBinding = props.account.platform === 'kiro' ? JSON.stringify([props.account.id, form.group_ids]) : null
   try {
     const result = await adminAPI.accounts.checkMixedChannelRisk({
       platform: props.account.platform,
       group_ids: form.group_ids,
       account_id: props.account.id
     })
-    if (kiroBinding !== null && (JSON.stringify([props.account?.id, form.group_ids]) !== kiroBinding || !mixedScheduling.value)) return false
     if (!result.has_risk) {
       return true
     }
     openMixedChannelDialog({
       response: result,
       onConfirm: async () => {
-        if (kiroBinding !== null && (JSON.stringify([props.account?.id, form.group_ids]) !== kiroBinding || !mixedScheduling.value)) return
         antigravityMixedChannelConfirmed.value = true
         await onConfirm()
       }
@@ -5750,7 +5723,7 @@ const handleSubmit = async () => {
       updatePayload.load_factor = 0
     }
     updatePayload.auto_pause_on_expired = autoPauseOnExpired.value
-    if (props.account.type === 'apikey' && props.account.platform !== 'kiro') {
+    if (props.account.type === 'apikey') {
       updatePayload.upstream_billing_probe_enabled = upstreamBillingAutoProbeEnabled.value
       updatePayload.upstream_billing_rate_sync_enabled = upstreamBillingRateSyncEnabled.value
       if (upstreamBillingRateSyncEnabled.value) {
@@ -5759,9 +5732,7 @@ const handleSubmit = async () => {
     }
 
     // For apikey type, handle credentials update
-    if (props.account.platform === 'kiro') {
-      updatePayload.credentials = buildKiroCredentials(kiroCredentials.value)
-    } else if (props.account.type === 'apikey') {
+    if (props.account.type === 'apikey') {
       const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
       const newBaseUrl = editBaseUrl.value.trim() || defaultBaseUrl.value
       const shouldApplyModelMapping = !isOpenAIModelRestrictionDisabled.value
@@ -6172,9 +6143,6 @@ const handleSubmit = async () => {
         delete newExtra.allow_overages
       }
       updatePayload.extra = newExtra
-    }
-    if (props.account.platform === 'kiro') {
-      updatePayload.extra = { ...props.account.extra, mixed_scheduling: mixedScheduling.value }
     }
 
     // For Anthropic OAuth/SetupToken accounts, handle quota control settings in extra

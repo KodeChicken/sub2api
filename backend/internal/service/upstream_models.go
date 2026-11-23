@@ -807,11 +807,7 @@ func (s *AccountTestService) fetchUpstreamModelListRequest(ctx context.Context, 
 		return nil, nil, nil, newUpstreamModelSyncConfigError("Account is required", nil)
 	}
 	if account.Platform == PlatformKiro {
-		if s.kiroService == nil {
-			return nil, nil, nil, newUpstreamModelSyncConfigError("Kiro service is not configured", nil)
-		}
-		models, body, err := s.kiroService.Models(ctx, account)
-		return models, body, nil, err
+		return nil, nil, nil, ErrKiroRetired
 	}
 
 	if account.Platform == PlatformAntigravity && account.Type != AccountTypeAPIKey {

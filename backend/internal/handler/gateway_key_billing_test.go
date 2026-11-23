@@ -43,7 +43,6 @@ func newKeyBillingGatewayService(repo service.UserGroupRateRepository) *service.
 	return service.NewGatewayService(
 		nil, nil, nil, nil, nil, nil, repo, nil, nil, nil, nil, nil, nil, nil,
 		nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil,
-		nil,
 	)
 }
 

@@ -19,8 +19,7 @@ const PROVIDER_BY_PLATFORM: Record<GroupPlatform, KeyGroupProvider> = {
   opencode_go: 'other',
   typesafe: 'other',
   command_code: 'other',
-  cline: 'other',
-  kiro: 'other'
+  cline: 'other'
 }
 
 export function getKeyGroupProvider(platform: GroupPlatform): KeyGroupProvider {
