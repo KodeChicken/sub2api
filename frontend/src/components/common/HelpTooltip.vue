@@ -36,13 +36,19 @@ function isInside(container: HTMLElement | null, target: EventTarget | null): bo
 // 悬停模式下指针在触发图标与提示框之间往返时保持打开，便于选中提示里的文字。
 function onLeave(event: MouseEvent) {
   if (props.trigger !== 'hover') return
-  if (isInside(tooltipRef.value, event.relatedTarget)) return
+  if (triggerRef.value?.matches(':focus-within') || isInside(tooltipRef.value, event.relatedTarget)) return
   closeTooltip()
 }
 
 function onTooltipLeave(event: MouseEvent) {
   if (props.trigger !== 'hover') return
-  if (isInside(triggerRef.value, event.relatedTarget)) return
+  if (triggerRef.value?.matches(':focus-within') || isInside(triggerRef.value, event.relatedTarget)) return
+  closeTooltip()
+}
+
+function onFocusOut(event: FocusEvent) {
+  if (props.trigger !== 'hover') return
+  if (triggerRef.value?.matches(':hover') || isInside(triggerRef.value, event.relatedTarget)) return
   closeTooltip()
 }
 
@@ -65,7 +71,6 @@ function onDocumentClick(event: MouseEvent) {
 }
 
 function onDocumentKeydown(event: KeyboardEvent) {
-  if (props.trigger !== 'click') return
   if (event.key === 'Escape') {
     closeTooltip()
   }
@@ -107,6 +112,8 @@ onBeforeUnmount(() => {
     class="group relative ml-1 inline-flex items-center align-middle"
     @mouseenter="onEnter"
     @mouseleave="onLeave"
+    @focusin="onEnter"
+    @focusout="onFocusOut"
     @click="onClick"
   >
     <!-- Trigger Icon -->

@@ -103,8 +103,6 @@ export default {
       groupCountTotal: '共 {count} 个分组',
       temporaryGroups: '临时调度分组',
       boundGroups: '原绑定分组',
-      temporaryGroupPrefix: '临时',
-      temporaryGroupHint: '临时调度关系，不会修改账号原来的分组绑定',
       columns: {
         name: '名称',
         id: '账号ID',
