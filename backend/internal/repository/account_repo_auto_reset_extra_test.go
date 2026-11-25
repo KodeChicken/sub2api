@@ -59,7 +59,7 @@ func TestLockAndMergeAccountExtraPreservesLatestAutoResetAttempt(t *testing.T) {
 					"codex_reset_credit_snapshot":                      map[string]any{"available_count": 100},
 				},
 			}
-			got, err := lockAndMergeAccountProbeExtra(ctx, client, account, nil, nil)
+			got, err := lockAndMergeAccountProbeExtra(ctx, client, account, service.AccountBillingSettingsUpdate{})
 			require.NoError(t, err)
 			wantEnabled := tc.currentEnabled
 			if tc.explicit != nil {
